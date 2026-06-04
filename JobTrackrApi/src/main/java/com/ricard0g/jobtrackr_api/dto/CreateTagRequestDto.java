@@ -1,5 +1,6 @@
 package com.ricard0g.jobtrackr_api.dto;
 
+import com.fasterxml.jackson.annotation.JsonProperty;
 import com.ricard0g.jobtrackr_api.model.enums.TagCategory;
 
 import jakarta.validation.constraints.NotBlank;

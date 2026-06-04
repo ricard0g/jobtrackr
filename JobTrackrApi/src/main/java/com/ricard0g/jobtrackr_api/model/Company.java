@@ -60,4 +60,21 @@ public class Company {
     @UpdateTimestamp
     @Column(name = "company_updated_at", nullable = false)
     private OffsetDateTime companyUpdatedAt;
+
+    public static Company create(
+            final User user,
+            final String companyName,
+            final String companyWebsiteUrl,
+            final String companyLocation,
+            final String companyType,
+            final String companyLogo) {
+        final Company company = new Company();
+        company.setUser(user);
+        company.setCompanyName(companyName);
+        company.setCompanyWebsiteUrl(companyWebsiteUrl);
+        company.setCompanyLocation(companyLocation);
+        company.setCompanyType(companyType);
+        company.setCompanyLogo(companyLogo);
+        return company;
+    }
 }
