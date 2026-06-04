@@ -30,6 +30,8 @@ import lombok.Setter;
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
 public class Tag {
 
+    public static final String DEFAULT_TAG_COLOR = "#808080";
+
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     @Column(name = "tag_id")
@@ -44,8 +46,17 @@ public class Tag {
     private String tagName;
 
     @Column(name = "tag_color", nullable = false, length = 7)
-    private String tagColor = "#808080";
+    private String tagColor = DEFAULT_TAG_COLOR;
 
     @ManyToMany(mappedBy = "tags", fetch = FetchType.LAZY)
     private Set<Application> applications = new HashSet<>();
+
+    public static Tag create(final TagCategory category, final String name, final String color) {
+        final Tag tag = new Tag();
+        tag.setTagCategory(category);
+        tag.setTagName(name);
+        final boolean hasColor = color != null && !color.isBlank();
+        tag.setTagColor(hasColor ? color : DEFAULT_TAG_COLOR);
+        return tag;
+    }
 }
