@@ -115,4 +115,37 @@ public class Application {
             joinColumns = @JoinColumn(name = "application_tags_application_id"),
             inverseJoinColumns = @JoinColumn(name = "application_tags_tag_id"))
     private Set<Tag> tags = new HashSet<>();
+
+    public static Application create(
+            final User user,
+            final Company company,
+            final String applicationTitle,
+            final ApplicationStatus applicationStatus,
+            final Integer applicationKanbanOrder,
+            final String applicationJobUrl,
+            final String applicationLocation,
+            final RemoteType applicationRemoteType,
+            final String applicationSource,
+            final BigDecimal applicationSalaryMin,
+            final BigDecimal applicationSalaryMax,
+            final String applicationCurrency,
+            final OffsetDateTime applicationAppliedAt,
+            final Set<Tag> tags) {
+        final Application application = new Application();
+        application.setUser(user);
+        application.setCompany(company);
+        application.setApplicationTitle(applicationTitle);
+        application.setApplicationStatus(applicationStatus);
+        application.setApplicationKanbanOrder(applicationKanbanOrder != null ? applicationKanbanOrder : 0);
+        application.setApplicationJobUrl(applicationJobUrl);
+        application.setApplicationLocation(applicationLocation);
+        application.setApplicationRemoteType(applicationRemoteType);
+        application.setApplicationSource(applicationSource);
+        application.setApplicationSalaryMin(applicationSalaryMin);
+        application.setApplicationSalaryMax(applicationSalaryMax);
+        application.setApplicationCurrency(applicationCurrency);
+        application.setApplicationAppliedAt(applicationAppliedAt);
+        application.setTags(tags != null ? tags : new HashSet<>());
+        return application;
+    }
 }

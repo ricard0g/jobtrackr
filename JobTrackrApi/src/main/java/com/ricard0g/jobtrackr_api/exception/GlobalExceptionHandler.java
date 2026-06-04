@@ -41,6 +41,20 @@ public class GlobalExceptionHandler {
                 .body(ErrorResponse.of("COMPANY_HAS_APPLICATIONS", exception.getMessage()));
     }
 
+    @ExceptionHandler(ApplicationNotFoundException.class)
+    public ResponseEntity<ErrorResponse> handleApplicationNotFound(
+            final ApplicationNotFoundException exception) {
+        return ResponseEntity.status(HttpStatus.NOT_FOUND)
+                .body(ErrorResponse.of("APPLICATION_NOT_FOUND", exception.getMessage()));
+    }
+
+    @ExceptionHandler(InvalidApplicationSalaryRangeException.class)
+    public ResponseEntity<ErrorResponse> handleInvalidApplicationSalaryRange(
+            final InvalidApplicationSalaryRangeException exception) {
+        return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                .body(ErrorResponse.of("INVALID_APPLICATION_SALARY_RANGE", exception.getMessage()));
+    }
+
     @ExceptionHandler(TagNotFoundException.class)
     public ResponseEntity<ErrorResponse> handleTagNotFound(final TagNotFoundException exception) {
         return ResponseEntity.status(HttpStatus.NOT_FOUND)

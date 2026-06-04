@@ -1,5 +1,8 @@
 package com.ricard0g.jobtrackr_api.repository;
 
+import java.util.List;
+import java.util.Optional;
+
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
@@ -15,4 +18,24 @@ public interface ApplicationRepository extends JpaRepository<Application, Long> 
             WHERE a.company.companyId = :companyId
             """)
     boolean hasApplications(@Param("companyId") Long companyId);
+
+    @Query(
+            """
+            SELECT DISTINCT a FROM Application a
+            JOIN FETCH a.company
+            JOIN FETCH a.tags
+            WHERE a.user.userId = :userId
+            ORDER BY a.applicationKanbanOrder ASC, a.applicationCreatedAt DESC
+            """)
+    List<Application> findAllForUser(@Param("userId") Long userId);
+
+    @Query(
+            """
+            SELECT a FROM Application a
+            JOIN FETCH a.company
+            JOIN FETCH a.tags
+            WHERE a.applicationId = :applicationId AND a.user.userId = :userId
+            """)
+    Optional<Application> findForUser(
+            @Param("applicationId") Long applicationId, @Param("userId") Long userId);
 }
