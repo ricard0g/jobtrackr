@@ -5,8 +5,8 @@ import java.util.List;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import com.ricard0g.jobtrackr_api.dto.CompanyCreateRequestDto;
-import com.ricard0g.jobtrackr_api.dto.CompanyResponseDto;
+import com.ricard0g.jobtrackr_api.dto.CompanyDto.CompanyCreateRequestDto;
+import com.ricard0g.jobtrackr_api.dto.CompanyDto.CompanyResponseDto;
 import com.ricard0g.jobtrackr_api.exception.CompanyHasApplicationsException;
 import com.ricard0g.jobtrackr_api.exception.CompanyNotFoundException;
 import com.ricard0g.jobtrackr_api.exception.DuplicateCompanyNameException;

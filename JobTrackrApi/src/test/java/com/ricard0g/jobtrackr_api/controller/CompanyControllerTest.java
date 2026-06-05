@@ -24,8 +24,8 @@ import org.springframework.http.MediaType;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 
-import com.ricard0g.jobtrackr_api.dto.CompanyCreateRequestDto;
-import com.ricard0g.jobtrackr_api.dto.CompanyResponseDto;
+import com.ricard0g.jobtrackr_api.dto.CompanyDto.CompanyCreateRequestDto;
+import com.ricard0g.jobtrackr_api.dto.CompanyDto.CompanyResponseDto;
 import com.ricard0g.jobtrackr_api.exception.CompanyHasApplicationsException;
 import com.ricard0g.jobtrackr_api.exception.CompanyNotFoundException;
 import com.ricard0g.jobtrackr_api.exception.DuplicateCompanyNameException;

@@ -13,8 +13,8 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
-import com.ricard0g.jobtrackr_api.dto.CompanyCreateRequestDto;
-import com.ricard0g.jobtrackr_api.dto.CompanyResponseDto;
+import com.ricard0g.jobtrackr_api.dto.CompanyDto.CompanyCreateRequestDto;
+import com.ricard0g.jobtrackr_api.dto.CompanyDto.CompanyResponseDto;
 import com.ricard0g.jobtrackr_api.service.CompanyService;
 
 import jakarta.validation.Valid;

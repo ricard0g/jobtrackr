@@ -1,10 +1,12 @@
-package com.ricard0g.jobtrackr_api.dto;
+package com.ricard0g.jobtrackr_api.dto.ApplicationDto;
 
 import java.math.BigDecimal;
 import java.time.OffsetDateTime;
 import java.util.Comparator;
 import java.util.List;
 
+import com.ricard0g.jobtrackr_api.dto.CompanyDto.CompanyResponseDto;
+import com.ricard0g.jobtrackr_api.dto.TagDto.TagResponseDto;
 import com.ricard0g.jobtrackr_api.model.Application;
 import com.ricard0g.jobtrackr_api.model.enums.ApplicationStatus;
 import com.ricard0g.jobtrackr_api.model.enums.RemoteType;

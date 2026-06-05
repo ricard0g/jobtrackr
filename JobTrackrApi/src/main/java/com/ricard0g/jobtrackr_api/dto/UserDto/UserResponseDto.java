@@ -1,4 +1,4 @@
-package com.ricard0g.jobtrackr_api.dto;
+package com.ricard0g.jobtrackr_api.dto.UserDto;
 
 import java.time.OffsetDateTime;
 

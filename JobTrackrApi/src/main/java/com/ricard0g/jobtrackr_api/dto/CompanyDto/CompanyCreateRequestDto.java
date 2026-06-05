@@ -1,4 +1,4 @@
-package com.ricard0g.jobtrackr_api.dto;
+package com.ricard0g.jobtrackr_api.dto.CompanyDto;
 
 import static com.ricard0g.jobtrackr_api.validation.ValidationPatterns.OPTIONAL_HTTP_URL;
 

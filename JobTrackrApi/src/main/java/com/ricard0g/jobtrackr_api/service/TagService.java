@@ -6,8 +6,8 @@ import java.util.List;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import com.ricard0g.jobtrackr_api.dto.CreateTagRequestDto;
-import com.ricard0g.jobtrackr_api.dto.TagResponseDto;
+import com.ricard0g.jobtrackr_api.dto.TagDto.CreateTagRequestDto;
+import com.ricard0g.jobtrackr_api.dto.TagDto.TagResponseDto;
 import com.ricard0g.jobtrackr_api.exception.DuplicateTagNameException;
 import com.ricard0g.jobtrackr_api.exception.TagNotFoundException;
 import com.ricard0g.jobtrackr_api.model.Tag;

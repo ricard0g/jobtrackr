@@ -25,10 +25,10 @@ import org.springframework.http.MediaType;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 
-import com.ricard0g.jobtrackr_api.dto.ApplicationCreateRequestDto;
-import com.ricard0g.jobtrackr_api.dto.ApplicationResponseDto;
-import com.ricard0g.jobtrackr_api.dto.CompanyResponseDto;
-import com.ricard0g.jobtrackr_api.dto.TagResponseDto;
+import com.ricard0g.jobtrackr_api.dto.ApplicationDto.ApplicationCreateRequestDto;
+import com.ricard0g.jobtrackr_api.dto.ApplicationDto.ApplicationResponseDto;
+import com.ricard0g.jobtrackr_api.dto.CompanyDto.CompanyResponseDto;
+import com.ricard0g.jobtrackr_api.dto.TagDto.TagResponseDto;
 import com.ricard0g.jobtrackr_api.exception.ApplicationNotFoundException;
 import com.ricard0g.jobtrackr_api.exception.CompanyNotFoundException;
 import com.ricard0g.jobtrackr_api.exception.GlobalExceptionHandler;

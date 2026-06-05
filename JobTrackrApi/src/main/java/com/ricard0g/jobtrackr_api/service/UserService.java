@@ -5,7 +5,7 @@ import java.util.List;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import com.ricard0g.jobtrackr_api.dto.UserResponseDto;
+import com.ricard0g.jobtrackr_api.dto.UserDto.UserResponseDto;
 import com.ricard0g.jobtrackr_api.repository.UserRepository;
 
 import lombok.RequiredArgsConstructor;

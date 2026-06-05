@@ -22,8 +22,8 @@ import org.springframework.http.MediaType;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 
-import com.ricard0g.jobtrackr_api.dto.CreateTagRequestDto;
-import com.ricard0g.jobtrackr_api.dto.TagResponseDto;
+import com.ricard0g.jobtrackr_api.dto.TagDto.CreateTagRequestDto;
+import com.ricard0g.jobtrackr_api.dto.TagDto.TagResponseDto;
 import com.ricard0g.jobtrackr_api.exception.GlobalExceptionHandler;
 import com.ricard0g.jobtrackr_api.exception.TagNotFoundException;
 import com.ricard0g.jobtrackr_api.model.enums.TagCategory;

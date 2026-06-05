@@ -9,8 +9,8 @@ import java.util.stream.Collectors;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import com.ricard0g.jobtrackr_api.dto.ApplicationCreateRequestDto;
-import com.ricard0g.jobtrackr_api.dto.ApplicationResponseDto;
+import com.ricard0g.jobtrackr_api.dto.ApplicationDto.ApplicationCreateRequestDto;
+import com.ricard0g.jobtrackr_api.dto.ApplicationDto.ApplicationResponseDto;
 import com.ricard0g.jobtrackr_api.exception.ApplicationNotFoundException;
 import com.ricard0g.jobtrackr_api.exception.CompanyNotFoundException;
 import com.ricard0g.jobtrackr_api.exception.InvalidApplicationSalaryRangeException;
