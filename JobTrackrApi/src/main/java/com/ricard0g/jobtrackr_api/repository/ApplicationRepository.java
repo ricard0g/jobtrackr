@@ -38,4 +38,12 @@ public interface ApplicationRepository extends JpaRepository<Application, Long> 
             """)
     Optional<Application> findForUser(
             @Param("applicationId") Long applicationId, @Param("userId") Long userId);
+
+    @Query(
+            """
+            SELECT CASE WHEN COUNT(a) > 0 THEN true ELSE false END
+            FROM Application a
+            WHERE a.applicationId = :applicationId AND a.user.userId = :userId
+            """)
+    boolean existsForUser(@Param("applicationId") Long applicationId, @Param("userId") Long userId);
 }

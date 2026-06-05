@@ -48,6 +48,12 @@ public class GlobalExceptionHandler {
                 .body(ErrorResponse.of("APPLICATION_NOT_FOUND", exception.getMessage()));
     }
 
+    @ExceptionHandler(InterviewNotFoundException.class)
+    public ResponseEntity<ErrorResponse> handleInterviewNotFound(final InterviewNotFoundException exception) {
+        return ResponseEntity.status(HttpStatus.NOT_FOUND)
+                .body(ErrorResponse.of("INTERVIEW_NOT_FOUND", exception.getMessage()));
+    }
+
     @ExceptionHandler(InvalidApplicationSalaryRangeException.class)
     public ResponseEntity<ErrorResponse> handleInvalidApplicationSalaryRange(
             final InvalidApplicationSalaryRangeException exception) {

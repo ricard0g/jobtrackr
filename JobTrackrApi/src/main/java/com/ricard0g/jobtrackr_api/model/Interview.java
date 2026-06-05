@@ -74,4 +74,20 @@ public class Interview {
     @UpdateTimestamp
     @Column(name = "interview_updated_at", nullable = false)
     private OffsetDateTime interviewUpdatedAt;
+
+    public static Interview create(
+            final Application application,
+            final InterviewType interviewType,
+            final OffsetDateTime interviewScheduledAt,
+            final String interviewLocation,
+            final String interviewNotes) {
+        final Interview interview = new Interview();
+        interview.setApplication(application);
+        interview.setInterviewType(interviewType);
+        interview.setInterviewScheduledAt(interviewScheduledAt);
+        interview.setInterviewLocation(interviewLocation);
+        interview.setInterviewNotes(interviewNotes);
+        interview.setInterviewOutcome(InterviewOutcome.PENDING);
+        return interview;
+    }
 }
