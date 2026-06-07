@@ -7,6 +7,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import com.ricard0g.jobtrackr_api.dto.TagDto.CreateTagRequestDto;
+import com.ricard0g.jobtrackr_api.dto.TagDto.TagPutRequestDto;
 import com.ricard0g.jobtrackr_api.dto.TagDto.TagResponseDto;
 import com.ricard0g.jobtrackr_api.exception.DuplicateTagNameException;
 import com.ricard0g.jobtrackr_api.exception.TagNotFoundException;
@@ -49,6 +50,22 @@ public class TagService {
         final Tag savedTag = tagRepository.save(tag);
         final TagResponseDto response = TagResponseDto.from(savedTag);
         log.info("[TagService] - CREATE_TAG: response: {}, tagId: {}", response.tagName(), response.tagId());
+        return response;
+    }
+
+    @Transactional
+    public TagResponseDto replaceTag(final Long tagId, final TagPutRequestDto request) {
+        final Tag tag = tagRepository.findById(tagId).orElseThrow(() -> new TagNotFoundException(tagId));
+        if (tagRepository.existsByTagNameAndTagIdNot(request.tagName(), tagId)) {
+            throw new DuplicateTagNameException(request.tagName());
+        }
+        tag.setTagCategory(request.tagCategory());
+        tag.setTagName(request.tagName());
+        final boolean hasColor = request.tagColor() != null && !request.tagColor().isBlank();
+        tag.setTagColor(hasColor ? request.tagColor() : Tag.DEFAULT_TAG_COLOR);
+        final Tag savedTag = tagRepository.save(tag);
+        final TagResponseDto response = TagResponseDto.from(savedTag);
+        log.info("[TagService] - REPLACE_TAG: response: {}, tagId: {}", response.tagName(), response.tagId());
         return response;
     }
 

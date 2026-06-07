@@ -9,6 +9,7 @@ import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -25,6 +26,7 @@ import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 
 import com.ricard0g.jobtrackr_api.dto.InterviewDto.InterviewCreateRequestDto;
+import com.ricard0g.jobtrackr_api.dto.InterviewDto.InterviewPutRequestDto;
 import com.ricard0g.jobtrackr_api.dto.InterviewDto.InterviewResponseDto;
 import com.ricard0g.jobtrackr_api.exception.ApplicationNotFoundException;
 import com.ricard0g.jobtrackr_api.exception.GlobalExceptionHandler;
@@ -250,6 +252,82 @@ class InterviewControllerTest {
                                         """))
                 .andExpect(status().isNotFound())
                 .andExpect(jsonPath("$.code").value("APPLICATION_NOT_FOUND"));
+    }
+
+    @Test
+    void replaceInterview_withValidBody_returns200() throws Exception {
+        // given
+        final InterviewResponseDto updated = new InterviewResponseDto(
+                2L,
+                10L,
+                InterviewType.HR,
+                TIMESTAMP,
+                "Office",
+                "Updated notes",
+                InterviewOutcome.PASSED,
+                TIMESTAMP,
+                TIMESTAMP);
+        when(interviewService.replaceInterview(eq(1L), eq(10L), eq(2L), any(InterviewPutRequestDto.class)))
+                .thenReturn(updated);
+
+        // when / then
+        mockMvc.perform(
+                        put(BASE_PATH + "/2")
+                                .contentType(MediaType.APPLICATION_JSON)
+                                .content(
+                                        """
+                                        {
+                                          "interviewType": "HR",
+                                          "interviewScheduledAt": "2026-06-10T15:00:00Z",
+                                          "interviewLocation": "Office",
+                                          "interviewNotes": "Updated notes",
+                                          "interviewOutcome": "PASSED"
+                                        }
+                                        """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.interviewId").value(2))
+                .andExpect(jsonPath("$.interviewOutcome").value("PASSED"));
+
+        verify(interviewService).replaceInterview(eq(1L), eq(10L), eq(2L), any(InterviewPutRequestDto.class));
+    }
+
+    @Test
+    void replaceInterview_withMissingOutcome_returns400() throws Exception {
+        // when / then
+        mockMvc.perform(
+                        put(BASE_PATH + "/2")
+                                .contentType(MediaType.APPLICATION_JSON)
+                                .content(
+                                        """
+                                        {
+                                          "interviewType": "TECHNICAL",
+                                          "interviewScheduledAt": "2026-06-10T15:00:00Z"
+                                        }
+                                        """))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("VALIDATION_ERROR"));
+    }
+
+    @Test
+    void replaceInterview_whenNotFound_returns404() throws Exception {
+        // given
+        when(interviewService.replaceInterview(eq(1L), eq(10L), eq(99L), any(InterviewPutRequestDto.class)))
+                .thenThrow(new InterviewNotFoundException(1L, 10L, 99L));
+
+        // when / then
+        mockMvc.perform(
+                        put(BASE_PATH + "/99")
+                                .contentType(MediaType.APPLICATION_JSON)
+                                .content(
+                                        """
+                                        {
+                                          "interviewType": "TECHNICAL",
+                                          "interviewScheduledAt": "2026-06-10T15:00:00Z",
+                                          "interviewOutcome": "PENDING"
+                                        }
+                                        """))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.code").value("INTERVIEW_NOT_FOUND"));
     }
 
     @Test

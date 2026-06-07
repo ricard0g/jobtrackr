@@ -6,6 +6,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import com.ricard0g.jobtrackr_api.dto.InterviewDto.InterviewCreateRequestDto;
+import com.ricard0g.jobtrackr_api.dto.InterviewDto.InterviewPutRequestDto;
 import com.ricard0g.jobtrackr_api.dto.InterviewDto.InterviewResponseDto;
 import com.ricard0g.jobtrackr_api.exception.ApplicationNotFoundException;
 import com.ricard0g.jobtrackr_api.exception.InterviewNotFoundException;
@@ -68,6 +69,27 @@ public class InterviewService {
         log.info(
                 "[InterviewService] - CREATE_INTERVIEW: interviewId: {}, applicationId: {}, userId: {}",
                 saved.getInterviewId(),
+                applicationId,
+                userId);
+        return InterviewResponseDto.from(saved, applicationId);
+    }
+
+    @Transactional
+    public InterviewResponseDto replaceInterview(
+            final Long userId,
+            final Long applicationId,
+            final Long interviewId,
+            final InterviewPutRequestDto dto) {
+        final Interview interview = requireInterviewForUser(userId, applicationId, interviewId);
+        interview.setInterviewType(dto.interviewType());
+        interview.setInterviewScheduledAt(dto.interviewScheduledAt());
+        interview.setInterviewLocation(normalizeOptional(dto.interviewLocation()));
+        interview.setInterviewNotes(normalizeOptional(dto.interviewNotes()));
+        interview.setInterviewOutcome(dto.interviewOutcome());
+        final Interview saved = interviewRepository.save(interview);
+        log.info(
+                "[InterviewService] - REPLACE_INTERVIEW: interviewId: {}, applicationId: {}, userId: {}",
+                interviewId,
                 applicationId,
                 userId);
         return InterviewResponseDto.from(saved, applicationId);

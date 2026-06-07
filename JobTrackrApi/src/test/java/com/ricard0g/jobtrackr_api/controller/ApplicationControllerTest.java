@@ -8,7 +8,9 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -26,14 +28,19 @@ import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 
 import com.ricard0g.jobtrackr_api.dto.ApplicationDto.ApplicationCreateRequestDto;
+import com.ricard0g.jobtrackr_api.dto.ApplicationDto.ApplicationPatchRequestDto;
+import com.ricard0g.jobtrackr_api.dto.ApplicationDto.ApplicationPutRequestDto;
 import com.ricard0g.jobtrackr_api.dto.ApplicationDto.ApplicationResponseDto;
+import com.ricard0g.jobtrackr_api.dto.TagDto.CreateTagRequestDto;
 import com.ricard0g.jobtrackr_api.dto.CompanyDto.CompanyResponseDto;
 import com.ricard0g.jobtrackr_api.dto.TagDto.TagResponseDto;
 import com.ricard0g.jobtrackr_api.exception.ApplicationNotFoundException;
 import com.ricard0g.jobtrackr_api.exception.CompanyNotFoundException;
+import com.ricard0g.jobtrackr_api.exception.DuplicateTagNameException;
 import com.ricard0g.jobtrackr_api.exception.GlobalExceptionHandler;
 import com.ricard0g.jobtrackr_api.exception.InvalidApplicationSalaryRangeException;
 import com.ricard0g.jobtrackr_api.exception.TagNotFoundException;
+import com.ricard0g.jobtrackr_api.exception.TooManyApplicationTagsException;
 import com.ricard0g.jobtrackr_api.exception.UserNotFoundException;
 import com.ricard0g.jobtrackr_api.model.enums.ApplicationStatus;
 import com.ricard0g.jobtrackr_api.model.enums.RemoteType;
@@ -299,6 +306,168 @@ class ApplicationControllerTest {
                                         """))
                 .andExpect(status().isNotFound())
                 .andExpect(jsonPath("$.code").value("TAG_NOT_FOUND"));
+    }
+
+    @Test
+    void replaceApplication_withValidBody_returns200() throws Exception {
+        // given
+        final ApplicationResponseDto updated = sampleApplication(2L, "Updated Title");
+        when(applicationService.replaceApplication(eq(1L), eq(2L), any(ApplicationPutRequestDto.class)))
+                .thenReturn(updated);
+
+        // when / then
+        mockMvc.perform(
+                        put(BASE_PATH + "/2")
+                                .contentType(MediaType.APPLICATION_JSON)
+                                .content(
+                                        """
+                                        {
+                                          "companyId": 5,
+                                          "applicationTitle": "Updated Title",
+                                          "applicationStatus": "APPLIED"
+                                        }
+                                        """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.applicationId").value(2))
+                .andExpect(jsonPath("$.applicationTitle").value("Updated Title"));
+
+        verify(applicationService).replaceApplication(eq(1L), eq(2L), any(ApplicationPutRequestDto.class));
+    }
+
+    @Test
+    void replaceApplication_whenNotFound_returns404() throws Exception {
+        // given
+        when(applicationService.replaceApplication(eq(1L), eq(99L), any(ApplicationPutRequestDto.class)))
+                .thenThrow(new ApplicationNotFoundException(1L, 99L));
+
+        // when / then
+        mockMvc.perform(
+                        put(BASE_PATH + "/99")
+                                .contentType(MediaType.APPLICATION_JSON)
+                                .content(
+                                        """
+                                        {
+                                          "companyId": 5,
+                                          "applicationTitle": "Updated Title",
+                                          "applicationStatus": "APPLIED"
+                                        }
+                                        """))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.code").value("APPLICATION_NOT_FOUND"));
+    }
+
+    @Test
+    void patchApplication_withScalarFields_returns200() throws Exception {
+        // given
+        final ApplicationResponseDto patched = sampleApplication(2L, "Patched Title");
+        when(applicationService.patchApplication(eq(1L), eq(2L), any(ApplicationPatchRequestDto.class)))
+                .thenReturn(patched);
+
+        // when / then
+        mockMvc.perform(
+                        patch(BASE_PATH + "/2")
+                                .contentType(MediaType.APPLICATION_JSON)
+                                .content(
+                                        """
+                                        {
+                                          "applicationTitle": "Patched Title",
+                                          "applicationStatus": "IN_REVIEW"
+                                        }
+                                        """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.applicationTitle").value("Patched Title"));
+
+        verify(applicationService).patchApplication(eq(1L), eq(2L), any(ApplicationPatchRequestDto.class));
+    }
+
+    @Test
+    void patchApplication_withTagIds_returns200() throws Exception {
+        // given
+        final ApplicationResponseDto patched = sampleApplicationWithTags(2L, "Tagged Role");
+        when(applicationService.patchApplication(eq(1L), eq(2L), any(ApplicationPatchRequestDto.class)))
+                .thenReturn(patched);
+
+        // when / then
+        mockMvc.perform(
+                        patch(BASE_PATH + "/2")
+                                .contentType(MediaType.APPLICATION_JSON)
+                                .content(
+                                        """
+                                        {
+                                          "addTagIds": [1, 2],
+                                          "removeTagIds": [3]
+                                        }
+                                        """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.tags[0].tagId").value(1))
+                .andExpect(jsonPath("$.tags[1].tagId").value(2));
+    }
+
+    @Test
+    void patchApplication_whenTooManyTags_returns400() throws Exception {
+        // given
+        when(applicationService.patchApplication(eq(1L), eq(2L), any(ApplicationPatchRequestDto.class)))
+                .thenThrow(new TooManyApplicationTagsException(2L, 50));
+
+        // when / then
+        mockMvc.perform(
+                        patch(BASE_PATH + "/2")
+                                .contentType(MediaType.APPLICATION_JSON)
+                                .content(
+                                        """
+                                        {
+                                          "addTagIds": [1]
+                                        }
+                                        """))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("TOO_MANY_APPLICATION_TAGS"));
+    }
+
+    @Test
+    void createAndAttachTag_withValidBody_returns201() throws Exception {
+        // given
+        final TagResponseDto created = new TagResponseDto(5L, TagCategory.TECH_STACK, "Kotlin", "#AABBCC");
+        when(applicationService.createAndAttachTag(eq(1L), eq(2L), any(CreateTagRequestDto.class)))
+                .thenReturn(created);
+
+        // when / then
+        mockMvc.perform(
+                        post(BASE_PATH + "/2/tags")
+                                .contentType(MediaType.APPLICATION_JSON)
+                                .content(
+                                        """
+                                        {
+                                          "tagCategory": "TECH_STACK",
+                                          "tagName": "Kotlin",
+                                          "tagColor": "#AABBCC"
+                                        }
+                                        """))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.tagId").value(5))
+                .andExpect(jsonPath("$.tagName").value("Kotlin"));
+
+        verify(applicationService).createAndAttachTag(eq(1L), eq(2L), any(CreateTagRequestDto.class));
+    }
+
+    @Test
+    void createAndAttachTag_whenDuplicateName_returns409() throws Exception {
+        // given
+        when(applicationService.createAndAttachTag(eq(1L), eq(2L), any(CreateTagRequestDto.class)))
+                .thenThrow(new DuplicateTagNameException("Kotlin"));
+
+        // when / then
+        mockMvc.perform(
+                        post(BASE_PATH + "/2/tags")
+                                .contentType(MediaType.APPLICATION_JSON)
+                                .content(
+                                        """
+                                        {
+                                          "tagCategory": "TECH_STACK",
+                                          "tagName": "Kotlin"
+                                        }
+                                        """))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.code").value("DUPLICATE_TAG_NAME"));
     }
 
     @Test

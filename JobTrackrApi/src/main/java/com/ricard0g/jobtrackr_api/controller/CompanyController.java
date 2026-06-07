@@ -9,11 +9,13 @@ import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 import com.ricard0g.jobtrackr_api.dto.CompanyDto.CompanyCreateRequestDto;
+import com.ricard0g.jobtrackr_api.dto.CompanyDto.CompanyPutRequestDto;
 import com.ricard0g.jobtrackr_api.dto.CompanyDto.CompanyResponseDto;
 import com.ricard0g.jobtrackr_api.service.CompanyService;
 
@@ -46,6 +48,14 @@ public class CompanyController {
             @PathVariable @Positive final Long userId,
             @Valid @RequestBody final CompanyCreateRequestDto request) {
         return ResponseEntity.status(HttpStatus.CREATED).body(companyService.createCompany(userId, request));
+    }
+
+    @PutMapping("/{companyId}")
+    public ResponseEntity<CompanyResponseDto> replaceCompany(
+            @PathVariable @Positive final Long userId,
+            @PathVariable @Positive final Long companyId,
+            @Valid @RequestBody final CompanyPutRequestDto request) {
+        return ResponseEntity.ok(companyService.replaceCompany(userId, companyId, request));
     }
 
     @DeleteMapping("/{companyId}")

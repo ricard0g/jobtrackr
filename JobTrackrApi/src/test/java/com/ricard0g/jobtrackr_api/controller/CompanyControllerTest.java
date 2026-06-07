@@ -9,6 +9,7 @@ import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -25,6 +26,7 @@ import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 
 import com.ricard0g.jobtrackr_api.dto.CompanyDto.CompanyCreateRequestDto;
+import com.ricard0g.jobtrackr_api.dto.CompanyDto.CompanyPutRequestDto;
 import com.ricard0g.jobtrackr_api.dto.CompanyDto.CompanyResponseDto;
 import com.ricard0g.jobtrackr_api.exception.CompanyHasApplicationsException;
 import com.ricard0g.jobtrackr_api.exception.CompanyNotFoundException;
@@ -217,6 +219,70 @@ class CompanyControllerTest {
         // when / then
         mockMvc.perform(
                         post(BASE_PATH)
+                                .contentType(MediaType.APPLICATION_JSON)
+                                .content(
+                                        """
+                                        {
+                                          "companyName": "Acme"
+                                        }
+                                        """))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.code").value("DUPLICATE_COMPANY_NAME"));
+    }
+
+    @Test
+    void replaceCompany_withValidBody_returns200() throws Exception {
+        // given
+        final CompanyResponseDto updated = sampleCompany(2L, "Globex Updated", "https://globex.example");
+        when(companyService.replaceCompany(eq(1L), eq(2L), any(CompanyPutRequestDto.class))).thenReturn(updated);
+
+        // when / then
+        mockMvc.perform(
+                        put(BASE_PATH + "/2")
+                                .contentType(MediaType.APPLICATION_JSON)
+                                .content(
+                                        """
+                                        {
+                                          "companyName": "Globex Updated",
+                                          "companyWebsiteUrl": "https://globex.example"
+                                        }
+                                        """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.companyId").value(2))
+                .andExpect(jsonPath("$.companyName").value("Globex Updated"));
+
+        verify(companyService).replaceCompany(eq(1L), eq(2L), any(CompanyPutRequestDto.class));
+    }
+
+    @Test
+    void replaceCompany_whenNotFound_returns404() throws Exception {
+        // given
+        when(companyService.replaceCompany(eq(1L), eq(99L), any(CompanyPutRequestDto.class)))
+                .thenThrow(new CompanyNotFoundException(1L, 99L));
+
+        // when / then
+        mockMvc.perform(
+                        put(BASE_PATH + "/99")
+                                .contentType(MediaType.APPLICATION_JSON)
+                                .content(
+                                        """
+                                        {
+                                          "companyName": "Globex"
+                                        }
+                                        """))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.code").value("COMPANY_NOT_FOUND"));
+    }
+
+    @Test
+    void replaceCompany_whenDuplicateName_returns409() throws Exception {
+        // given
+        when(companyService.replaceCompany(eq(1L), eq(2L), any(CompanyPutRequestDto.class)))
+                .thenThrow(new DuplicateCompanyNameException(1L, "Acme"));
+
+        // when / then
+        mockMvc.perform(
+                        put(BASE_PATH + "/2")
                                 .contentType(MediaType.APPLICATION_JSON)
                                 .content(
                                         """

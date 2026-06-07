@@ -73,6 +73,13 @@ public class GlobalExceptionHandler {
                 .body(ErrorResponse.of("DUPLICATE_TAG_NAME", exception.getMessage()));
     }
 
+    @ExceptionHandler(TooManyApplicationTagsException.class)
+    public ResponseEntity<ErrorResponse> handleTooManyApplicationTags(
+            final TooManyApplicationTagsException exception) {
+        return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                .body(ErrorResponse.of("TOO_MANY_APPLICATION_TAGS", exception.getMessage()));
+    }
+
     @ExceptionHandler(MethodArgumentNotValidException.class)
     public ResponseEntity<ErrorResponse> handleMethodArgumentNotValid(
             final MethodArgumentNotValidException exception) {

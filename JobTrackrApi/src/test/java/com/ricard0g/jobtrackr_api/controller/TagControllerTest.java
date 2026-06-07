@@ -1,6 +1,7 @@
 package com.ricard0g.jobtrackr_api.controller;
 
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doNothing;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.verify;
@@ -8,6 +9,7 @@ import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -23,7 +25,9 @@ import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 
 import com.ricard0g.jobtrackr_api.dto.TagDto.CreateTagRequestDto;
+import com.ricard0g.jobtrackr_api.dto.TagDto.TagPutRequestDto;
 import com.ricard0g.jobtrackr_api.dto.TagDto.TagResponseDto;
+import com.ricard0g.jobtrackr_api.exception.DuplicateTagNameException;
 import com.ricard0g.jobtrackr_api.exception.GlobalExceptionHandler;
 import com.ricard0g.jobtrackr_api.exception.TagNotFoundException;
 import com.ricard0g.jobtrackr_api.model.enums.TagCategory;
@@ -113,6 +117,74 @@ class TagControllerTest {
                     }
                     """))
         .andExpect(status().isBadRequest());
+  }
+
+  @Test
+  void replaceTag_withValidBody_returns200() throws Exception {
+    // given
+    final TagResponseDto updated =
+        new TagResponseDto(1L, TagCategory.TECH_STACK, "Java 21", "#112233");
+    when(tagService.replaceTag(eq(1L), any(TagPutRequestDto.class))).thenReturn(updated);
+
+    // when / then
+    mockMvc.perform(
+            put("/api/v1/tags/1")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(
+                    """
+                    {
+                      "tagCategory": "TECH_STACK",
+                      "tagName": "Java 21",
+                      "tagColor": "#112233"
+                    }
+                    """))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.tagId").value(1))
+        .andExpect(jsonPath("$.tagName").value("Java 21"));
+
+    verify(tagService).replaceTag(eq(1L), any(TagPutRequestDto.class));
+  }
+
+  @Test
+  void replaceTag_whenNotFound_returns404() throws Exception {
+    // given
+    when(tagService.replaceTag(eq(99L), any(TagPutRequestDto.class)))
+        .thenThrow(new TagNotFoundException(99L));
+
+    // when / then
+    mockMvc.perform(
+            put("/api/v1/tags/99")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(
+                    """
+                    {
+                      "tagCategory": "TECH_STACK",
+                      "tagName": "Java"
+                    }
+                    """))
+        .andExpect(status().isNotFound())
+        .andExpect(jsonPath("$.code").value("TAG_NOT_FOUND"));
+  }
+
+  @Test
+  void replaceTag_whenDuplicateName_returns409() throws Exception {
+    // given
+    when(tagService.replaceTag(eq(1L), any(TagPutRequestDto.class)))
+        .thenThrow(new DuplicateTagNameException("Spring"));
+
+    // when / then
+    mockMvc.perform(
+            put("/api/v1/tags/1")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(
+                    """
+                    {
+                      "tagCategory": "TECH_STACK",
+                      "tagName": "Spring"
+                    }
+                    """))
+        .andExpect(status().isConflict())
+        .andExpect(jsonPath("$.code").value("DUPLICATE_TAG_NAME"));
   }
 
   @Test

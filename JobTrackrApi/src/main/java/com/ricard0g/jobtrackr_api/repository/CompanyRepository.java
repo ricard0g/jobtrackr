@@ -34,4 +34,17 @@ public interface CompanyRepository extends JpaRepository<Company, Long> {
               AND LOWER(c.companyName) = LOWER(:companyName)
             """)
     boolean nameExistsForUser(@Param("userId") Long userId, @Param("companyName") String companyName);
+
+    @Query(
+            """
+            SELECT CASE WHEN COUNT(c) > 0 THEN true ELSE false END
+            FROM Company c
+            WHERE c.user.userId = :userId
+              AND LOWER(c.companyName) = LOWER(:companyName)
+              AND c.companyId <> :companyId
+            """)
+    boolean nameExistsForUserExcludingCompany(
+            @Param("userId") Long userId,
+            @Param("companyName") String companyName,
+            @Param("companyId") Long companyId);
 }

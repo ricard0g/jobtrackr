@@ -9,11 +9,13 @@ import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 import com.ricard0g.jobtrackr_api.dto.TagDto.CreateTagRequestDto;
+import com.ricard0g.jobtrackr_api.dto.TagDto.TagPutRequestDto;
 import com.ricard0g.jobtrackr_api.dto.TagDto.TagResponseDto;
 import com.ricard0g.jobtrackr_api.service.TagService;
 
@@ -42,6 +44,12 @@ public class TagController {
     @PostMapping
     public ResponseEntity<TagResponseDto> createTag(@Valid @RequestBody final CreateTagRequestDto request) {
         return ResponseEntity.status(HttpStatus.CREATED).body(tagService.createTag(request));
+    }
+
+    @PutMapping("/{tagId}")
+    public ResponseEntity<TagResponseDto> replaceTag(
+            @PathVariable @Positive final Long tagId, @Valid @RequestBody final TagPutRequestDto request) {
+        return ResponseEntity.ok(tagService.replaceTag(tagId, request));
     }
 
     @DeleteMapping("/{tagId}")

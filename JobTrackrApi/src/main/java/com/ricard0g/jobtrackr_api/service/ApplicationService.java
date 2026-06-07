@@ -10,7 +10,13 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import com.ricard0g.jobtrackr_api.dto.ApplicationDto.ApplicationCreateRequestDto;
+import com.ricard0g.jobtrackr_api.dto.ApplicationDto.ApplicationPatchRequestDto;
+import com.ricard0g.jobtrackr_api.dto.ApplicationDto.ApplicationPutRequestDto;
 import com.ricard0g.jobtrackr_api.dto.ApplicationDto.ApplicationResponseDto;
+import com.ricard0g.jobtrackr_api.dto.TagDto.CreateTagRequestDto;
+import com.ricard0g.jobtrackr_api.dto.TagDto.TagResponseDto;
+import com.ricard0g.jobtrackr_api.exception.DuplicateTagNameException;
+import com.ricard0g.jobtrackr_api.exception.TooManyApplicationTagsException;
 import com.ricard0g.jobtrackr_api.exception.ApplicationNotFoundException;
 import com.ricard0g.jobtrackr_api.exception.CompanyNotFoundException;
 import com.ricard0g.jobtrackr_api.exception.InvalidApplicationSalaryRangeException;
@@ -32,6 +38,8 @@ import lombok.extern.slf4j.Slf4j;
 @RequiredArgsConstructor
 @Slf4j
 public class ApplicationService {
+
+    private static final int MAX_TAGS = 50;
 
     private final UserRepository userRepository;
     private final CompanyRepository companyRepository;
@@ -91,6 +99,103 @@ public class ApplicationService {
     }
 
     @Transactional
+    public ApplicationResponseDto replaceApplication(
+            final Long userId, final Long applicationId, final ApplicationPutRequestDto dto) {
+        final Application application = requireApplicationForUser(userId, applicationId);
+        final Company company = requireCompanyForUser(userId, dto.companyId());
+        validateSalaryRange(dto.applicationSalaryMin(), dto.applicationSalaryMax());
+        application.setCompany(company);
+        application.setApplicationTitle(dto.applicationTitle().trim());
+        application.setApplicationStatus(dto.applicationStatus());
+        application.setApplicationKanbanOrder(
+                dto.applicationKanbanOrder() != null ? dto.applicationKanbanOrder() : 0);
+        application.setApplicationJobUrl(normalizeOptional(dto.applicationJobUrl()));
+        application.setApplicationLocation(normalizeOptional(dto.applicationLocation()));
+        application.setApplicationRemoteType(dto.applicationRemoteType());
+        application.setApplicationSource(normalizeOptional(dto.applicationSource()));
+        application.setApplicationSalaryMin(dto.applicationSalaryMin());
+        application.setApplicationSalaryMax(dto.applicationSalaryMax());
+        application.setApplicationCurrency(normalizeOptional(dto.applicationCurrency()));
+        application.setApplicationAppliedAt(dto.applicationAppliedAt());
+        final Application saved = applicationRepository.save(application);
+        log.info(
+                "[ApplicationService] - REPLACE_APPLICATION: applicationId: {}, userId: {}",
+                applicationId,
+                userId);
+        return ApplicationResponseDto.from(saved);
+    }
+
+    @Transactional
+    public ApplicationResponseDto patchApplication(
+            final Long userId, final Long applicationId, final ApplicationPatchRequestDto dto) {
+        final Application application = requireApplicationForUser(userId, applicationId);
+        if (dto.companyId() != null) {
+            application.setCompany(requireCompanyForUser(userId, dto.companyId()));
+        }
+        if (dto.applicationTitle() != null) {
+            application.setApplicationTitle(dto.applicationTitle().trim());
+        }
+        if (dto.applicationStatus() != null) {
+            application.setApplicationStatus(dto.applicationStatus());
+        }
+        if (dto.applicationKanbanOrder() != null) {
+            application.setApplicationKanbanOrder(dto.applicationKanbanOrder());
+        }
+        if (dto.applicationJobUrl() != null) {
+            application.setApplicationJobUrl(normalizeOptional(dto.applicationJobUrl()));
+        }
+        if (dto.applicationLocation() != null) {
+            application.setApplicationLocation(normalizeOptional(dto.applicationLocation()));
+        }
+        if (dto.applicationRemoteType() != null) {
+            application.setApplicationRemoteType(dto.applicationRemoteType());
+        }
+        if (dto.applicationSource() != null) {
+            application.setApplicationSource(normalizeOptional(dto.applicationSource()));
+        }
+        if (dto.applicationSalaryMin() != null) {
+            application.setApplicationSalaryMin(dto.applicationSalaryMin());
+        }
+        if (dto.applicationSalaryMax() != null) {
+            application.setApplicationSalaryMax(dto.applicationSalaryMax());
+        }
+        if (dto.applicationCurrency() != null) {
+            application.setApplicationCurrency(normalizeOptional(dto.applicationCurrency()));
+        }
+        if (dto.applicationAppliedAt() != null) {
+            application.setApplicationAppliedAt(dto.applicationAppliedAt());
+        }
+        validateSalaryRange(application.getApplicationSalaryMin(), application.getApplicationSalaryMax());
+        patchTags(application, dto.addTagIds(), dto.removeTagIds());
+        final Application saved = applicationRepository.save(application);
+        log.info(
+                "[ApplicationService] - PATCH_APPLICATION: applicationId: {}, userId: {}",
+                applicationId,
+                userId);
+        return ApplicationResponseDto.from(saved);
+    }
+
+    @Transactional
+    public TagResponseDto createAndAttachTag(
+            final Long userId, final Long applicationId, final CreateTagRequestDto request) {
+        final Application application = requireApplicationForUser(userId, applicationId);
+        if (tagRepository.existsByTagName(request.tagName())) {
+            throw new DuplicateTagNameException(request.tagName());
+        }
+        ensureTagCountWithinLimit(application, 1);
+        final Tag tag = Tag.create(request.tagCategory(), request.tagName(), request.tagColor());
+        final Tag savedTag = tagRepository.save(tag);
+        application.getTags().add(savedTag);
+        applicationRepository.save(application);
+        log.info(
+                "[ApplicationService] - CREATE_AND_ATTACH_TAG: tagId: {}, applicationId: {}, userId: {}",
+                savedTag.getTagId(),
+                applicationId,
+                userId);
+        return TagResponseDto.from(savedTag);
+    }
+
+    @Transactional
     public void deleteApplication(final Long userId, final Long applicationId) {
         final Application application = requireApplicationForUser(userId, applicationId);
         applicationRepository.delete(application);
@@ -123,6 +228,25 @@ public class ApplicationService {
         final boolean maxLessThanMin = salaryMax.compareTo(salaryMin) < 0;
         if (maxLessThanMin) {
             throw new InvalidApplicationSalaryRangeException(salaryMin, salaryMax);
+        }
+    }
+
+    private void patchTags(
+            final Application application, final List<Long> addTagIds, final List<Long> removeTagIds) {
+        if (removeTagIds != null && !removeTagIds.isEmpty()) {
+            final Set<Long> idsToRemove = new HashSet<>(removeTagIds);
+            application.getTags().removeIf(tag -> idsToRemove.contains(tag.getTagId()));
+        }
+        if (addTagIds != null && !addTagIds.isEmpty()) {
+            application.getTags().addAll(resolveTags(addTagIds));
+        }
+        ensureTagCountWithinLimit(application, 0);
+    }
+
+    private void ensureTagCountWithinLimit(final Application application, final int additionalTags) {
+        final int projectedCount = application.getTags().size() + additionalTags;
+        if (projectedCount > MAX_TAGS) {
+            throw new TooManyApplicationTagsException(application.getApplicationId(), MAX_TAGS);
         }
     }
 

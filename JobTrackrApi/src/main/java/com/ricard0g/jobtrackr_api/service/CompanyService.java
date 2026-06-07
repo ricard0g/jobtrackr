@@ -6,6 +6,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import com.ricard0g.jobtrackr_api.dto.CompanyDto.CompanyCreateRequestDto;
+import com.ricard0g.jobtrackr_api.dto.CompanyDto.CompanyPutRequestDto;
 import com.ricard0g.jobtrackr_api.dto.CompanyDto.CompanyResponseDto;
 import com.ricard0g.jobtrackr_api.exception.CompanyHasApplicationsException;
 import com.ricard0g.jobtrackr_api.exception.CompanyNotFoundException;
@@ -63,6 +64,26 @@ public class CompanyService {
                 normalizeOptional(dto.companyLogo()));
         final Company saved = companyRepository.save(company);
         log.info("[CompanyService] - CREATE_COMPANY: companyId: {}, userId: {}", saved.getCompanyId(), userId);
+        return CompanyResponseDto.from(saved);
+    }
+
+    @Transactional
+    public CompanyResponseDto replaceCompany(
+            final Long userId, final Long companyId, final CompanyPutRequestDto dto) {
+        final Company company = requireCompanyForUser(userId, companyId);
+        final String companyName = dto.companyName().trim();
+        final boolean nameAlreadyExists =
+                companyRepository.nameExistsForUserExcludingCompany(userId, companyName, companyId);
+        if (nameAlreadyExists) {
+            throw new DuplicateCompanyNameException(userId, companyName);
+        }
+        company.setCompanyName(companyName);
+        company.setCompanyWebsiteUrl(normalizeOptional(dto.companyWebsiteUrl()));
+        company.setCompanyLocation(normalizeOptional(dto.companyLocation()));
+        company.setCompanyType(normalizeOptional(dto.companyType()));
+        company.setCompanyLogo(normalizeOptional(dto.companyLogo()));
+        final Company saved = companyRepository.save(company);
+        log.info("[CompanyService] - REPLACE_COMPANY: companyId: {}, userId: {}", companyId, userId);
         return CompanyResponseDto.from(saved);
     }
 
