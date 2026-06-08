@@ -31,6 +31,7 @@ import com.ricard0g.jobtrackr_api.dto.ApplicationDto.ApplicationCreateRequestDto
 import com.ricard0g.jobtrackr_api.dto.ApplicationDto.ApplicationPatchRequestDto;
 import com.ricard0g.jobtrackr_api.dto.ApplicationDto.ApplicationPutRequestDto;
 import com.ricard0g.jobtrackr_api.dto.ApplicationDto.ApplicationResponseDto;
+import com.ricard0g.jobtrackr_api.dto.ApplicationDto.ApplicationStatusPatchRequestDto;
 import com.ricard0g.jobtrackr_api.dto.TagDto.CreateTagRequestDto;
 import com.ricard0g.jobtrackr_api.dto.CompanyDto.CompanyResponseDto;
 import com.ricard0g.jobtrackr_api.dto.TagDto.TagResponseDto;
@@ -323,8 +324,7 @@ class ApplicationControllerTest {
                                         """
                                         {
                                           "companyId": 5,
-                                          "applicationTitle": "Updated Title",
-                                          "applicationStatus": "APPLIED"
+                                          "applicationTitle": "Updated Title"
                                         }
                                         """))
                 .andExpect(status().isOk())
@@ -348,12 +348,66 @@ class ApplicationControllerTest {
                                         """
                                         {
                                           "companyId": 5,
-                                          "applicationTitle": "Updated Title",
-                                          "applicationStatus": "APPLIED"
+                                          "applicationTitle": "Updated Title"
                                         }
                                         """))
                 .andExpect(status().isNotFound())
                 .andExpect(jsonPath("$.code").value("APPLICATION_NOT_FOUND"));
+    }
+
+    @Test
+    void patchApplicationStatus_withNewStatus_returns200() throws Exception {
+        // given
+        final ApplicationResponseDto patched = sampleApplication(2L, "Backend Engineer");
+        when(applicationService.patchApplicationStatus(eq(1L), eq(2L), any(ApplicationStatusPatchRequestDto.class)))
+                .thenReturn(patched);
+
+        // when / then
+        mockMvc.perform(
+                        patch(BASE_PATH + "/2/status")
+                                .contentType(MediaType.APPLICATION_JSON)
+                                .content(
+                                        """
+                                        {
+                                          "applicationStatus": "IN_REVIEW"
+                                        }
+                                        """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.applicationId").value(2));
+
+        verify(applicationService)
+                .patchApplicationStatus(eq(1L), eq(2L), any(ApplicationStatusPatchRequestDto.class));
+    }
+
+    @Test
+    void patchApplicationStatus_whenNotFound_returns404() throws Exception {
+        // given
+        when(applicationService.patchApplicationStatus(eq(1L), eq(99L), any(ApplicationStatusPatchRequestDto.class)))
+                .thenThrow(new ApplicationNotFoundException(1L, 99L));
+
+        // when / then
+        mockMvc.perform(
+                        patch(BASE_PATH + "/99/status")
+                                .contentType(MediaType.APPLICATION_JSON)
+                                .content(
+                                        """
+                                        {
+                                          "applicationStatus": "IN_REVIEW"
+                                        }
+                                        """))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.code").value("APPLICATION_NOT_FOUND"));
+    }
+
+    @Test
+    void patchApplicationStatus_withMissingStatus_returns400() throws Exception {
+        // when / then
+        mockMvc.perform(
+                        patch(BASE_PATH + "/2/status")
+                                .contentType(MediaType.APPLICATION_JSON)
+                                .content("{}"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("VALIDATION_ERROR"));
     }
 
     @Test
@@ -370,8 +424,7 @@ class ApplicationControllerTest {
                                 .content(
                                         """
                                         {
-                                          "applicationTitle": "Patched Title",
-                                          "applicationStatus": "IN_REVIEW"
+                                          "applicationTitle": "Patched Title"
                                         }
                                         """))
                 .andExpect(status().isOk())

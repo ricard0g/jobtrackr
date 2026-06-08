@@ -63,4 +63,15 @@ public class StatusHistory {
     @CreationTimestamp
     @Column(name = "status_history_created_at", nullable = false, updatable = false)
     private OffsetDateTime statusHistoryCreatedAt;
+
+    public static StatusHistory create(
+            final Application application,
+            final ApplicationStatus oldStatus,
+            final ApplicationStatus newStatus) {
+        final StatusHistory statusHistory = new StatusHistory();
+        statusHistory.setApplication(application);
+        statusHistory.setStatusHistoryOldStatus(oldStatus);
+        statusHistory.setStatusHistoryNewStatus(newStatus);
+        return statusHistory;
+    }
 }

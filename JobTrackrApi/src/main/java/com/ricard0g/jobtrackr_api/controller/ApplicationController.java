@@ -18,6 +18,7 @@ import org.springframework.web.bind.annotation.RestController;
 import com.ricard0g.jobtrackr_api.dto.ApplicationDto.ApplicationCreateRequestDto;
 import com.ricard0g.jobtrackr_api.dto.ApplicationDto.ApplicationPatchRequestDto;
 import com.ricard0g.jobtrackr_api.dto.ApplicationDto.ApplicationPutRequestDto;
+import com.ricard0g.jobtrackr_api.dto.ApplicationDto.ApplicationStatusPatchRequestDto;
 import com.ricard0g.jobtrackr_api.dto.ApplicationDto.ApplicationResponseDto;
 import com.ricard0g.jobtrackr_api.dto.TagDto.CreateTagRequestDto;
 import com.ricard0g.jobtrackr_api.dto.TagDto.TagResponseDto;
@@ -61,6 +62,14 @@ public class ApplicationController {
             @PathVariable @Positive final Long applicationId,
             @Valid @RequestBody final ApplicationPutRequestDto request) {
         return ResponseEntity.ok(applicationService.replaceApplication(userId, applicationId, request));
+    }
+
+    @PatchMapping("/{applicationId}/status")
+    public ResponseEntity<ApplicationResponseDto> patchApplicationStatus(
+            @PathVariable @Positive final Long userId,
+            @PathVariable @Positive final Long applicationId,
+            @Valid @RequestBody final ApplicationStatusPatchRequestDto request) {
+        return ResponseEntity.ok(applicationService.patchApplicationStatus(userId, applicationId, request));
     }
 
     @PatchMapping("/{applicationId}")

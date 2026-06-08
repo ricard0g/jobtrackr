@@ -5,7 +5,6 @@ import static com.ricard0g.jobtrackr_api.validation.ValidationPatterns.OPTIONAL_
 import java.math.BigDecimal;
 import java.time.OffsetDateTime;
 
-import com.ricard0g.jobtrackr_api.model.enums.ApplicationStatus;
 import com.ricard0g.jobtrackr_api.model.enums.RemoteType;
 
 import jakarta.validation.constraints.DecimalMin;
@@ -20,7 +19,6 @@ import jakarta.validation.constraints.Size;
 public record ApplicationPutRequestDto(
         @NotNull @Positive Long companyId,
         @NotBlank @Size(max = 255) String applicationTitle,
-        @NotNull ApplicationStatus applicationStatus,
         @Size(max = 1024) @Pattern(regexp = OPTIONAL_HTTP_URL) String applicationJobUrl,
         @Size(max = 255) String applicationLocation,
         RemoteType applicationRemoteType,

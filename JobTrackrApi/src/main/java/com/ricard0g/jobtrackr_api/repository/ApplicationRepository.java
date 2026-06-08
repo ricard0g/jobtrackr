@@ -4,8 +4,11 @@ import java.util.List;
 import java.util.Optional;
 
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
+
+import jakarta.persistence.LockModeType;
 
 import com.ricard0g.jobtrackr_api.model.Application;
 
@@ -37,6 +40,15 @@ public interface ApplicationRepository extends JpaRepository<Application, Long> 
             WHERE a.applicationId = :applicationId AND a.user.userId = :userId
             """)
     Optional<Application> findForUser(
+            @Param("applicationId") Long applicationId, @Param("userId") Long userId);
+
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query(
+            """
+            SELECT a FROM Application a
+            WHERE a.applicationId = :applicationId AND a.user.userId = :userId
+            """)
+    Optional<Application> findForUserWithLock(
             @Param("applicationId") Long applicationId, @Param("userId") Long userId);
 
     @Query(

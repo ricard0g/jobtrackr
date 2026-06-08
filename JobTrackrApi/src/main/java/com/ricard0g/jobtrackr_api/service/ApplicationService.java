@@ -13,6 +13,7 @@ import com.ricard0g.jobtrackr_api.dto.ApplicationDto.ApplicationCreateRequestDto
 import com.ricard0g.jobtrackr_api.dto.ApplicationDto.ApplicationPatchRequestDto;
 import com.ricard0g.jobtrackr_api.dto.ApplicationDto.ApplicationPutRequestDto;
 import com.ricard0g.jobtrackr_api.dto.ApplicationDto.ApplicationResponseDto;
+import com.ricard0g.jobtrackr_api.dto.ApplicationDto.ApplicationStatusPatchRequestDto;
 import com.ricard0g.jobtrackr_api.dto.TagDto.CreateTagRequestDto;
 import com.ricard0g.jobtrackr_api.dto.TagDto.TagResponseDto;
 import com.ricard0g.jobtrackr_api.exception.DuplicateTagNameException;
@@ -26,6 +27,7 @@ import com.ricard0g.jobtrackr_api.model.Application;
 import com.ricard0g.jobtrackr_api.model.Company;
 import com.ricard0g.jobtrackr_api.model.Tag;
 import com.ricard0g.jobtrackr_api.model.User;
+import com.ricard0g.jobtrackr_api.model.enums.ApplicationStatus;
 import com.ricard0g.jobtrackr_api.repository.ApplicationRepository;
 import com.ricard0g.jobtrackr_api.repository.CompanyRepository;
 import com.ricard0g.jobtrackr_api.repository.TagRepository;
@@ -45,6 +47,7 @@ public class ApplicationService {
     private final CompanyRepository companyRepository;
     private final ApplicationRepository applicationRepository;
     private final TagRepository tagRepository;
+    private final StatusHistoryService statusHistoryService;
 
     @Transactional(readOnly = true)
     public List<ApplicationResponseDto> getAllApplications(final Long userId) {
@@ -106,7 +109,6 @@ public class ApplicationService {
         validateSalaryRange(dto.applicationSalaryMin(), dto.applicationSalaryMax());
         application.setCompany(company);
         application.setApplicationTitle(dto.applicationTitle().trim());
-        application.setApplicationStatus(dto.applicationStatus());
         application.setApplicationKanbanOrder(
                 dto.applicationKanbanOrder() != null ? dto.applicationKanbanOrder() : 0);
         application.setApplicationJobUrl(normalizeOptional(dto.applicationJobUrl()));
@@ -134,9 +136,6 @@ public class ApplicationService {
         }
         if (dto.applicationTitle() != null) {
             application.setApplicationTitle(dto.applicationTitle().trim());
-        }
-        if (dto.applicationStatus() != null) {
-            application.setApplicationStatus(dto.applicationStatus());
         }
         if (dto.applicationKanbanOrder() != null) {
             application.setApplicationKanbanOrder(dto.applicationKanbanOrder());
@@ -172,6 +171,28 @@ public class ApplicationService {
                 "[ApplicationService] - PATCH_APPLICATION: applicationId: {}, userId: {}",
                 applicationId,
                 userId);
+        return ApplicationResponseDto.from(saved);
+    }
+
+    @Transactional
+    public ApplicationResponseDto patchApplicationStatus(
+            final Long userId,
+            final Long applicationId,
+            final ApplicationStatusPatchRequestDto dto) {
+        final Application application = requireApplicationForUserWithLock(userId, applicationId);
+        final ApplicationStatus oldStatus = application.getApplicationStatus();
+        final ApplicationStatus newStatus = dto.applicationStatus();
+        if (!oldStatus.equals(newStatus)) {
+            statusHistoryService.recordStatusChange(application, oldStatus, newStatus);
+            application.setApplicationStatus(newStatus);
+        }
+        final Application saved = applicationRepository.save(application);
+        log.info(
+                "[ApplicationService] - PATCH_APPLICATION_STATUS: applicationId: {}, userId: {}, oldStatus: {}, newStatus: {}",
+                applicationId,
+                userId,
+                oldStatus,
+                newStatus);
         return ApplicationResponseDto.from(saved);
     }
 
@@ -218,6 +239,12 @@ public class ApplicationService {
     private Application requireApplicationForUser(final Long userId, final Long applicationId) {
         return applicationRepository
                 .findForUser(applicationId, userId)
+                .orElseThrow(() -> new ApplicationNotFoundException(userId, applicationId));
+    }
+
+    private Application requireApplicationForUserWithLock(final Long userId, final Long applicationId) {
+        return applicationRepository
+                .findForUserWithLock(applicationId, userId)
                 .orElseThrow(() -> new ApplicationNotFoundException(userId, applicationId));
     }
 
