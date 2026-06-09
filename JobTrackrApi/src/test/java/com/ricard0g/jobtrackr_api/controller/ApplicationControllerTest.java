@@ -32,6 +32,7 @@ import com.ricard0g.jobtrackr_api.dto.ApplicationDto.ApplicationPatchRequestDto;
 import com.ricard0g.jobtrackr_api.dto.ApplicationDto.ApplicationPutRequestDto;
 import com.ricard0g.jobtrackr_api.dto.ApplicationDto.ApplicationResponseDto;
 import com.ricard0g.jobtrackr_api.dto.ApplicationDto.ApplicationStatusPatchRequestDto;
+import com.ricard0g.jobtrackr_api.dto.StatusHistoryDto.StatusHistoryResponseDto;
 import com.ricard0g.jobtrackr_api.dto.TagDto.CreateTagRequestDto;
 import com.ricard0g.jobtrackr_api.dto.CompanyDto.CompanyResponseDto;
 import com.ricard0g.jobtrackr_api.dto.TagDto.TagResponseDto;
@@ -356,6 +357,34 @@ class ApplicationControllerTest {
     }
 
     @Test
+    void getStatusHistory_returns200() throws Exception {
+        // given
+        final StatusHistoryResponseDto entry = sampleStatusHistory(1L, 2L, ApplicationStatus.APPLIED, ApplicationStatus.IN_REVIEW);
+        when(applicationService.getStatusHistory(1L, 2L)).thenReturn(List.of(entry));
+
+        // when / then
+        mockMvc.perform(get(BASE_PATH + "/2/status-history"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[0].statusHistoryId").value(1))
+                .andExpect(jsonPath("$[0].applicationId").value(2))
+                .andExpect(jsonPath("$[0].statusHistoryOldStatus").value("APPLIED"))
+                .andExpect(jsonPath("$[0].statusHistoryNewStatus").value("IN_REVIEW"));
+
+        verify(applicationService).getStatusHistory(1L, 2L);
+    }
+
+    @Test
+    void getStatusHistory_whenNotFound_returns404() throws Exception {
+        // given
+        when(applicationService.getStatusHistory(1L, 99L)).thenThrow(new ApplicationNotFoundException(1L, 99L));
+
+        // when / then
+        mockMvc.perform(get(BASE_PATH + "/99/status-history"))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.code").value("APPLICATION_NOT_FOUND"));
+    }
+
+    @Test
     void patchApplicationStatus_withNewStatus_returns200() throws Exception {
         // given
         final ApplicationResponseDto patched = sampleApplication(2L, "Backend Engineer");
@@ -595,5 +624,14 @@ class ApplicationControllerTest {
     private static CompanyResponseDto sampleCompany() {
         return new CompanyResponseDto(
                 5L, 1L, "Acme Corp", "https://acme.example", "Madrid", "Tech", null, TIMESTAMP, TIMESTAMP);
+    }
+
+    private static StatusHistoryResponseDto sampleStatusHistory(
+            final Long statusHistoryId,
+            final Long applicationId,
+            final ApplicationStatus oldStatus,
+            final ApplicationStatus newStatus) {
+        return new StatusHistoryResponseDto(
+                statusHistoryId, applicationId, oldStatus, newStatus, TIMESTAMP, TIMESTAMP);
     }
 }

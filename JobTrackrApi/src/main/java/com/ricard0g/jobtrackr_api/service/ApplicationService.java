@@ -14,6 +14,7 @@ import com.ricard0g.jobtrackr_api.dto.ApplicationDto.ApplicationPatchRequestDto;
 import com.ricard0g.jobtrackr_api.dto.ApplicationDto.ApplicationPutRequestDto;
 import com.ricard0g.jobtrackr_api.dto.ApplicationDto.ApplicationResponseDto;
 import com.ricard0g.jobtrackr_api.dto.ApplicationDto.ApplicationStatusPatchRequestDto;
+import com.ricard0g.jobtrackr_api.dto.StatusHistoryDto.StatusHistoryResponseDto;
 import com.ricard0g.jobtrackr_api.dto.TagDto.CreateTagRequestDto;
 import com.ricard0g.jobtrackr_api.dto.TagDto.TagResponseDto;
 import com.ricard0g.jobtrackr_api.exception.DuplicateTagNameException;
@@ -70,6 +71,11 @@ public class ApplicationService {
                 applicationId,
                 userId);
         return ApplicationResponseDto.from(application);
+    }
+
+    @Transactional(readOnly = true)
+    public List<StatusHistoryResponseDto> getStatusHistory(final Long userId, final Long applicationId) {
+        return statusHistoryService.getStatusHistoryForApplication(userId, applicationId);
     }
 
     @Transactional

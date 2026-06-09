@@ -20,6 +20,7 @@ import com.ricard0g.jobtrackr_api.dto.ApplicationDto.ApplicationPatchRequestDto;
 import com.ricard0g.jobtrackr_api.dto.ApplicationDto.ApplicationPutRequestDto;
 import com.ricard0g.jobtrackr_api.dto.ApplicationDto.ApplicationStatusPatchRequestDto;
 import com.ricard0g.jobtrackr_api.dto.ApplicationDto.ApplicationResponseDto;
+import com.ricard0g.jobtrackr_api.dto.StatusHistoryDto.StatusHistoryResponseDto;
 import com.ricard0g.jobtrackr_api.dto.TagDto.CreateTagRequestDto;
 import com.ricard0g.jobtrackr_api.dto.TagDto.TagResponseDto;
 import com.ricard0g.jobtrackr_api.service.ApplicationService;
@@ -62,6 +63,12 @@ public class ApplicationController {
             @PathVariable @Positive final Long applicationId,
             @Valid @RequestBody final ApplicationPutRequestDto request) {
         return ResponseEntity.ok(applicationService.replaceApplication(userId, applicationId, request));
+    }
+
+    @GetMapping("/{applicationId}/status-history")
+    public ResponseEntity<List<StatusHistoryResponseDto>> getStatusHistory(
+            @PathVariable @Positive final Long userId, @PathVariable @Positive final Long applicationId) {
+        return ResponseEntity.ok(applicationService.getStatusHistory(userId, applicationId));
     }
 
     @PatchMapping("/{applicationId}/status")
