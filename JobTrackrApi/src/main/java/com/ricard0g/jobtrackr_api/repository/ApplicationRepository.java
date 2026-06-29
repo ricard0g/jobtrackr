@@ -2,6 +2,7 @@ package com.ricard0g.jobtrackr_api.repository;
 
 import java.util.List;
 import java.util.Optional;
+import java.util.UUID;
 
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Lock;
@@ -30,7 +31,7 @@ public interface ApplicationRepository extends JpaRepository<Application, Long> 
             WHERE a.user.userId = :userId
             ORDER BY a.applicationKanbanOrder ASC, a.applicationCreatedAt DESC
             """)
-    List<Application> findAllForUser(@Param("userId") Long userId);
+    List<Application> findAllForUser(@Param("userId") UUID userId);
 
     @Query(
             """
@@ -40,7 +41,7 @@ public interface ApplicationRepository extends JpaRepository<Application, Long> 
             WHERE a.applicationId = :applicationId AND a.user.userId = :userId
             """)
     Optional<Application> findForUser(
-            @Param("applicationId") Long applicationId, @Param("userId") Long userId);
+            @Param("applicationId") Long applicationId, @Param("userId") UUID userId);
 
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query(
@@ -49,7 +50,7 @@ public interface ApplicationRepository extends JpaRepository<Application, Long> 
             WHERE a.applicationId = :applicationId AND a.user.userId = :userId
             """)
     Optional<Application> findForUserWithLock(
-            @Param("applicationId") Long applicationId, @Param("userId") Long userId);
+            @Param("applicationId") Long applicationId, @Param("userId") UUID userId);
 
     @Query(
             """
@@ -57,5 +58,5 @@ public interface ApplicationRepository extends JpaRepository<Application, Long> 
             FROM Application a
             WHERE a.applicationId = :applicationId AND a.user.userId = :userId
             """)
-    boolean existsForUser(@Param("applicationId") Long applicationId, @Param("userId") Long userId);
+    boolean existsForUser(@Param("applicationId") Long applicationId, @Param("userId") UUID userId);
 }

@@ -1,6 +1,7 @@
 package com.ricard0g.jobtrackr_api.service;
 
 import java.util.List;
+import java.util.UUID;
 
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -27,7 +28,7 @@ public class InterviewService {
     private final InterviewRepository interviewRepository;
 
     @Transactional(readOnly = true)
-    public List<InterviewResponseDto> getAllInterviews(final Long userId, final Long applicationId) {
+    public List<InterviewResponseDto> getAllInterviews(final UUID userId, final Long applicationId) {
         ensureApplicationExistsForUser(userId, applicationId);
         final List<InterviewResponseDto> interviews = interviewRepository
                 .findAllForApplicationAndUser(applicationId, userId)
@@ -44,7 +45,7 @@ public class InterviewService {
 
     @Transactional(readOnly = true)
     public InterviewResponseDto getInterviewById(
-            final Long userId, final Long applicationId, final Long interviewId) {
+            final UUID userId, final Long applicationId, final Long interviewId) {
         final Interview interview = requireInterviewForUser(userId, applicationId, interviewId);
         log.info(
                 "[InterviewService] - GET_INTERVIEW_BY_ID: interviewId: {}, applicationId: {}, userId: {}",
@@ -56,7 +57,7 @@ public class InterviewService {
 
     @Transactional
     public InterviewResponseDto createInterview(
-            final Long userId, final Long applicationId, final InterviewCreateRequestDto dto) {
+            final UUID userId, final Long applicationId, final InterviewCreateRequestDto dto) {
         ensureApplicationExistsForUser(userId, applicationId);
         final Application application = applicationRepository.getReferenceById(applicationId);
         final Interview interview = Interview.create(
@@ -76,7 +77,7 @@ public class InterviewService {
 
     @Transactional
     public InterviewResponseDto replaceInterview(
-            final Long userId,
+            final UUID userId,
             final Long applicationId,
             final Long interviewId,
             final InterviewPutRequestDto dto) {
@@ -96,7 +97,7 @@ public class InterviewService {
     }
 
     @Transactional
-    public void deleteInterview(final Long userId, final Long applicationId, final Long interviewId) {
+    public void deleteInterview(final UUID userId, final Long applicationId, final Long interviewId) {
         final Interview interview = requireInterviewForUser(userId, applicationId, interviewId);
         interviewRepository.delete(interview);
         log.info(
@@ -106,7 +107,7 @@ public class InterviewService {
                 userId);
     }
 
-    private void ensureApplicationExistsForUser(final Long userId, final Long applicationId) {
+    private void ensureApplicationExistsForUser(final UUID userId, final Long applicationId) {
         final boolean applicationExists = applicationRepository.existsForUser(applicationId, userId);
         if (!applicationExists) {
             throw new ApplicationNotFoundException(userId, applicationId);
@@ -114,7 +115,7 @@ public class InterviewService {
     }
 
     private Interview requireInterviewForUser(
-            final Long userId, final Long applicationId, final Long interviewId) {
+            final UUID userId, final Long applicationId, final Long interviewId) {
         return interviewRepository
                 .findForApplicationAndUser(interviewId, applicationId, userId)
                 .orElseThrow(() -> new InterviewNotFoundException(userId, applicationId, interviewId));

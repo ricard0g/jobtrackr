@@ -1,12 +1,13 @@
 package com.ricard0g.jobtrackr_api.dto.CompanyDto;
 
 import java.time.OffsetDateTime;
+import java.util.UUID;
 
 import com.ricard0g.jobtrackr_api.model.Company;
 
 public record CompanyResponseDto(
         Long companyId,
-        Long userId,
+        UUID userId,
         String companyName,
         String companyWebsiteUrl,
         String companyLocation,

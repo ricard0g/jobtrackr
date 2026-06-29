@@ -9,6 +9,7 @@ import static org.mockito.Mockito.when;
 import java.time.OffsetDateTime;
 import java.util.HashSet;
 import java.util.Optional;
+import java.util.UUID;
 
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -31,7 +32,7 @@ import com.ricard0g.jobtrackr_api.repository.UserRepository;
 @ExtendWith(MockitoExtension.class)
 class ApplicationServiceTest {
 
-    private static final Long USER_ID = 1L;
+    private static final UUID USER_ID = UUID.randomUUID();
     private static final Long APPLICATION_ID = 2L;
     private static final Long COMPANY_ID = 5L;
 

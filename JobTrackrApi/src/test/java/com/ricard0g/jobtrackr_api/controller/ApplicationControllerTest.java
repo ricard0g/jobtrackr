@@ -17,6 +17,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import java.math.BigDecimal;
 import java.time.OffsetDateTime;
 import java.util.List;
+import java.util.UUID;
 
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -54,7 +55,9 @@ import com.ricard0g.jobtrackr_api.service.ApplicationService;
 @Import(GlobalExceptionHandler.class)
 class ApplicationControllerTest {
 
-    private static final String BASE_PATH = "/api/v1/users/1/applications";
+    private static final String USER_ID_VALUE = "11111111-1111-1111-1111-111111111111";
+    private static final UUID USER_ID = UUID.fromString(USER_ID_VALUE);
+    private static final String BASE_PATH = "/api/v1/users/" + USER_ID_VALUE + "/applications";
     private static final OffsetDateTime TIMESTAMP = OffsetDateTime.parse("2026-06-04T12:00:00Z");
 
     @Autowired
@@ -67,7 +70,7 @@ class ApplicationControllerTest {
     void getAllApplications_returns200() throws Exception {
         // given
         final ApplicationResponseDto application = sampleApplication(1L, "Backend Engineer");
-        when(applicationService.getAllApplications(1L)).thenReturn(List.of(application));
+        when(applicationService.getAllApplications(USER_ID)).thenReturn(List.of(application));
 
         // when / then
         mockMvc.perform(get(BASE_PATH))
@@ -81,7 +84,7 @@ class ApplicationControllerTest {
     @Test
     void getAllApplications_whenUserNotFound_returns404() throws Exception {
         // given
-        when(applicationService.getAllApplications(1L)).thenThrow(new UserNotFoundException(1L));
+        when(applicationService.getAllApplications(USER_ID)).thenThrow(new UserNotFoundException(USER_ID));
 
         // when / then
         mockMvc.perform(get(BASE_PATH))
@@ -92,14 +95,14 @@ class ApplicationControllerTest {
     @Test
     void getAllApplications_withInvalidUserId_returns400() throws Exception {
         // when / then
-        mockMvc.perform(get("/api/v1/users/0/applications")).andExpect(status().isBadRequest());
+        mockMvc.perform(get("/api/v1/users/not-a-uuid/applications")).andExpect(status().isBadRequest());
     }
 
     @Test
     void getApplicationById_returns200() throws Exception {
         // given
         final ApplicationResponseDto application = sampleApplication(2L, "Staff Engineer");
-        when(applicationService.getApplicationById(1L, 2L)).thenReturn(application);
+        when(applicationService.getApplicationById(USER_ID, 2L)).thenReturn(application);
 
         // when / then
         mockMvc.perform(get(BASE_PATH + "/2"))
@@ -112,7 +115,8 @@ class ApplicationControllerTest {
     @Test
     void getApplicationById_whenNotFound_returns404() throws Exception {
         // given
-        when(applicationService.getApplicationById(1L, 99L)).thenThrow(new ApplicationNotFoundException(1L, 99L));
+        when(applicationService.getApplicationById(USER_ID, 99L))
+                .thenThrow(new ApplicationNotFoundException(USER_ID, 99L));
 
         // when / then
         mockMvc.perform(get(BASE_PATH + "/99"))
@@ -130,7 +134,7 @@ class ApplicationControllerTest {
     void createApplication_withValidBody_returns201() throws Exception {
         // given
         final ApplicationResponseDto created = sampleApplication(3L, "Platform Engineer");
-        when(applicationService.createApplication(eq(1L), any(ApplicationCreateRequestDto.class)))
+        when(applicationService.createApplication(eq(USER_ID), any(ApplicationCreateRequestDto.class)))
                 .thenReturn(created);
 
         // when / then
@@ -152,14 +156,14 @@ class ApplicationControllerTest {
                 .andExpect(jsonPath("$.company.companyId").value(5))
                 .andExpect(jsonPath("$.company.companyName").value("Acme Corp"));
 
-        verify(applicationService).createApplication(eq(1L), any(ApplicationCreateRequestDto.class));
+        verify(applicationService).createApplication(eq(USER_ID), any(ApplicationCreateRequestDto.class));
     }
 
     @Test
     void createApplication_withTagIds_returns201() throws Exception {
         // given
         final ApplicationResponseDto created = sampleApplicationWithTags(4L, "DevOps Engineer");
-        when(applicationService.createApplication(eq(1L), any(ApplicationCreateRequestDto.class)))
+        when(applicationService.createApplication(eq(USER_ID), any(ApplicationCreateRequestDto.class)))
                 .thenReturn(created);
 
         // when / then
@@ -221,8 +225,8 @@ class ApplicationControllerTest {
     @Test
     void createApplication_whenUserNotFound_returns404() throws Exception {
         // given
-        when(applicationService.createApplication(eq(1L), any(ApplicationCreateRequestDto.class)))
-                .thenThrow(new UserNotFoundException(1L));
+        when(applicationService.createApplication(eq(USER_ID), any(ApplicationCreateRequestDto.class)))
+                .thenThrow(new UserNotFoundException(USER_ID));
 
         // when / then
         mockMvc.perform(
@@ -243,8 +247,8 @@ class ApplicationControllerTest {
     @Test
     void createApplication_whenCompanyNotFound_returns404() throws Exception {
         // given
-        when(applicationService.createApplication(eq(1L), any(ApplicationCreateRequestDto.class)))
-                .thenThrow(new CompanyNotFoundException(1L, 99L));
+        when(applicationService.createApplication(eq(USER_ID), any(ApplicationCreateRequestDto.class)))
+                .thenThrow(new CompanyNotFoundException(USER_ID, 99L));
 
         // when / then
         mockMvc.perform(
@@ -265,7 +269,7 @@ class ApplicationControllerTest {
     @Test
     void createApplication_whenInvalidSalaryRange_returns400() throws Exception {
         // given
-        when(applicationService.createApplication(eq(1L), any(ApplicationCreateRequestDto.class)))
+        when(applicationService.createApplication(eq(USER_ID), any(ApplicationCreateRequestDto.class)))
                 .thenThrow(new InvalidApplicationSalaryRangeException(
                         BigDecimal.valueOf(100000), BigDecimal.valueOf(50000)));
 
@@ -290,7 +294,7 @@ class ApplicationControllerTest {
     @Test
     void createApplication_whenTagNotFound_returns404() throws Exception {
         // given
-        when(applicationService.createApplication(eq(1L), any(ApplicationCreateRequestDto.class)))
+        when(applicationService.createApplication(eq(USER_ID), any(ApplicationCreateRequestDto.class)))
                 .thenThrow(new TagNotFoundException(99L));
 
         // when / then
@@ -314,7 +318,7 @@ class ApplicationControllerTest {
     void replaceApplication_withValidBody_returns200() throws Exception {
         // given
         final ApplicationResponseDto updated = sampleApplication(2L, "Updated Title");
-        when(applicationService.replaceApplication(eq(1L), eq(2L), any(ApplicationPutRequestDto.class)))
+        when(applicationService.replaceApplication(eq(USER_ID), eq(2L), any(ApplicationPutRequestDto.class)))
                 .thenReturn(updated);
 
         // when / then
@@ -332,14 +336,14 @@ class ApplicationControllerTest {
                 .andExpect(jsonPath("$.applicationId").value(2))
                 .andExpect(jsonPath("$.applicationTitle").value("Updated Title"));
 
-        verify(applicationService).replaceApplication(eq(1L), eq(2L), any(ApplicationPutRequestDto.class));
+        verify(applicationService).replaceApplication(eq(USER_ID), eq(2L), any(ApplicationPutRequestDto.class));
     }
 
     @Test
     void replaceApplication_whenNotFound_returns404() throws Exception {
         // given
-        when(applicationService.replaceApplication(eq(1L), eq(99L), any(ApplicationPutRequestDto.class)))
-                .thenThrow(new ApplicationNotFoundException(1L, 99L));
+        when(applicationService.replaceApplication(eq(USER_ID), eq(99L), any(ApplicationPutRequestDto.class)))
+                .thenThrow(new ApplicationNotFoundException(USER_ID, 99L));
 
         // when / then
         mockMvc.perform(
@@ -359,8 +363,9 @@ class ApplicationControllerTest {
     @Test
     void getStatusHistory_returns200() throws Exception {
         // given
-        final StatusHistoryResponseDto entry = sampleStatusHistory(1L, 2L, ApplicationStatus.APPLIED, ApplicationStatus.IN_REVIEW);
-        when(applicationService.getStatusHistory(1L, 2L)).thenReturn(List.of(entry));
+        final StatusHistoryResponseDto entry =
+                sampleStatusHistory(1L, 2L, ApplicationStatus.APPLIED, ApplicationStatus.IN_REVIEW);
+        when(applicationService.getStatusHistory(USER_ID, 2L)).thenReturn(List.of(entry));
 
         // when / then
         mockMvc.perform(get(BASE_PATH + "/2/status-history"))
@@ -370,13 +375,14 @@ class ApplicationControllerTest {
                 .andExpect(jsonPath("$[0].statusHistoryOldStatus").value("APPLIED"))
                 .andExpect(jsonPath("$[0].statusHistoryNewStatus").value("IN_REVIEW"));
 
-        verify(applicationService).getStatusHistory(1L, 2L);
+        verify(applicationService).getStatusHistory(USER_ID, 2L);
     }
 
     @Test
     void getStatusHistory_whenNotFound_returns404() throws Exception {
         // given
-        when(applicationService.getStatusHistory(1L, 99L)).thenThrow(new ApplicationNotFoundException(1L, 99L));
+        when(applicationService.getStatusHistory(USER_ID, 99L))
+                .thenThrow(new ApplicationNotFoundException(USER_ID, 99L));
 
         // when / then
         mockMvc.perform(get(BASE_PATH + "/99/status-history"))
@@ -388,7 +394,8 @@ class ApplicationControllerTest {
     void patchApplicationStatus_withNewStatus_returns200() throws Exception {
         // given
         final ApplicationResponseDto patched = sampleApplication(2L, "Backend Engineer");
-        when(applicationService.patchApplicationStatus(eq(1L), eq(2L), any(ApplicationStatusPatchRequestDto.class)))
+        when(applicationService.patchApplicationStatus(
+                eq(USER_ID), eq(2L), any(ApplicationStatusPatchRequestDto.class)))
                 .thenReturn(patched);
 
         // when / then
@@ -405,14 +412,15 @@ class ApplicationControllerTest {
                 .andExpect(jsonPath("$.applicationId").value(2));
 
         verify(applicationService)
-                .patchApplicationStatus(eq(1L), eq(2L), any(ApplicationStatusPatchRequestDto.class));
+                .patchApplicationStatus(eq(USER_ID), eq(2L), any(ApplicationStatusPatchRequestDto.class));
     }
 
     @Test
     void patchApplicationStatus_whenNotFound_returns404() throws Exception {
         // given
-        when(applicationService.patchApplicationStatus(eq(1L), eq(99L), any(ApplicationStatusPatchRequestDto.class)))
-                .thenThrow(new ApplicationNotFoundException(1L, 99L));
+        when(applicationService.patchApplicationStatus(
+                eq(USER_ID), eq(99L), any(ApplicationStatusPatchRequestDto.class)))
+                .thenThrow(new ApplicationNotFoundException(USER_ID, 99L));
 
         // when / then
         mockMvc.perform(
@@ -443,7 +451,7 @@ class ApplicationControllerTest {
     void patchApplication_withScalarFields_returns200() throws Exception {
         // given
         final ApplicationResponseDto patched = sampleApplication(2L, "Patched Title");
-        when(applicationService.patchApplication(eq(1L), eq(2L), any(ApplicationPatchRequestDto.class)))
+        when(applicationService.patchApplication(eq(USER_ID), eq(2L), any(ApplicationPatchRequestDto.class)))
                 .thenReturn(patched);
 
         // when / then
@@ -459,14 +467,14 @@ class ApplicationControllerTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.applicationTitle").value("Patched Title"));
 
-        verify(applicationService).patchApplication(eq(1L), eq(2L), any(ApplicationPatchRequestDto.class));
+        verify(applicationService).patchApplication(eq(USER_ID), eq(2L), any(ApplicationPatchRequestDto.class));
     }
 
     @Test
     void patchApplication_withTagIds_returns200() throws Exception {
         // given
         final ApplicationResponseDto patched = sampleApplicationWithTags(2L, "Tagged Role");
-        when(applicationService.patchApplication(eq(1L), eq(2L), any(ApplicationPatchRequestDto.class)))
+        when(applicationService.patchApplication(eq(USER_ID), eq(2L), any(ApplicationPatchRequestDto.class)))
                 .thenReturn(patched);
 
         // when / then
@@ -488,7 +496,7 @@ class ApplicationControllerTest {
     @Test
     void patchApplication_whenTooManyTags_returns400() throws Exception {
         // given
-        when(applicationService.patchApplication(eq(1L), eq(2L), any(ApplicationPatchRequestDto.class)))
+        when(applicationService.patchApplication(eq(USER_ID), eq(2L), any(ApplicationPatchRequestDto.class)))
                 .thenThrow(new TooManyApplicationTagsException(2L, 50));
 
         // when / then
@@ -509,7 +517,7 @@ class ApplicationControllerTest {
     void createAndAttachTag_withValidBody_returns201() throws Exception {
         // given
         final TagResponseDto created = new TagResponseDto(5L, TagCategory.TECH_STACK, "Kotlin", "#AABBCC");
-        when(applicationService.createAndAttachTag(eq(1L), eq(2L), any(CreateTagRequestDto.class)))
+        when(applicationService.createAndAttachTag(eq(USER_ID), eq(2L), any(CreateTagRequestDto.class)))
                 .thenReturn(created);
 
         // when / then
@@ -528,13 +536,13 @@ class ApplicationControllerTest {
                 .andExpect(jsonPath("$.tagId").value(5))
                 .andExpect(jsonPath("$.tagName").value("Kotlin"));
 
-        verify(applicationService).createAndAttachTag(eq(1L), eq(2L), any(CreateTagRequestDto.class));
+        verify(applicationService).createAndAttachTag(eq(USER_ID), eq(2L), any(CreateTagRequestDto.class));
     }
 
     @Test
     void createAndAttachTag_whenDuplicateName_returns409() throws Exception {
         // given
-        when(applicationService.createAndAttachTag(eq(1L), eq(2L), any(CreateTagRequestDto.class)))
+        when(applicationService.createAndAttachTag(eq(USER_ID), eq(2L), any(CreateTagRequestDto.class)))
                 .thenThrow(new DuplicateTagNameException("Kotlin"));
 
         // when / then
@@ -555,20 +563,20 @@ class ApplicationControllerTest {
     @Test
     void deleteApplication_returns204() throws Exception {
         // given
-        doNothing().when(applicationService).deleteApplication(1L, 2L);
+        doNothing().when(applicationService).deleteApplication(USER_ID, 2L);
 
         // when / then
         mockMvc.perform(delete(BASE_PATH + "/2")).andExpect(status().isNoContent());
 
-        verify(applicationService).deleteApplication(1L, 2L);
+        verify(applicationService).deleteApplication(USER_ID, 2L);
     }
 
     @Test
     void deleteApplication_whenNotFound_returns404() throws Exception {
         // given
-        doThrow(new ApplicationNotFoundException(1L, 99L))
+        doThrow(new ApplicationNotFoundException(USER_ID, 99L))
                 .when(applicationService)
-                .deleteApplication(1L, 99L);
+                .deleteApplication(USER_ID, 99L);
 
         // when / then
         mockMvc.perform(delete(BASE_PATH + "/99"))
@@ -579,7 +587,7 @@ class ApplicationControllerTest {
     private static ApplicationResponseDto sampleApplication(final Long applicationId, final String title) {
         return new ApplicationResponseDto(
                 applicationId,
-                1L,
+                USER_ID,
                 title,
                 "https://jobs.example.com/role",
                 "Remote",
@@ -601,7 +609,7 @@ class ApplicationControllerTest {
             final Long applicationId, final String title) {
         return new ApplicationResponseDto(
                 applicationId,
-                1L,
+                USER_ID,
                 title,
                 null,
                 null,
@@ -623,7 +631,7 @@ class ApplicationControllerTest {
 
     private static CompanyResponseDto sampleCompany() {
         return new CompanyResponseDto(
-                5L, 1L, "Acme Corp", "https://acme.example", "Madrid", "Tech", null, TIMESTAMP, TIMESTAMP);
+                5L, USER_ID, "Acme Corp", "https://acme.example", "Madrid", "Tech", null, TIMESTAMP, TIMESTAMP);
     }
 
     private static StatusHistoryResponseDto sampleStatusHistory(

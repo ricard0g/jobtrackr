@@ -2,6 +2,7 @@ package com.ricard0g.jobtrackr_api.repository;
 
 import java.util.List;
 import java.util.Optional;
+import java.util.UUID;
 
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
@@ -17,14 +18,14 @@ public interface CompanyRepository extends JpaRepository<Company, Long> {
             WHERE c.user.userId = :userId
             ORDER BY c.companyName ASC
             """)
-    List<Company> findAllForUser(@Param("userId") Long userId);
+    List<Company> findAllForUser(@Param("userId") UUID userId);
 
     @Query(
             """
             SELECT c FROM Company c
             WHERE c.companyId = :companyId AND c.user.userId = :userId
             """)
-    Optional<Company> findForUser(@Param("companyId") Long companyId, @Param("userId") Long userId);
+    Optional<Company> findForUser(@Param("companyId") Long companyId, @Param("userId") UUID userId);
 
     @Query(
             """
@@ -33,7 +34,7 @@ public interface CompanyRepository extends JpaRepository<Company, Long> {
             WHERE c.user.userId = :userId
               AND LOWER(c.companyName) = LOWER(:companyName)
             """)
-    boolean nameExistsForUser(@Param("userId") Long userId, @Param("companyName") String companyName);
+    boolean nameExistsForUser(@Param("userId") UUID userId, @Param("companyName") String companyName);
 
     @Query(
             """
@@ -44,7 +45,7 @@ public interface CompanyRepository extends JpaRepository<Company, Long> {
               AND c.companyId <> :companyId
             """)
     boolean nameExistsForUserExcludingCompany(
-            @Param("userId") Long userId,
+            @Param("userId") UUID userId,
             @Param("companyName") String companyName,
             @Param("companyId") Long companyId);
 }

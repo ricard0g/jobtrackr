@@ -1,7 +1,7 @@
 package com.ricard0g.jobtrackr_api.controller;
 
 import java.util.List;
-
+import java.util.UUID;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.validation.annotation.Validated;
@@ -33,26 +33,26 @@ public class CompanyController {
 
     @GetMapping
     public ResponseEntity<List<CompanyResponseDto>> getAllCompanies(
-            @PathVariable @Positive final Long userId) {
+            @PathVariable final UUID userId) {
         return ResponseEntity.ok(companyService.getAllCompanies(userId));
     }
 
     @GetMapping("/{companyId}")
     public ResponseEntity<CompanyResponseDto> getCompanyById(
-            @PathVariable @Positive final Long userId, @PathVariable @Positive final Long companyId) {
+            @PathVariable final UUID userId, @PathVariable @Positive final Long companyId) {
         return ResponseEntity.ok(companyService.getCompanyById(userId, companyId));
     }
 
     @PostMapping
     public ResponseEntity<CompanyResponseDto> createCompany(
-            @PathVariable @Positive final Long userId,
+            @PathVariable final UUID userId,
             @Valid @RequestBody final CompanyCreateRequestDto request) {
         return ResponseEntity.status(HttpStatus.CREATED).body(companyService.createCompany(userId, request));
     }
 
     @PutMapping("/{companyId}")
     public ResponseEntity<CompanyResponseDto> replaceCompany(
-            @PathVariable @Positive final Long userId,
+            @PathVariable final UUID userId,
             @PathVariable @Positive final Long companyId,
             @Valid @RequestBody final CompanyPutRequestDto request) {
         return ResponseEntity.ok(companyService.replaceCompany(userId, companyId, request));
@@ -60,7 +60,7 @@ public class CompanyController {
 
     @DeleteMapping("/{companyId}")
     public ResponseEntity<Void> deleteCompany(
-            @PathVariable @Positive final Long userId, @PathVariable @Positive final Long companyId) {
+            @PathVariable final UUID userId, @PathVariable @Positive final Long companyId) {
         companyService.deleteCompany(userId, companyId);
         return ResponseEntity.noContent().build();
     }

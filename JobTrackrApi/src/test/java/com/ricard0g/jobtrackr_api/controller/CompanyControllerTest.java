@@ -15,6 +15,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 import java.time.OffsetDateTime;
 import java.util.List;
+import java.util.UUID;
 
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -40,7 +41,9 @@ import com.ricard0g.jobtrackr_api.service.CompanyService;
 @Import(GlobalExceptionHandler.class)
 class CompanyControllerTest {
 
-    private static final String BASE_PATH = "/api/v1/users/1/companies";
+    private static final String USER_ID_VALUE = "11111111-1111-1111-1111-111111111111";
+    private static final UUID USER_ID = UUID.fromString(USER_ID_VALUE);
+    private static final String BASE_PATH = "/api/v1/users/" + USER_ID_VALUE + "/companies";
     private static final OffsetDateTime TIMESTAMP = OffsetDateTime.parse("2026-06-04T12:00:00Z");
 
     @Autowired
@@ -53,20 +56,20 @@ class CompanyControllerTest {
     void getAllCompanies_returns200() throws Exception {
         // given
         final CompanyResponseDto company = sampleCompany(1L, "Acme Corp");
-        when(companyService.getAllCompanies(1L)).thenReturn(List.of(company));
+        when(companyService.getAllCompanies(USER_ID)).thenReturn(List.of(company));
 
         // when / then
         mockMvc.perform(get(BASE_PATH))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$[0].companyId").value(1))
-                .andExpect(jsonPath("$[0].userId").value(1))
+                .andExpect(jsonPath("$[0].userId").value(USER_ID_VALUE))
                 .andExpect(jsonPath("$[0].companyName").value("Acme Corp"));
     }
 
     @Test
     void getAllCompanies_whenUserNotFound_returns404() throws Exception {
         // given
-        when(companyService.getAllCompanies(1L)).thenThrow(new UserNotFoundException(1L));
+        when(companyService.getAllCompanies(USER_ID)).thenThrow(new UserNotFoundException(USER_ID));
 
         // when / then
         mockMvc.perform(get(BASE_PATH))
@@ -77,14 +80,14 @@ class CompanyControllerTest {
     @Test
     void getAllCompanies_withInvalidUserId_returns400() throws Exception {
         // when / then
-        mockMvc.perform(get("/api/v1/users/0/companies")).andExpect(status().isBadRequest());
+        mockMvc.perform(get("/api/v1/users/not-a-uuid/companies")).andExpect(status().isBadRequest());
     }
 
     @Test
     void getCompanyById_returns200() throws Exception {
         // given
         final CompanyResponseDto company = sampleCompany(2L, "Globex");
-        when(companyService.getCompanyById(1L, 2L)).thenReturn(company);
+        when(companyService.getCompanyById(USER_ID, 2L)).thenReturn(company);
 
         // when / then
         mockMvc.perform(get(BASE_PATH + "/2"))
@@ -96,7 +99,7 @@ class CompanyControllerTest {
     @Test
     void getCompanyById_whenNotFound_returns404() throws Exception {
         // given
-        when(companyService.getCompanyById(1L, 99L)).thenThrow(new CompanyNotFoundException(1L, 99L));
+        when(companyService.getCompanyById(USER_ID, 99L)).thenThrow(new CompanyNotFoundException(USER_ID, 99L));
 
         // when / then
         mockMvc.perform(get(BASE_PATH + "/99"))
@@ -115,7 +118,7 @@ class CompanyControllerTest {
         // given
         final CompanyResponseDto created =
                 sampleCompany(3L, "Initech", "https://initech.example");
-        when(companyService.createCompany(eq(1L), any(CompanyCreateRequestDto.class))).thenReturn(created);
+        when(companyService.createCompany(eq(USER_ID), any(CompanyCreateRequestDto.class))).thenReturn(created);
 
         // when / then
         mockMvc.perform(
@@ -133,14 +136,14 @@ class CompanyControllerTest {
                 .andExpect(jsonPath("$.companyName").value("Initech"))
                 .andExpect(jsonPath("$.companyWebsiteUrl").value("https://initech.example"));
 
-        verify(companyService).createCompany(eq(1L), any(CompanyCreateRequestDto.class));
+        verify(companyService).createCompany(eq(USER_ID), any(CompanyCreateRequestDto.class));
     }
 
     @Test
     void createCompany_withOnlyRequiredFields_returns201() throws Exception {
         // given
         final CompanyResponseDto created = sampleCompany(4L, "Umbrella");
-        when(companyService.createCompany(eq(1L), any(CompanyCreateRequestDto.class))).thenReturn(created);
+        when(companyService.createCompany(eq(USER_ID), any(CompanyCreateRequestDto.class))).thenReturn(created);
 
         // when / then
         mockMvc.perform(
@@ -193,8 +196,8 @@ class CompanyControllerTest {
     @Test
     void createCompany_whenUserNotFound_returns404() throws Exception {
         // given
-        when(companyService.createCompany(eq(1L), any(CompanyCreateRequestDto.class)))
-                .thenThrow(new UserNotFoundException(1L));
+        when(companyService.createCompany(eq(USER_ID), any(CompanyCreateRequestDto.class)))
+                .thenThrow(new UserNotFoundException(USER_ID));
 
         // when / then
         mockMvc.perform(
@@ -213,8 +216,8 @@ class CompanyControllerTest {
     @Test
     void createCompany_whenDuplicateName_returns409() throws Exception {
         // given
-        when(companyService.createCompany(eq(1L), any(CompanyCreateRequestDto.class)))
-                .thenThrow(new DuplicateCompanyNameException(1L, "Acme"));
+        when(companyService.createCompany(eq(USER_ID), any(CompanyCreateRequestDto.class)))
+                .thenThrow(new DuplicateCompanyNameException(USER_ID, "Acme"));
 
         // when / then
         mockMvc.perform(
@@ -234,7 +237,7 @@ class CompanyControllerTest {
     void replaceCompany_withValidBody_returns200() throws Exception {
         // given
         final CompanyResponseDto updated = sampleCompany(2L, "Globex Updated", "https://globex.example");
-        when(companyService.replaceCompany(eq(1L), eq(2L), any(CompanyPutRequestDto.class))).thenReturn(updated);
+        when(companyService.replaceCompany(eq(USER_ID), eq(2L), any(CompanyPutRequestDto.class))).thenReturn(updated);
 
         // when / then
         mockMvc.perform(
@@ -251,14 +254,14 @@ class CompanyControllerTest {
                 .andExpect(jsonPath("$.companyId").value(2))
                 .andExpect(jsonPath("$.companyName").value("Globex Updated"));
 
-        verify(companyService).replaceCompany(eq(1L), eq(2L), any(CompanyPutRequestDto.class));
+        verify(companyService).replaceCompany(eq(USER_ID), eq(2L), any(CompanyPutRequestDto.class));
     }
 
     @Test
     void replaceCompany_whenNotFound_returns404() throws Exception {
         // given
-        when(companyService.replaceCompany(eq(1L), eq(99L), any(CompanyPutRequestDto.class)))
-                .thenThrow(new CompanyNotFoundException(1L, 99L));
+        when(companyService.replaceCompany(eq(USER_ID), eq(99L), any(CompanyPutRequestDto.class)))
+                .thenThrow(new CompanyNotFoundException(USER_ID, 99L));
 
         // when / then
         mockMvc.perform(
@@ -277,8 +280,8 @@ class CompanyControllerTest {
     @Test
     void replaceCompany_whenDuplicateName_returns409() throws Exception {
         // given
-        when(companyService.replaceCompany(eq(1L), eq(2L), any(CompanyPutRequestDto.class)))
-                .thenThrow(new DuplicateCompanyNameException(1L, "Acme"));
+        when(companyService.replaceCompany(eq(USER_ID), eq(2L), any(CompanyPutRequestDto.class)))
+                .thenThrow(new DuplicateCompanyNameException(USER_ID, "Acme"));
 
         // when / then
         mockMvc.perform(
@@ -297,18 +300,18 @@ class CompanyControllerTest {
     @Test
     void deleteCompany_returns204() throws Exception {
         // given
-        doNothing().when(companyService).deleteCompany(1L, 2L);
+        doNothing().when(companyService).deleteCompany(USER_ID, 2L);
 
         // when / then
         mockMvc.perform(delete(BASE_PATH + "/2")).andExpect(status().isNoContent());
 
-        verify(companyService).deleteCompany(1L, 2L);
+        verify(companyService).deleteCompany(USER_ID, 2L);
     }
 
     @Test
     void deleteCompany_whenNotFound_returns404() throws Exception {
         // given
-        doThrow(new CompanyNotFoundException(1L, 99L)).when(companyService).deleteCompany(1L, 99L);
+        doThrow(new CompanyNotFoundException(USER_ID, 99L)).when(companyService).deleteCompany(USER_ID, 99L);
 
         // when / then
         mockMvc.perform(delete(BASE_PATH + "/99"))
@@ -319,7 +322,7 @@ class CompanyControllerTest {
     @Test
     void deleteCompany_whenHasApplications_returns409() throws Exception {
         // given
-        doThrow(new CompanyHasApplicationsException(2L)).when(companyService).deleteCompany(1L, 2L);
+        doThrow(new CompanyHasApplicationsException(2L)).when(companyService).deleteCompany(USER_ID, 2L);
 
         // when / then
         mockMvc.perform(delete(BASE_PATH + "/2"))
@@ -335,7 +338,7 @@ class CompanyControllerTest {
             final Long companyId, final String companyName, final String companyWebsiteUrl) {
         return new CompanyResponseDto(
                 companyId,
-                1L,
+                USER_ID,
                 companyName,
                 companyWebsiteUrl,
                 "Madrid",

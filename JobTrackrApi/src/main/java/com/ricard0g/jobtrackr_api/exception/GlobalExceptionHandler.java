@@ -100,4 +100,30 @@ public class GlobalExceptionHandler {
         return ResponseEntity.status(HttpStatus.BAD_REQUEST)
                 .body(ErrorResponse.of("VALIDATION_ERROR", "Request validation failed", fieldErrors));
     }
+
+    @ExceptionHandler(DuplicateEmailException.class)
+    public ResponseEntity<ErrorResponse> handleDuplicateEmail(final DuplicateEmailException exception) {
+        return ResponseEntity.status(HttpStatus.CONFLICT)
+                .body(ErrorResponse.of("DUPLICATE_EMAIL", exception.getMessage()));
+    }
+
+    @ExceptionHandler(InvalidRefreshTokenException.class)
+    public ResponseEntity<ErrorResponse> handleInvalidRefreshToken(
+            final InvalidRefreshTokenException exception) {
+        return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
+                .body(ErrorResponse.of("INVALID_REFRESH_TOKEN", exception.getMessage()));
+    }
+
+    @ExceptionHandler(RefreshTokenReuseException.class)
+    public ResponseEntity<ErrorResponse> handleRefreshTokenReuse(final RefreshTokenReuseException exception) {
+        return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
+                .body(ErrorResponse.of("REFRESH_TOKEN_REUSE", exception.getMessage()));
+    }
+
+    @ExceptionHandler(org.springframework.security.authentication.BadCredentialsException.class)
+    public ResponseEntity<ErrorResponse> handleBadCredentials(
+            final org.springframework.security.authentication.BadCredentialsException exception) {
+        return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
+                .body(ErrorResponse.of("INVALID_CREDENTIALS", "Invalid email or password"));
+    }
 }

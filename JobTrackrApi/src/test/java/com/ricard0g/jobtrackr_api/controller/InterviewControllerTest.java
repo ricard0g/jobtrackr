@@ -15,6 +15,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 import java.time.OffsetDateTime;
 import java.util.List;
+import java.util.UUID;
 
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -41,7 +42,9 @@ import com.ricard0g.jobtrackr_api.service.InterviewService;
 @Import(GlobalExceptionHandler.class)
 class InterviewControllerTest {
 
-    private static final String BASE_PATH = "/api/v1/users/1/applications/10/interviews";
+    private static final String USER_ID_VALUE = "11111111-1111-1111-1111-111111111111";
+    private static final UUID USER_ID = UUID.fromString(USER_ID_VALUE);
+    private static final String BASE_PATH = "/api/v1/users/" + USER_ID_VALUE + "/applications/10/interviews";
     private static final OffsetDateTime TIMESTAMP = OffsetDateTime.parse("2026-06-10T15:00:00Z");
 
     @Autowired
@@ -54,7 +57,7 @@ class InterviewControllerTest {
     void getAllInterviews_returns200() throws Exception {
         // given
         final InterviewResponseDto interview = sampleInterview(1L);
-        when(interviewService.getAllInterviews(1L, 10L)).thenReturn(List.of(interview));
+        when(interviewService.getAllInterviews(USER_ID, 10L)).thenReturn(List.of(interview));
 
         // when / then
         mockMvc.perform(get(BASE_PATH))
@@ -68,7 +71,7 @@ class InterviewControllerTest {
     @Test
     void getAllInterviews_whenUserNotFound_returns404() throws Exception {
         // given
-        when(interviewService.getAllInterviews(1L, 10L)).thenThrow(new UserNotFoundException(1L));
+        when(interviewService.getAllInterviews(USER_ID, 10L)).thenThrow(new UserNotFoundException(USER_ID));
 
         // when / then
         mockMvc.perform(get(BASE_PATH))
@@ -79,7 +82,8 @@ class InterviewControllerTest {
     @Test
     void getAllInterviews_whenApplicationNotFound_returns404() throws Exception {
         // given
-        when(interviewService.getAllInterviews(1L, 10L)).thenThrow(new ApplicationNotFoundException(1L, 10L));
+        when(interviewService.getAllInterviews(USER_ID, 10L))
+                .thenThrow(new ApplicationNotFoundException(USER_ID, 10L));
 
         // when / then
         mockMvc.perform(get(BASE_PATH))
@@ -90,20 +94,22 @@ class InterviewControllerTest {
     @Test
     void getAllInterviews_withInvalidUserId_returns400() throws Exception {
         // when / then
-        mockMvc.perform(get("/api/v1/users/0/applications/10/interviews")).andExpect(status().isBadRequest());
+        mockMvc.perform(get("/api/v1/users/not-a-uuid/applications/10/interviews"))
+                .andExpect(status().isBadRequest());
     }
 
     @Test
     void getAllInterviews_withInvalidApplicationId_returns400() throws Exception {
         // when / then
-        mockMvc.perform(get("/api/v1/users/1/applications/0/interviews")).andExpect(status().isBadRequest());
+        mockMvc.perform(get("/api/v1/users/" + USER_ID_VALUE + "/applications/0/interviews"))
+                .andExpect(status().isBadRequest());
     }
 
     @Test
     void getInterviewById_returns200() throws Exception {
         // given
         final InterviewResponseDto interview = sampleInterview(2L);
-        when(interviewService.getInterviewById(1L, 10L, 2L)).thenReturn(interview);
+        when(interviewService.getInterviewById(USER_ID, 10L, 2L)).thenReturn(interview);
 
         // when / then
         mockMvc.perform(get(BASE_PATH + "/2"))
@@ -116,8 +122,8 @@ class InterviewControllerTest {
     @Test
     void getInterviewById_whenNotFound_returns404() throws Exception {
         // given
-        when(interviewService.getInterviewById(1L, 10L, 99L))
-                .thenThrow(new InterviewNotFoundException(1L, 10L, 99L));
+        when(interviewService.getInterviewById(USER_ID, 10L, 99L))
+                .thenThrow(new InterviewNotFoundException(USER_ID, 10L, 99L));
 
         // when / then
         mockMvc.perform(get(BASE_PATH + "/99"))
@@ -135,7 +141,7 @@ class InterviewControllerTest {
     void createInterview_withValidBody_returns201() throws Exception {
         // given
         final InterviewResponseDto created = sampleInterview(3L);
-        when(interviewService.createInterview(eq(1L), eq(10L), any(InterviewCreateRequestDto.class)))
+        when(interviewService.createInterview(eq(USER_ID), eq(10L), any(InterviewCreateRequestDto.class)))
                 .thenReturn(created);
 
         // when / then
@@ -157,7 +163,7 @@ class InterviewControllerTest {
                 .andExpect(jsonPath("$.interviewType").value("TECHNICAL"))
                 .andExpect(jsonPath("$.interviewOutcome").value("PENDING"));
 
-        verify(interviewService).createInterview(eq(1L), eq(10L), any(InterviewCreateRequestDto.class));
+        verify(interviewService).createInterview(eq(USER_ID), eq(10L), any(InterviewCreateRequestDto.class));
     }
 
     @Test
@@ -215,8 +221,8 @@ class InterviewControllerTest {
     @Test
     void createInterview_whenUserNotFound_returns404() throws Exception {
         // given
-        when(interviewService.createInterview(eq(1L), eq(10L), any(InterviewCreateRequestDto.class)))
-                .thenThrow(new UserNotFoundException(1L));
+        when(interviewService.createInterview(eq(USER_ID), eq(10L), any(InterviewCreateRequestDto.class)))
+                .thenThrow(new UserNotFoundException(USER_ID));
 
         // when / then
         mockMvc.perform(
@@ -236,8 +242,8 @@ class InterviewControllerTest {
     @Test
     void createInterview_whenApplicationNotFound_returns404() throws Exception {
         // given
-        when(interviewService.createInterview(eq(1L), eq(10L), any(InterviewCreateRequestDto.class)))
-                .thenThrow(new ApplicationNotFoundException(1L, 10L));
+        when(interviewService.createInterview(eq(USER_ID), eq(10L), any(InterviewCreateRequestDto.class)))
+                .thenThrow(new ApplicationNotFoundException(USER_ID, 10L));
 
         // when / then
         mockMvc.perform(
@@ -267,7 +273,7 @@ class InterviewControllerTest {
                 InterviewOutcome.PASSED,
                 TIMESTAMP,
                 TIMESTAMP);
-        when(interviewService.replaceInterview(eq(1L), eq(10L), eq(2L), any(InterviewPutRequestDto.class)))
+        when(interviewService.replaceInterview(eq(USER_ID), eq(10L), eq(2L), any(InterviewPutRequestDto.class)))
                 .thenReturn(updated);
 
         // when / then
@@ -288,7 +294,7 @@ class InterviewControllerTest {
                 .andExpect(jsonPath("$.interviewId").value(2))
                 .andExpect(jsonPath("$.interviewOutcome").value("PASSED"));
 
-        verify(interviewService).replaceInterview(eq(1L), eq(10L), eq(2L), any(InterviewPutRequestDto.class));
+        verify(interviewService).replaceInterview(eq(USER_ID), eq(10L), eq(2L), any(InterviewPutRequestDto.class));
     }
 
     @Test
@@ -311,8 +317,8 @@ class InterviewControllerTest {
     @Test
     void replaceInterview_whenNotFound_returns404() throws Exception {
         // given
-        when(interviewService.replaceInterview(eq(1L), eq(10L), eq(99L), any(InterviewPutRequestDto.class)))
-                .thenThrow(new InterviewNotFoundException(1L, 10L, 99L));
+        when(interviewService.replaceInterview(eq(USER_ID), eq(10L), eq(99L), any(InterviewPutRequestDto.class)))
+                .thenThrow(new InterviewNotFoundException(USER_ID, 10L, 99L));
 
         // when / then
         mockMvc.perform(
@@ -333,20 +339,20 @@ class InterviewControllerTest {
     @Test
     void deleteInterview_returns204() throws Exception {
         // given
-        doNothing().when(interviewService).deleteInterview(1L, 10L, 2L);
+        doNothing().when(interviewService).deleteInterview(USER_ID, 10L, 2L);
 
         // when / then
         mockMvc.perform(delete(BASE_PATH + "/2")).andExpect(status().isNoContent());
 
-        verify(interviewService).deleteInterview(1L, 10L, 2L);
+        verify(interviewService).deleteInterview(USER_ID, 10L, 2L);
     }
 
     @Test
     void deleteInterview_whenNotFound_returns404() throws Exception {
         // given
-        doThrow(new InterviewNotFoundException(1L, 10L, 99L))
+        doThrow(new InterviewNotFoundException(USER_ID, 10L, 99L))
                 .when(interviewService)
-                .deleteInterview(1L, 10L, 99L);
+                .deleteInterview(USER_ID, 10L, 99L);
 
         // when / then
         mockMvc.perform(delete(BASE_PATH + "/99"))

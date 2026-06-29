@@ -8,6 +8,7 @@ import static org.mockito.Mockito.when;
 
 import java.time.OffsetDateTime;
 import java.util.List;
+import java.util.UUID;
 
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -25,7 +26,7 @@ import com.ricard0g.jobtrackr_api.repository.StatusHistoryRepository;
 @ExtendWith(MockitoExtension.class)
 class StatusHistoryServiceTest {
 
-    private static final Long USER_ID = 1L;
+    private static final UUID USER_ID = UUID.fromString("11111111-1111-1111-1111-111111111111");
     private static final Long APPLICATION_ID = 2L;
     private static final OffsetDateTime NEWER_TIMESTAMP = OffsetDateTime.parse("2026-06-10T15:00:00Z");
     private static final OffsetDateTime OLDER_TIMESTAMP = OffsetDateTime.parse("2026-06-09T10:00:00Z");

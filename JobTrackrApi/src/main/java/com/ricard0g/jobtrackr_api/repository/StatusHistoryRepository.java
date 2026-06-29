@@ -1,6 +1,7 @@
 package com.ricard0g.jobtrackr_api.repository;
 
 import java.util.List;
+import java.util.UUID;
 
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
@@ -18,5 +19,5 @@ public interface StatusHistoryRepository extends JpaRepository<StatusHistory, Lo
             ORDER BY sh.statusHistoryChangedAt DESC
             """)
     List<StatusHistory> findAllForApplicationAndUser(
-            @Param("applicationId") Long applicationId, @Param("userId") Long userId);
+            @Param("applicationId") Long applicationId, @Param("userId") UUID userId);
 }

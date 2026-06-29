@@ -1,6 +1,7 @@
 package com.ricard0g.jobtrackr_api.service;
 
 import java.util.List;
+import java.util.UUID;
 
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -31,7 +32,7 @@ public class CompanyService {
     private final ApplicationRepository applicationRepository;
 
     @Transactional(readOnly = true)
-    public List<CompanyResponseDto> getAllCompanies(final Long userId) {
+    public List<CompanyResponseDto> getAllCompanies(final UUID userId) {
         requireUser(userId);
         final List<CompanyResponseDto> companies = companyRepository.findAllForUser(userId).stream()
                 .map(CompanyResponseDto::from)
@@ -41,14 +42,14 @@ public class CompanyService {
     }
 
     @Transactional(readOnly = true)
-    public CompanyResponseDto getCompanyById(final Long userId, final Long companyId) {
+    public CompanyResponseDto getCompanyById(final UUID userId, final Long companyId) {
         final Company company = requireCompanyForUser(userId, companyId);
         log.info("[CompanyService] - GET_COMPANY_BY_ID: companyId: {}, userId: {}", companyId, userId);
         return CompanyResponseDto.from(company);
     }
 
     @Transactional
-    public CompanyResponseDto createCompany(final Long userId, final CompanyCreateRequestDto dto) {
+    public CompanyResponseDto createCompany(final UUID userId, final CompanyCreateRequestDto dto) {
         final User user = requireUser(userId);
         final String companyName = dto.companyName().trim();
         final boolean nameAlreadyExists = companyRepository.nameExistsForUser(userId, companyName);
@@ -69,7 +70,7 @@ public class CompanyService {
 
     @Transactional
     public CompanyResponseDto replaceCompany(
-            final Long userId, final Long companyId, final CompanyPutRequestDto dto) {
+            final UUID userId, final Long companyId, final CompanyPutRequestDto dto) {
         final Company company = requireCompanyForUser(userId, companyId);
         final String companyName = dto.companyName().trim();
         final boolean nameAlreadyExists =
@@ -88,7 +89,7 @@ public class CompanyService {
     }
 
     @Transactional
-    public void deleteCompany(final Long userId, final Long companyId) {
+    public void deleteCompany(final UUID userId, final Long companyId) {
         final Company company = requireCompanyForUser(userId, companyId);
         final boolean hasApplications = applicationRepository.hasApplications(companyId);
         if (hasApplications) {
@@ -98,11 +99,11 @@ public class CompanyService {
         log.info("[CompanyService] - DELETE_COMPANY: companyId: {}, userId: {}", companyId, userId);
     }
 
-    private User requireUser(final Long userId) {
+    private User requireUser(final UUID userId) {
         return userRepository.findById(userId).orElseThrow(() -> new UserNotFoundException(userId));
     }
 
-    private Company requireCompanyForUser(final Long userId, final Long companyId) {
+    private Company requireCompanyForUser(final UUID userId, final Long companyId) {
         return companyRepository
                 .findForUser(companyId, userId)
                 .orElseThrow(() -> new CompanyNotFoundException(userId, companyId));

@@ -1,6 +1,7 @@
 package com.ricard0g.jobtrackr_api.controller;
 
 import java.util.List;
+import java.util.UUID;
 
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -39,19 +40,19 @@ public class ApplicationController {
 
     @GetMapping
     public ResponseEntity<List<ApplicationResponseDto>> getAllApplications(
-            @PathVariable @Positive final Long userId) {
+            @PathVariable final UUID userId) {
         return ResponseEntity.ok(applicationService.getAllApplications(userId));
     }
 
     @GetMapping("/{applicationId}")
     public ResponseEntity<ApplicationResponseDto> getApplicationById(
-            @PathVariable @Positive final Long userId, @PathVariable @Positive final Long applicationId) {
+            @PathVariable final UUID userId, @PathVariable @Positive final Long applicationId) {
         return ResponseEntity.ok(applicationService.getApplicationById(userId, applicationId));
     }
 
     @PostMapping
     public ResponseEntity<ApplicationResponseDto> createApplication(
-            @PathVariable @Positive final Long userId,
+            @PathVariable final UUID userId,
             @Valid @RequestBody final ApplicationCreateRequestDto request) {
         return ResponseEntity.status(HttpStatus.CREATED)
                 .body(applicationService.createApplication(userId, request));
@@ -59,7 +60,7 @@ public class ApplicationController {
 
     @PutMapping("/{applicationId}")
     public ResponseEntity<ApplicationResponseDto> replaceApplication(
-            @PathVariable @Positive final Long userId,
+            @PathVariable final UUID userId,
             @PathVariable @Positive final Long applicationId,
             @Valid @RequestBody final ApplicationPutRequestDto request) {
         return ResponseEntity.ok(applicationService.replaceApplication(userId, applicationId, request));
@@ -67,13 +68,13 @@ public class ApplicationController {
 
     @GetMapping("/{applicationId}/status-history")
     public ResponseEntity<List<StatusHistoryResponseDto>> getStatusHistory(
-            @PathVariable @Positive final Long userId, @PathVariable @Positive final Long applicationId) {
+            @PathVariable final UUID userId, @PathVariable @Positive final Long applicationId) {
         return ResponseEntity.ok(applicationService.getStatusHistory(userId, applicationId));
     }
 
     @PatchMapping("/{applicationId}/status")
     public ResponseEntity<ApplicationResponseDto> patchApplicationStatus(
-            @PathVariable @Positive final Long userId,
+            @PathVariable final UUID userId,
             @PathVariable @Positive final Long applicationId,
             @Valid @RequestBody final ApplicationStatusPatchRequestDto request) {
         return ResponseEntity.ok(applicationService.patchApplicationStatus(userId, applicationId, request));
@@ -81,7 +82,7 @@ public class ApplicationController {
 
     @PatchMapping("/{applicationId}")
     public ResponseEntity<ApplicationResponseDto> patchApplication(
-            @PathVariable @Positive final Long userId,
+            @PathVariable final UUID userId,
             @PathVariable @Positive final Long applicationId,
             @Valid @RequestBody final ApplicationPatchRequestDto request) {
         return ResponseEntity.ok(applicationService.patchApplication(userId, applicationId, request));
@@ -89,7 +90,7 @@ public class ApplicationController {
 
     @PostMapping("/{applicationId}/tags")
     public ResponseEntity<TagResponseDto> createAndAttachTag(
-            @PathVariable @Positive final Long userId,
+            @PathVariable final UUID userId,
             @PathVariable @Positive final Long applicationId,
             @Valid @RequestBody final CreateTagRequestDto request) {
         return ResponseEntity.status(HttpStatus.CREATED)
@@ -98,7 +99,7 @@ public class ApplicationController {
 
     @DeleteMapping("/{applicationId}")
     public ResponseEntity<Void> deleteApplication(
-            @PathVariable @Positive final Long userId, @PathVariable @Positive final Long applicationId) {
+            @PathVariable final UUID userId, @PathVariable @Positive final Long applicationId) {
         applicationService.deleteApplication(userId, applicationId);
         return ResponseEntity.noContent().build();
     }

@@ -1,14 +1,20 @@
 package com.ricard0g.jobtrackr_api.dto.UserDto;
 
 import java.time.OffsetDateTime;
+import java.util.UUID;
 
 import com.ricard0g.jobtrackr_api.model.User;
 
 public record UserResponseDto(
-        Long userId,
+        UUID userId,
         String userEmail,
-        String userFirstName,
-        String userLastName,
+        String userDisplayName,
+        String userPictureUrl,
+        boolean userEnabled,
+        boolean userLocked,
+        OffsetDateTime userDeletedAt,
+        OffsetDateTime userPasswordChangedAt,
+        OffsetDateTime userLastLoginAt,
         OffsetDateTime userCreatedAt,
         OffsetDateTime userUpdatedAt) {
 
@@ -16,8 +22,13 @@ public record UserResponseDto(
         return new UserResponseDto(
                 user.getUserId(),
                 user.getUserEmail(),
-                user.getUserFirstName(),
-                user.getUserLastName(),
+                user.getUserDisplayName(),
+                user.getUserPictureUrl(),
+                user.isUserEnabled(),
+                user.isUserLocked(),
+                user.getUserDeletedAt(),
+                user.getUserPasswordChangedAt(),
+                user.getUserLastLoginAt(),
                 user.getUserCreatedAt(),
                 user.getUserUpdatedAt());
     }

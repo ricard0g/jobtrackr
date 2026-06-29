@@ -1,6 +1,7 @@
 package com.ricard0g.jobtrackr_api.controller;
 
 import java.util.List;
+import java.util.UUID;
 
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -33,15 +34,14 @@ public class InterviewController {
 
     @GetMapping
     public ResponseEntity<List<InterviewResponseDto>> getAllInterviews(
-            @PathVariable(name = "userId") @Positive final Long userId, @PathVariable(name = "applicationId") @Positive final Long applicationId) {
-            System.out.println("userId: " + userId);
-            System.out.println("applicationId: " + applicationId);
+            @PathVariable(name = "userId") final UUID userId,
+            @PathVariable(name = "applicationId") @Positive final Long applicationId) {
         return ResponseEntity.ok(interviewService.getAllInterviews(userId, applicationId));
     }
 
     @GetMapping("/{interviewId}")
     public ResponseEntity<InterviewResponseDto> getInterviewById(
-            @PathVariable @Positive final Long userId,
+            @PathVariable final UUID userId,
             @PathVariable @Positive final Long applicationId,
             @PathVariable @Positive final Long interviewId) {
         return ResponseEntity.ok(interviewService.getInterviewById(userId, applicationId, interviewId));
@@ -49,7 +49,7 @@ public class InterviewController {
 
     @PostMapping
     public ResponseEntity<InterviewResponseDto> createInterview(
-            @PathVariable @Positive final Long userId,
+            @PathVariable final UUID userId,
             @PathVariable @Positive final Long applicationId,
             @Valid @RequestBody final InterviewCreateRequestDto request) {
         return ResponseEntity.status(HttpStatus.CREATED)
@@ -58,7 +58,7 @@ public class InterviewController {
 
     @PutMapping("/{interviewId}")
     public ResponseEntity<InterviewResponseDto> replaceInterview(
-            @PathVariable @Positive final Long userId,
+            @PathVariable final UUID userId,
             @PathVariable @Positive final Long applicationId,
             @PathVariable @Positive final Long interviewId,
             @Valid @RequestBody final InterviewPutRequestDto request) {
@@ -68,7 +68,7 @@ public class InterviewController {
 
     @DeleteMapping("/{interviewId}")
     public ResponseEntity<Void> deleteInterview(
-            @PathVariable @Positive final Long userId,
+            @PathVariable final UUID userId,
             @PathVariable @Positive final Long applicationId,
             @PathVariable @Positive final Long interviewId) {
         interviewService.deleteInterview(userId, applicationId, interviewId);

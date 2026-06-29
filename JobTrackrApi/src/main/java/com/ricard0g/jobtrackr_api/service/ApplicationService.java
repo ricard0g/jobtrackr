@@ -2,6 +2,7 @@ package com.ricard0g.jobtrackr_api.service;
 
 import java.math.BigDecimal;
 import java.util.HashSet;
+import java.util.UUID;
 import java.util.List;
 import java.util.Set;
 import java.util.stream.Collectors;
@@ -51,7 +52,7 @@ public class ApplicationService {
     private final StatusHistoryService statusHistoryService;
 
     @Transactional(readOnly = true)
-    public List<ApplicationResponseDto> getAllApplications(final Long userId) {
+    public List<ApplicationResponseDto> getAllApplications(final UUID userId) {
         requireUser(userId);
         final List<ApplicationResponseDto> applications = applicationRepository.findAllForUser(userId).stream()
                 .map(ApplicationResponseDto::from)
@@ -64,7 +65,7 @@ public class ApplicationService {
     }
 
     @Transactional(readOnly = true)
-    public ApplicationResponseDto getApplicationById(final Long userId, final Long applicationId) {
+    public ApplicationResponseDto getApplicationById(final UUID userId, final Long applicationId) {
         final Application application = requireApplicationForUser(userId, applicationId);
         log.info(
                 "[ApplicationService] - GET_APPLICATION_BY_ID: applicationId: {}, userId: {}",
@@ -74,12 +75,12 @@ public class ApplicationService {
     }
 
     @Transactional(readOnly = true)
-    public List<StatusHistoryResponseDto> getStatusHistory(final Long userId, final Long applicationId) {
+    public List<StatusHistoryResponseDto> getStatusHistory(final UUID userId, final Long applicationId) {
         return statusHistoryService.getStatusHistoryForApplication(userId, applicationId);
     }
 
     @Transactional
-    public ApplicationResponseDto createApplication(final Long userId, final ApplicationCreateRequestDto dto) {
+    public ApplicationResponseDto createApplication(final UUID userId, final ApplicationCreateRequestDto dto) {
         final User user = requireUser(userId);
         final Company company = requireCompanyForUser(userId, dto.companyId());
         validateSalaryRange(dto.applicationSalaryMin(), dto.applicationSalaryMax());
@@ -109,7 +110,7 @@ public class ApplicationService {
 
     @Transactional
     public ApplicationResponseDto replaceApplication(
-            final Long userId, final Long applicationId, final ApplicationPutRequestDto dto) {
+            final UUID userId, final Long applicationId, final ApplicationPutRequestDto dto) {
         final Application application = requireApplicationForUser(userId, applicationId);
         final Company company = requireCompanyForUser(userId, dto.companyId());
         validateSalaryRange(dto.applicationSalaryMin(), dto.applicationSalaryMax());
@@ -135,7 +136,7 @@ public class ApplicationService {
 
     @Transactional
     public ApplicationResponseDto patchApplication(
-            final Long userId, final Long applicationId, final ApplicationPatchRequestDto dto) {
+            final UUID userId, final Long applicationId, final ApplicationPatchRequestDto dto) {
         final Application application = requireApplicationForUser(userId, applicationId);
         if (dto.companyId() != null) {
             application.setCompany(requireCompanyForUser(userId, dto.companyId()));
@@ -182,7 +183,7 @@ public class ApplicationService {
 
     @Transactional
     public ApplicationResponseDto patchApplicationStatus(
-            final Long userId,
+            final UUID userId,
             final Long applicationId,
             final ApplicationStatusPatchRequestDto dto) {
         final Application application = requireApplicationForUserWithLock(userId, applicationId);
@@ -204,7 +205,7 @@ public class ApplicationService {
 
     @Transactional
     public TagResponseDto createAndAttachTag(
-            final Long userId, final Long applicationId, final CreateTagRequestDto request) {
+            final UUID userId, final Long applicationId, final CreateTagRequestDto request) {
         final Application application = requireApplicationForUser(userId, applicationId);
         if (tagRepository.existsByTagName(request.tagName())) {
             throw new DuplicateTagNameException(request.tagName());
@@ -223,7 +224,7 @@ public class ApplicationService {
     }
 
     @Transactional
-    public void deleteApplication(final Long userId, final Long applicationId) {
+    public void deleteApplication(final UUID userId, final Long applicationId) {
         final Application application = requireApplicationForUser(userId, applicationId);
         applicationRepository.delete(application);
         log.info(
@@ -232,23 +233,23 @@ public class ApplicationService {
                 userId);
     }
 
-    private User requireUser(final Long userId) {
+    private User requireUser(final UUID userId) {
         return userRepository.findById(userId).orElseThrow(() -> new UserNotFoundException(userId));
     }
 
-    private Company requireCompanyForUser(final Long userId, final Long companyId) {
+    private Company requireCompanyForUser(final UUID userId, final Long companyId) {
         return companyRepository
                 .findForUser(companyId, userId)
                 .orElseThrow(() -> new CompanyNotFoundException(userId, companyId));
     }
 
-    private Application requireApplicationForUser(final Long userId, final Long applicationId) {
+    private Application requireApplicationForUser(final UUID userId, final Long applicationId) {
         return applicationRepository
                 .findForUser(applicationId, userId)
                 .orElseThrow(() -> new ApplicationNotFoundException(userId, applicationId));
     }
 
-    private Application requireApplicationForUserWithLock(final Long userId, final Long applicationId) {
+    private Application requireApplicationForUserWithLock(final UUID userId, final Long applicationId) {
         return applicationRepository
                 .findForUserWithLock(applicationId, userId)
                 .orElseThrow(() -> new ApplicationNotFoundException(userId, applicationId));

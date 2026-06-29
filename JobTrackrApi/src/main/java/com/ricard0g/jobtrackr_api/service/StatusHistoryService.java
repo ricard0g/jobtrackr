@@ -1,6 +1,7 @@
 package com.ricard0g.jobtrackr_api.service;
 
 import java.util.List;
+import java.util.UUID;
 
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -26,7 +27,7 @@ public class StatusHistoryService {
 
     @Transactional(readOnly = true)
     public List<StatusHistoryResponseDto> getStatusHistoryForApplication(
-            final Long userId, final Long applicationId) {
+            final UUID userId, final Long applicationId) {
         ensureApplicationExistsForUser(userId, applicationId);
         final List<StatusHistoryResponseDto> history = statusHistoryRepository
                 .findAllForApplicationAndUser(applicationId, userId)
@@ -56,7 +57,7 @@ public class StatusHistoryService {
                 newStatus);
     }
 
-    private void ensureApplicationExistsForUser(final Long userId, final Long applicationId) {
+    private void ensureApplicationExistsForUser(final UUID userId, final Long applicationId) {
         final boolean exists = applicationRepository.existsForUser(applicationId, userId);
         if (!exists) {
             throw new ApplicationNotFoundException(userId, applicationId);

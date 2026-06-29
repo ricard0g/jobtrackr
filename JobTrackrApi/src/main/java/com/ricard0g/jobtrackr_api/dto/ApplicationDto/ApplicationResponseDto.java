@@ -4,6 +4,7 @@ import java.math.BigDecimal;
 import java.time.OffsetDateTime;
 import java.util.Comparator;
 import java.util.List;
+import java.util.UUID;
 
 import com.ricard0g.jobtrackr_api.dto.CompanyDto.CompanyResponseDto;
 import com.ricard0g.jobtrackr_api.dto.TagDto.TagResponseDto;
@@ -13,7 +14,7 @@ import com.ricard0g.jobtrackr_api.model.enums.RemoteType;
 
 public record ApplicationResponseDto(
         Long applicationId,
-        Long userId,
+        UUID userId,
         String applicationTitle,
         String applicationJobUrl,
         String applicationLocation,
