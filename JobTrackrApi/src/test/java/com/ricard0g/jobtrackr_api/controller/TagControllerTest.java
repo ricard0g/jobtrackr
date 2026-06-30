@@ -13,7 +13,9 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
+import java.security.Principal;
 import java.util.List;
+import java.util.UUID;
 
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -38,172 +40,184 @@ import com.ricard0g.jobtrackr_api.service.TagService;
 @Import(GlobalExceptionHandler.class)
 class TagControllerTest {
 
-  @Autowired private MockMvc mockMvc;
+    private static final String USER_ID_VALUE = "11111111-1111-1111-1111-111111111111";
+    private static final UUID USER_ID = UUID.fromString(USER_ID_VALUE);
 
-  @MockitoBean private TagService tagService;
+    @Autowired
+    private MockMvc mockMvc;
 
-  @Test
-  void getAllTags_returns200() throws Exception {
-    // given
-    final TagResponseDto tag =
-        new TagResponseDto(1L, TagCategory.TECH_STACK, "Java", "#FF5733");
-    when(tagService.getAllTags()).thenReturn(List.of(tag));
+    @MockitoBean
+    private TagService tagService;
 
-    // when / then
-    mockMvc.perform(get("/api/v1/tags"))
-        .andExpect(status().isOk())
-        .andExpect(jsonPath("$[0].tagId").value(1))
-        .andExpect(jsonPath("$[0].tagName").value("Java"));
-  }
+    @Test
+    void getAllTags_returns200() throws Exception {
+        // given
+        final TagResponseDto tag = new TagResponseDto(1L, TagCategory.TECH_STACK, "Java", "#FF5733", true);
+        when(tagService.getAllTags(USER_ID)).thenReturn(List.of(tag));
 
-  @Test
-  void getTagById_returns200() throws Exception {
-    // given
-    final TagResponseDto tag =
-        new TagResponseDto(1L, TagCategory.TECH_STACK, "Java", "#FF5733");
-    when(tagService.getTagById(1L)).thenReturn(tag);
+        // when / then
+        mockMvc.perform(get("/api/v1/tags").principal(authenticatedUser()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[0].tagId").value(1))
+                .andExpect(jsonPath("$[0].tagName").value("Java"))
+                .andExpect(jsonPath("$[0].global").value(true));
+    }
 
-    // when / then
-    mockMvc.perform(get("/api/v1/tags/1"))
-        .andExpect(status().isOk())
-        .andExpect(jsonPath("$.tagId").value(1))
-        .andExpect(jsonPath("$.tagCategory").value("TECH_STACK"));
-  }
+    @Test
+    void getTagById_returns200() throws Exception {
+        // given
+        final TagResponseDto tag = new TagResponseDto(1L, TagCategory.TECH_STACK, "Java", "#FF5733", true);
+        when(tagService.getTagById(USER_ID, 1L)).thenReturn(tag);
 
-  @Test
-  void getTagById_whenNotFound_returns404() throws Exception {
-    // given
-    when(tagService.getTagById(99L)).thenThrow(new TagNotFoundException(99L));
+        // when / then
+        mockMvc.perform(get("/api/v1/tags/1").principal(authenticatedUser()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.tagId").value(1))
+                .andExpect(jsonPath("$.tagCategory").value("TECH_STACK"));
+    }
 
-    // when / then
-    mockMvc.perform(get("/api/v1/tags/99")).andExpect(status().isNotFound());
-  }
+    @Test
+    void getTagById_whenNotFound_returns404() throws Exception {
+        // given
+        when(tagService.getTagById(USER_ID, 99L)).thenThrow(new TagNotFoundException(99L));
 
-  @Test
-  void createTag_withValidBody_returns201() throws Exception {
-    // given
-    final TagResponseDto created =
-        new TagResponseDto(1L, TagCategory.TECH_STACK, "Java", "#FF5733");
-    when(tagService.createTag(any(CreateTagRequestDto.class))).thenReturn(created);
+        // when / then
+        mockMvc.perform(get("/api/v1/tags/99").principal(authenticatedUser())).andExpect(status().isNotFound());
+    }
 
-    // when / then
-    mockMvc.perform(
-            post("/api/v1/tags")
-                .contentType(MediaType.APPLICATION_JSON)
-                .content(
-                    """
-                    {
-                      "tagCategory": "TECH_STACK",
-                      "tagName": "Java",
-                      "tagColor": "#FF5733"
-                    }
-                    """))
-        .andExpect(status().isCreated())
-        .andExpect(jsonPath("$.tagId").value(1))
-        .andExpect(jsonPath("$.tagName").value("Java"));
-  }
+    @Test
+    void createTag_withValidBody_returns201() throws Exception {
+        // given
+        final TagResponseDto created = new TagResponseDto(1L, TagCategory.TECH_STACK, "Java", "#FF5733", false);
+        when(tagService.createTag(eq(USER_ID), any(CreateTagRequestDto.class))).thenReturn(created);
 
-  @Test
-  void createTag_withInvalidBody_returns400() throws Exception {
-    // when / then
-    mockMvc.perform(
-            post("/api/v1/tags")
-                .contentType(MediaType.APPLICATION_JSON)
-                .content(
-                    """
-                    {
-                      "tagCategory": "TECH_STACK",
-                      "tagName": ""
-                    }
-                    """))
-        .andExpect(status().isBadRequest());
-  }
+        // when / then
+        mockMvc.perform(
+                        post("/api/v1/tags")
+                                .principal(authenticatedUser())
+                                .contentType(MediaType.APPLICATION_JSON)
+                                .content(
+                                        """
+                                        {
+                                          "tagCategory": "TECH_STACK",
+                                          "tagName": "Java",
+                                          "tagColor": "#FF5733"
+                                        }
+                                        """))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.tagId").value(1))
+                .andExpect(jsonPath("$.tagName").value("Java"))
+                .andExpect(jsonPath("$.global").value(false));
+    }
 
-  @Test
-  void replaceTag_withValidBody_returns200() throws Exception {
-    // given
-    final TagResponseDto updated =
-        new TagResponseDto(1L, TagCategory.TECH_STACK, "Java 21", "#112233");
-    when(tagService.replaceTag(eq(1L), any(TagPutRequestDto.class))).thenReturn(updated);
+    @Test
+    void createTag_withInvalidBody_returns400() throws Exception {
+        // when / then
+        mockMvc.perform(
+                        post("/api/v1/tags")
+                                .principal(authenticatedUser())
+                                .contentType(MediaType.APPLICATION_JSON)
+                                .content(
+                                        """
+                                        {
+                                          "tagCategory": "TECH_STACK",
+                                          "tagName": ""
+                                        }
+                                        """))
+                .andExpect(status().isBadRequest());
+    }
 
-    // when / then
-    mockMvc.perform(
-            put("/api/v1/tags/1")
-                .contentType(MediaType.APPLICATION_JSON)
-                .content(
-                    """
-                    {
-                      "tagCategory": "TECH_STACK",
-                      "tagName": "Java 21",
-                      "tagColor": "#112233"
-                    }
-                    """))
-        .andExpect(status().isOk())
-        .andExpect(jsonPath("$.tagId").value(1))
-        .andExpect(jsonPath("$.tagName").value("Java 21"));
+    @Test
+    void replaceTag_withValidBody_returns200() throws Exception {
+        // given
+        final TagResponseDto updated = new TagResponseDto(1L, TagCategory.TECH_STACK, "Java 21", "#112233", false);
+        when(tagService.replaceTag(eq(USER_ID), eq(1L), any(TagPutRequestDto.class))).thenReturn(updated);
 
-    verify(tagService).replaceTag(eq(1L), any(TagPutRequestDto.class));
-  }
+        // when / then
+        mockMvc.perform(
+                        put("/api/v1/tags/1")
+                                .principal(authenticatedUser())
+                                .contentType(MediaType.APPLICATION_JSON)
+                                .content(
+                                        """
+                                        {
+                                          "tagCategory": "TECH_STACK",
+                                          "tagName": "Java 21",
+                                          "tagColor": "#112233"
+                                        }
+                                        """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.tagId").value(1))
+                .andExpect(jsonPath("$.tagName").value("Java 21"));
 
-  @Test
-  void replaceTag_whenNotFound_returns404() throws Exception {
-    // given
-    when(tagService.replaceTag(eq(99L), any(TagPutRequestDto.class)))
-        .thenThrow(new TagNotFoundException(99L));
+        verify(tagService).replaceTag(eq(USER_ID), eq(1L), any(TagPutRequestDto.class));
+    }
 
-    // when / then
-    mockMvc.perform(
-            put("/api/v1/tags/99")
-                .contentType(MediaType.APPLICATION_JSON)
-                .content(
-                    """
-                    {
-                      "tagCategory": "TECH_STACK",
-                      "tagName": "Java"
-                    }
-                    """))
-        .andExpect(status().isNotFound())
-        .andExpect(jsonPath("$.code").value("TAG_NOT_FOUND"));
-  }
+    @Test
+    void replaceTag_whenNotFound_returns404() throws Exception {
+        // given
+        when(tagService.replaceTag(eq(USER_ID), eq(99L), any(TagPutRequestDto.class)))
+                .thenThrow(new TagNotFoundException(99L));
 
-  @Test
-  void replaceTag_whenDuplicateName_returns409() throws Exception {
-    // given
-    when(tagService.replaceTag(eq(1L), any(TagPutRequestDto.class)))
-        .thenThrow(new DuplicateTagNameException("Spring"));
+        // when / then
+        mockMvc.perform(
+                        put("/api/v1/tags/99")
+                                .principal(authenticatedUser())
+                                .contentType(MediaType.APPLICATION_JSON)
+                                .content(
+                                        """
+                                        {
+                                          "tagCategory": "TECH_STACK",
+                                          "tagName": "Java"
+                                        }
+                                        """))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.code").value("TAG_NOT_FOUND"));
+    }
 
-    // when / then
-    mockMvc.perform(
-            put("/api/v1/tags/1")
-                .contentType(MediaType.APPLICATION_JSON)
-                .content(
-                    """
-                    {
-                      "tagCategory": "TECH_STACK",
-                      "tagName": "Spring"
-                    }
-                    """))
-        .andExpect(status().isConflict())
-        .andExpect(jsonPath("$.code").value("DUPLICATE_TAG_NAME"));
-  }
+    @Test
+    void replaceTag_whenDuplicateName_returns409() throws Exception {
+        // given
+        when(tagService.replaceTag(eq(USER_ID), eq(1L), any(TagPutRequestDto.class)))
+                .thenThrow(new DuplicateTagNameException("Spring"));
 
-  @Test
-  void deleteTag_returns204() throws Exception {
-    // given
-    doNothing().when(tagService).deleteTag(1L);
+        // when / then
+        mockMvc.perform(
+                        put("/api/v1/tags/1")
+                                .principal(authenticatedUser())
+                                .contentType(MediaType.APPLICATION_JSON)
+                                .content(
+                                        """
+                                        {
+                                          "tagCategory": "TECH_STACK",
+                                          "tagName": "Spring"
+                                        }
+                                        """))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.code").value("DUPLICATE_TAG_NAME"));
+    }
 
-    // when / then
-    mockMvc.perform(delete("/api/v1/tags/1")).andExpect(status().isNoContent());
+    @Test
+    void deleteTag_returns204() throws Exception {
+        // given
+        doNothing().when(tagService).deleteTag(USER_ID, 1L);
 
-    verify(tagService).deleteTag(1L);
-  }
+        // when / then
+        mockMvc.perform(delete("/api/v1/tags/1").principal(authenticatedUser())).andExpect(status().isNoContent());
 
-  @Test
-  void deleteTag_whenNotFound_returns404() throws Exception {
-    // given
-    doThrow(new TagNotFoundException(99L)).when(tagService).deleteTag(99L);
+        verify(tagService).deleteTag(USER_ID, 1L);
+    }
 
-    // when / then
-    mockMvc.perform(delete("/api/v1/tags/99")).andExpect(status().isNotFound());
-  }
+    @Test
+    void deleteTag_whenNotFound_returns404() throws Exception {
+        // given
+        doThrow(new TagNotFoundException(99L)).when(tagService).deleteTag(USER_ID, 99L);
+
+        // when / then
+        mockMvc.perform(delete("/api/v1/tags/99").principal(authenticatedUser())).andExpect(status().isNotFound());
+    }
+
+    private static Principal authenticatedUser() {
+        return () -> USER_ID_VALUE;
+    }
 }

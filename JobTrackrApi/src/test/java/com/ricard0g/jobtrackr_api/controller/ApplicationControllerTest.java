@@ -511,7 +511,7 @@ class ApplicationControllerTest {
     @Test
     void createAndAttachTag_withValidBody_returns201() throws Exception {
         // given
-        final TagResponseDto created = new TagResponseDto(5L, TagCategory.TECH_STACK, "Kotlin", "#AABBCC");
+        final TagResponseDto created = new TagResponseDto(5L, TagCategory.TECH_STACK, "Kotlin", "#AABBCC", false);
         when(applicationService.createAndAttachTag(eq(USER_ID), eq(2L), any(CreateTagRequestDto.class)))
                 .thenReturn(created);
 
@@ -620,8 +620,8 @@ class ApplicationControllerTest {
                 TIMESTAMP,
                 sampleCompany(),
                 List.of(
-                        new TagResponseDto(1L, TagCategory.TECH_STACK, "Java", "#FF0000"),
-                        new TagResponseDto(2L, TagCategory.TECH_STACK, "Spring", "#00FF00")));
+                        new TagResponseDto(1L, TagCategory.TECH_STACK, "Java", "#FF0000", true),
+                        new TagResponseDto(2L, TagCategory.TECH_STACK, "Spring", "#00FF00", false)));
     }
 
     private static CompanyResponseDto sampleCompany() {

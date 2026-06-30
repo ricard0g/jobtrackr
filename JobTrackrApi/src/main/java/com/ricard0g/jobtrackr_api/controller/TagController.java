@@ -1,6 +1,8 @@
 package com.ricard0g.jobtrackr_api.controller;
 
+import java.security.Principal;
 import java.util.List;
+import java.util.UUID;
 
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -32,29 +34,38 @@ public class TagController {
     private final TagService tagService;
 
     @GetMapping
-    public ResponseEntity<List<TagResponseDto>> getAllTags() {
-        return ResponseEntity.ok(tagService.getAllTags());
+    public ResponseEntity<List<TagResponseDto>> getAllTags(final Principal principal) {
+        final UUID userId = AuthenticatedUserId.from(principal);
+        return ResponseEntity.ok(tagService.getAllTags(userId));
     }
 
     @GetMapping("/{tagId}")
-    public ResponseEntity<TagResponseDto> getTagById(@PathVariable @Positive final Long tagId) {
-        return ResponseEntity.ok(tagService.getTagById(tagId));
+    public ResponseEntity<TagResponseDto> getTagById(
+            final Principal principal, @PathVariable @Positive final Long tagId) {
+        final UUID userId = AuthenticatedUserId.from(principal);
+        return ResponseEntity.ok(tagService.getTagById(userId, tagId));
     }
 
     @PostMapping
-    public ResponseEntity<TagResponseDto> createTag(@Valid @RequestBody final CreateTagRequestDto request) {
-        return ResponseEntity.status(HttpStatus.CREATED).body(tagService.createTag(request));
+    public ResponseEntity<TagResponseDto> createTag(
+            final Principal principal, @Valid @RequestBody final CreateTagRequestDto request) {
+        final UUID userId = AuthenticatedUserId.from(principal);
+        return ResponseEntity.status(HttpStatus.CREATED).body(tagService.createTag(userId, request));
     }
 
     @PutMapping("/{tagId}")
     public ResponseEntity<TagResponseDto> replaceTag(
-            @PathVariable @Positive final Long tagId, @Valid @RequestBody final TagPutRequestDto request) {
-        return ResponseEntity.ok(tagService.replaceTag(tagId, request));
+            final Principal principal,
+            @PathVariable @Positive final Long tagId,
+            @Valid @RequestBody final TagPutRequestDto request) {
+        final UUID userId = AuthenticatedUserId.from(principal);
+        return ResponseEntity.ok(tagService.replaceTag(userId, tagId, request));
     }
 
     @DeleteMapping("/{tagId}")
-    public ResponseEntity<Void> deleteTag(@PathVariable @Positive final Long tagId) {
-        tagService.deleteTag(tagId);
+    public ResponseEntity<Void> deleteTag(final Principal principal, @PathVariable @Positive final Long tagId) {
+        final UUID userId = AuthenticatedUserId.from(principal);
+        tagService.deleteTag(userId, tagId);
         return ResponseEntity.noContent().build();
     }
 }

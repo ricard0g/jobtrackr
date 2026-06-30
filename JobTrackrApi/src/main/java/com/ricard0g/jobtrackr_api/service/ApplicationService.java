@@ -84,7 +84,7 @@ public class ApplicationService {
         final User user = requireUser(userId);
         final Company company = requireCompanyForUser(userId, dto.companyId());
         validateSalaryRange(dto.applicationSalaryMin(), dto.applicationSalaryMax());
-        final Set<Tag> tags = resolveTags(dto.tagIds());
+        final Set<Tag> tags = resolveTags(userId, dto.tagIds());
         final Application application = Application.create(
                 user,
                 company,
@@ -172,7 +172,7 @@ public class ApplicationService {
             application.setApplicationAppliedAt(dto.applicationAppliedAt());
         }
         validateSalaryRange(application.getApplicationSalaryMin(), application.getApplicationSalaryMax());
-        patchTags(application, dto.addTagIds(), dto.removeTagIds());
+        patchTags(userId, application, dto.addTagIds(), dto.removeTagIds());
         final Application saved = applicationRepository.save(application);
         log.info(
                 "[ApplicationService] - PATCH_APPLICATION: applicationId: {}, userId: {}",
@@ -207,11 +207,10 @@ public class ApplicationService {
     public TagResponseDto createAndAttachTag(
             final UUID userId, final Long applicationId, final CreateTagRequestDto request) {
         final Application application = requireApplicationForUser(userId, applicationId);
-        if (tagRepository.existsByTagName(request.tagName())) {
-            throw new DuplicateTagNameException(request.tagName());
-        }
+        final User user = requireUser(userId);
+        ensureTagNameAvailable(userId, request.tagName());
         ensureTagCountWithinLimit(application, 1);
-        final Tag tag = Tag.create(request.tagCategory(), request.tagName(), request.tagColor());
+        final Tag tag = Tag.create(user, request.tagCategory(), request.tagName(), request.tagColor());
         final Tag savedTag = tagRepository.save(tag);
         application.getTags().add(savedTag);
         applicationRepository.save(application);
@@ -266,13 +265,16 @@ public class ApplicationService {
     }
 
     private void patchTags(
-            final Application application, final List<Long> addTagIds, final List<Long> removeTagIds) {
+            final UUID userId,
+            final Application application,
+            final List<Long> addTagIds,
+            final List<Long> removeTagIds) {
         if (removeTagIds != null && !removeTagIds.isEmpty()) {
             final Set<Long> idsToRemove = new HashSet<>(removeTagIds);
             application.getTags().removeIf(tag -> idsToRemove.contains(tag.getTagId()));
         }
         if (addTagIds != null && !addTagIds.isEmpty()) {
-            application.getTags().addAll(resolveTags(addTagIds));
+            application.getTags().addAll(resolveTags(userId, addTagIds));
         }
         ensureTagCountWithinLimit(application, 0);
     }
@@ -284,11 +286,11 @@ public class ApplicationService {
         }
     }
 
-    private Set<Tag> resolveTags(final List<Long> tagIds) {
+    private Set<Tag> resolveTags(final UUID userId, final List<Long> tagIds) {
         if (tagIds == null || tagIds.isEmpty()) {
             return new HashSet<>();
         }
-        final List<Tag> foundTags = tagRepository.findAllByTagIdIn(tagIds);
+        final List<Tag> foundTags = tagRepository.findAllAccessibleByUserAndTagIdIn(userId, tagIds);
         if (foundTags.size() != tagIds.size()) {
             final Set<Long> foundIds = foundTags.stream().map(Tag::getTagId).collect(Collectors.toSet());
             final Long missingTagId = tagIds.stream()
@@ -298,6 +300,14 @@ public class ApplicationService {
             throw new TagNotFoundException(missingTagId);
         }
         return new HashSet<>(foundTags);
+    }
+
+    private void ensureTagNameAvailable(final UUID userId, final String tagName) {
+        final boolean nameTaken =
+                tagRepository.existsGlobalByTagName(tagName) || tagRepository.existsByTagNameAndUser_UserId(tagName, userId);
+        if (nameTaken) {
+            throw new DuplicateTagNameException(tagName);
+        }
     }
 
     private String normalizeOptional(final String value) {
