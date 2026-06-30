@@ -1,5 +1,6 @@
 package com.ricard0g.jobtrackr_api.controller;
 
+import java.security.Principal;
 import java.util.List;
 import java.util.UUID;
 
@@ -25,7 +26,7 @@ import jakarta.validation.constraints.Positive;
 import lombok.RequiredArgsConstructor;
 
 @RestController
-@RequestMapping("/api/v1/users/{userId}/applications/{applicationId}/interviews")
+@RequestMapping("/api/v1/applications/{applicationId}/interviews")
 @RequiredArgsConstructor
 @Validated
 public class InterviewController {
@@ -34,43 +35,48 @@ public class InterviewController {
 
     @GetMapping
     public ResponseEntity<List<InterviewResponseDto>> getAllInterviews(
-            @PathVariable(name = "userId") final UUID userId,
+            final Principal principal,
             @PathVariable(name = "applicationId") @Positive final Long applicationId) {
+        final UUID userId = AuthenticatedUserId.from(principal);
         return ResponseEntity.ok(interviewService.getAllInterviews(userId, applicationId));
     }
 
     @GetMapping("/{interviewId}")
     public ResponseEntity<InterviewResponseDto> getInterviewById(
-            @PathVariable final UUID userId,
+            final Principal principal,
             @PathVariable @Positive final Long applicationId,
             @PathVariable @Positive final Long interviewId) {
+        final UUID userId = AuthenticatedUserId.from(principal);
         return ResponseEntity.ok(interviewService.getInterviewById(userId, applicationId, interviewId));
     }
 
     @PostMapping
     public ResponseEntity<InterviewResponseDto> createInterview(
-            @PathVariable final UUID userId,
+            final Principal principal,
             @PathVariable @Positive final Long applicationId,
             @Valid @RequestBody final InterviewCreateRequestDto request) {
+        final UUID userId = AuthenticatedUserId.from(principal);
         return ResponseEntity.status(HttpStatus.CREATED)
                 .body(interviewService.createInterview(userId, applicationId, request));
     }
 
     @PutMapping("/{interviewId}")
     public ResponseEntity<InterviewResponseDto> replaceInterview(
-            @PathVariable final UUID userId,
+            final Principal principal,
             @PathVariable @Positive final Long applicationId,
             @PathVariable @Positive final Long interviewId,
             @Valid @RequestBody final InterviewPutRequestDto request) {
+        final UUID userId = AuthenticatedUserId.from(principal);
         return ResponseEntity.ok(
                 interviewService.replaceInterview(userId, applicationId, interviewId, request));
     }
 
     @DeleteMapping("/{interviewId}")
     public ResponseEntity<Void> deleteInterview(
-            @PathVariable final UUID userId,
+            final Principal principal,
             @PathVariable @Positive final Long applicationId,
             @PathVariable @Positive final Long interviewId) {
+        final UUID userId = AuthenticatedUserId.from(principal);
         interviewService.deleteInterview(userId, applicationId, interviewId);
         return ResponseEntity.noContent().build();
     }

@@ -13,6 +13,7 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
+import java.security.Principal;
 import java.time.OffsetDateTime;
 import java.util.List;
 import java.util.UUID;
@@ -43,7 +44,7 @@ class CompanyControllerTest {
 
     private static final String USER_ID_VALUE = "11111111-1111-1111-1111-111111111111";
     private static final UUID USER_ID = UUID.fromString(USER_ID_VALUE);
-    private static final String BASE_PATH = "/api/v1/users/" + USER_ID_VALUE + "/companies";
+    private static final String BASE_PATH = "/api/v1/companies";
     private static final OffsetDateTime TIMESTAMP = OffsetDateTime.parse("2026-06-04T12:00:00Z");
 
     @Autowired
@@ -59,7 +60,7 @@ class CompanyControllerTest {
         when(companyService.getAllCompanies(USER_ID)).thenReturn(List.of(company));
 
         // when / then
-        mockMvc.perform(get(BASE_PATH))
+        mockMvc.perform(get(BASE_PATH).principal(authenticatedUser()))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$[0].companyId").value(1))
                 .andExpect(jsonPath("$[0].userId").value(USER_ID_VALUE))
@@ -72,15 +73,9 @@ class CompanyControllerTest {
         when(companyService.getAllCompanies(USER_ID)).thenThrow(new UserNotFoundException(USER_ID));
 
         // when / then
-        mockMvc.perform(get(BASE_PATH))
+        mockMvc.perform(get(BASE_PATH).principal(authenticatedUser()))
                 .andExpect(status().isNotFound())
                 .andExpect(jsonPath("$.code").value("USER_NOT_FOUND"));
-    }
-
-    @Test
-    void getAllCompanies_withInvalidUserId_returns400() throws Exception {
-        // when / then
-        mockMvc.perform(get("/api/v1/users/not-a-uuid/companies")).andExpect(status().isBadRequest());
     }
 
     @Test
@@ -90,7 +85,7 @@ class CompanyControllerTest {
         when(companyService.getCompanyById(USER_ID, 2L)).thenReturn(company);
 
         // when / then
-        mockMvc.perform(get(BASE_PATH + "/2"))
+        mockMvc.perform(get(BASE_PATH + "/2").principal(authenticatedUser()))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.companyId").value(2))
                 .andExpect(jsonPath("$.companyName").value("Globex"));
@@ -102,7 +97,7 @@ class CompanyControllerTest {
         when(companyService.getCompanyById(USER_ID, 99L)).thenThrow(new CompanyNotFoundException(USER_ID, 99L));
 
         // when / then
-        mockMvc.perform(get(BASE_PATH + "/99"))
+        mockMvc.perform(get(BASE_PATH + "/99").principal(authenticatedUser()))
                 .andExpect(status().isNotFound())
                 .andExpect(jsonPath("$.code").value("COMPANY_NOT_FOUND"));
     }
@@ -110,7 +105,7 @@ class CompanyControllerTest {
     @Test
     void getCompanyById_withInvalidCompanyId_returns400() throws Exception {
         // when / then
-        mockMvc.perform(get(BASE_PATH + "/0")).andExpect(status().isBadRequest());
+        mockMvc.perform(get(BASE_PATH + "/0").principal(authenticatedUser())).andExpect(status().isBadRequest());
     }
 
     @Test
@@ -122,7 +117,7 @@ class CompanyControllerTest {
 
         // when / then
         mockMvc.perform(
-                        post(BASE_PATH)
+                        post(BASE_PATH).principal(authenticatedUser())
                                 .contentType(MediaType.APPLICATION_JSON)
                                 .content(
                                         """
@@ -147,7 +142,7 @@ class CompanyControllerTest {
 
         // when / then
         mockMvc.perform(
-                        post(BASE_PATH)
+                        post(BASE_PATH).principal(authenticatedUser())
                                 .contentType(MediaType.APPLICATION_JSON)
                                 .content(
                                         """
@@ -163,7 +158,7 @@ class CompanyControllerTest {
     void createCompany_withBlankName_returns400() throws Exception {
         // when / then
         mockMvc.perform(
-                        post(BASE_PATH)
+                        post(BASE_PATH).principal(authenticatedUser())
                                 .contentType(MediaType.APPLICATION_JSON)
                                 .content(
                                         """
@@ -179,7 +174,7 @@ class CompanyControllerTest {
     void createCompany_withInvalidWebsiteUrl_returns400() throws Exception {
         // when / then
         mockMvc.perform(
-                        post(BASE_PATH)
+                        post(BASE_PATH).principal(authenticatedUser())
                                 .contentType(MediaType.APPLICATION_JSON)
                                 .content(
                                         """
@@ -201,7 +196,7 @@ class CompanyControllerTest {
 
         // when / then
         mockMvc.perform(
-                        post(BASE_PATH)
+                        post(BASE_PATH).principal(authenticatedUser())
                                 .contentType(MediaType.APPLICATION_JSON)
                                 .content(
                                         """
@@ -221,7 +216,7 @@ class CompanyControllerTest {
 
         // when / then
         mockMvc.perform(
-                        post(BASE_PATH)
+                        post(BASE_PATH).principal(authenticatedUser())
                                 .contentType(MediaType.APPLICATION_JSON)
                                 .content(
                                         """
@@ -241,7 +236,7 @@ class CompanyControllerTest {
 
         // when / then
         mockMvc.perform(
-                        put(BASE_PATH + "/2")
+                        put(BASE_PATH + "/2").principal(authenticatedUser())
                                 .contentType(MediaType.APPLICATION_JSON)
                                 .content(
                                         """
@@ -265,7 +260,7 @@ class CompanyControllerTest {
 
         // when / then
         mockMvc.perform(
-                        put(BASE_PATH + "/99")
+                        put(BASE_PATH + "/99").principal(authenticatedUser())
                                 .contentType(MediaType.APPLICATION_JSON)
                                 .content(
                                         """
@@ -285,7 +280,7 @@ class CompanyControllerTest {
 
         // when / then
         mockMvc.perform(
-                        put(BASE_PATH + "/2")
+                        put(BASE_PATH + "/2").principal(authenticatedUser())
                                 .contentType(MediaType.APPLICATION_JSON)
                                 .content(
                                         """
@@ -303,7 +298,7 @@ class CompanyControllerTest {
         doNothing().when(companyService).deleteCompany(USER_ID, 2L);
 
         // when / then
-        mockMvc.perform(delete(BASE_PATH + "/2")).andExpect(status().isNoContent());
+        mockMvc.perform(delete(BASE_PATH + "/2").principal(authenticatedUser())).andExpect(status().isNoContent());
 
         verify(companyService).deleteCompany(USER_ID, 2L);
     }
@@ -314,7 +309,7 @@ class CompanyControllerTest {
         doThrow(new CompanyNotFoundException(USER_ID, 99L)).when(companyService).deleteCompany(USER_ID, 99L);
 
         // when / then
-        mockMvc.perform(delete(BASE_PATH + "/99"))
+        mockMvc.perform(delete(BASE_PATH + "/99").principal(authenticatedUser()))
                 .andExpect(status().isNotFound())
                 .andExpect(jsonPath("$.code").value("COMPANY_NOT_FOUND"));
     }
@@ -325,7 +320,7 @@ class CompanyControllerTest {
         doThrow(new CompanyHasApplicationsException(2L)).when(companyService).deleteCompany(USER_ID, 2L);
 
         // when / then
-        mockMvc.perform(delete(BASE_PATH + "/2"))
+        mockMvc.perform(delete(BASE_PATH + "/2").principal(authenticatedUser()))
                 .andExpect(status().isConflict())
                 .andExpect(jsonPath("$.code").value("COMPANY_HAS_APPLICATIONS"));
     }
@@ -346,5 +341,9 @@ class CompanyControllerTest {
                 null,
                 TIMESTAMP,
                 TIMESTAMP);
+    }
+
+    private static Principal authenticatedUser() {
+        return () -> USER_ID_VALUE;
     }
 }

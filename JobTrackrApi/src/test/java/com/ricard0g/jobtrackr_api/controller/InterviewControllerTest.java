@@ -13,6 +13,7 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
+import java.security.Principal;
 import java.time.OffsetDateTime;
 import java.util.List;
 import java.util.UUID;
@@ -44,7 +45,7 @@ class InterviewControllerTest {
 
     private static final String USER_ID_VALUE = "11111111-1111-1111-1111-111111111111";
     private static final UUID USER_ID = UUID.fromString(USER_ID_VALUE);
-    private static final String BASE_PATH = "/api/v1/users/" + USER_ID_VALUE + "/applications/10/interviews";
+    private static final String BASE_PATH = "/api/v1/applications/10/interviews";
     private static final OffsetDateTime TIMESTAMP = OffsetDateTime.parse("2026-06-10T15:00:00Z");
 
     @Autowired
@@ -60,7 +61,7 @@ class InterviewControllerTest {
         when(interviewService.getAllInterviews(USER_ID, 10L)).thenReturn(List.of(interview));
 
         // when / then
-        mockMvc.perform(get(BASE_PATH))
+        mockMvc.perform(get(BASE_PATH).principal(authenticatedUser()))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$[0].interviewId").value(1))
                 .andExpect(jsonPath("$[0].applicationId").value(10))
@@ -74,7 +75,7 @@ class InterviewControllerTest {
         when(interviewService.getAllInterviews(USER_ID, 10L)).thenThrow(new UserNotFoundException(USER_ID));
 
         // when / then
-        mockMvc.perform(get(BASE_PATH))
+        mockMvc.perform(get(BASE_PATH).principal(authenticatedUser()))
                 .andExpect(status().isNotFound())
                 .andExpect(jsonPath("$.code").value("USER_NOT_FOUND"));
     }
@@ -86,22 +87,15 @@ class InterviewControllerTest {
                 .thenThrow(new ApplicationNotFoundException(USER_ID, 10L));
 
         // when / then
-        mockMvc.perform(get(BASE_PATH))
+        mockMvc.perform(get(BASE_PATH).principal(authenticatedUser()))
                 .andExpect(status().isNotFound())
                 .andExpect(jsonPath("$.code").value("APPLICATION_NOT_FOUND"));
     }
 
     @Test
-    void getAllInterviews_withInvalidUserId_returns400() throws Exception {
-        // when / then
-        mockMvc.perform(get("/api/v1/users/not-a-uuid/applications/10/interviews"))
-                .andExpect(status().isBadRequest());
-    }
-
-    @Test
     void getAllInterviews_withInvalidApplicationId_returns400() throws Exception {
         // when / then
-        mockMvc.perform(get("/api/v1/users/" + USER_ID_VALUE + "/applications/0/interviews"))
+        mockMvc.perform(get("/api/v1/applications/0/interviews").principal(authenticatedUser()))
                 .andExpect(status().isBadRequest());
     }
 
@@ -112,7 +106,7 @@ class InterviewControllerTest {
         when(interviewService.getInterviewById(USER_ID, 10L, 2L)).thenReturn(interview);
 
         // when / then
-        mockMvc.perform(get(BASE_PATH + "/2"))
+        mockMvc.perform(get(BASE_PATH + "/2").principal(authenticatedUser()))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.interviewId").value(2))
                 .andExpect(jsonPath("$.interviewLocation").value("Zoom"))
@@ -126,7 +120,7 @@ class InterviewControllerTest {
                 .thenThrow(new InterviewNotFoundException(USER_ID, 10L, 99L));
 
         // when / then
-        mockMvc.perform(get(BASE_PATH + "/99"))
+        mockMvc.perform(get(BASE_PATH + "/99").principal(authenticatedUser()))
                 .andExpect(status().isNotFound())
                 .andExpect(jsonPath("$.code").value("INTERVIEW_NOT_FOUND"));
     }
@@ -134,7 +128,7 @@ class InterviewControllerTest {
     @Test
     void getInterviewById_withInvalidInterviewId_returns400() throws Exception {
         // when / then
-        mockMvc.perform(get(BASE_PATH + "/0")).andExpect(status().isBadRequest());
+        mockMvc.perform(get(BASE_PATH + "/0").principal(authenticatedUser())).andExpect(status().isBadRequest());
     }
 
     @Test
@@ -146,7 +140,7 @@ class InterviewControllerTest {
 
         // when / then
         mockMvc.perform(
-                        post(BASE_PATH)
+                        post(BASE_PATH).principal(authenticatedUser())
                                 .contentType(MediaType.APPLICATION_JSON)
                                 .content(
                                         """
@@ -170,7 +164,7 @@ class InterviewControllerTest {
     void createInterview_withMissingInterviewType_returns400() throws Exception {
         // when / then
         mockMvc.perform(
-                        post(BASE_PATH)
+                        post(BASE_PATH).principal(authenticatedUser())
                                 .contentType(MediaType.APPLICATION_JSON)
                                 .content(
                                         """
@@ -186,7 +180,7 @@ class InterviewControllerTest {
     void createInterview_withMissingInterviewScheduledAt_returns400() throws Exception {
         // when / then
         mockMvc.perform(
-                        post(BASE_PATH)
+                        post(BASE_PATH).principal(authenticatedUser())
                                 .contentType(MediaType.APPLICATION_JSON)
                                 .content(
                                         """
@@ -202,7 +196,7 @@ class InterviewControllerTest {
     void createInterview_withLocationTooLong_returns400() throws Exception {
         // when / then
         mockMvc.perform(
-                        post(BASE_PATH)
+                        post(BASE_PATH).principal(authenticatedUser())
                                 .contentType(MediaType.APPLICATION_JSON)
                                 .content(
                                         """
@@ -226,7 +220,7 @@ class InterviewControllerTest {
 
         // when / then
         mockMvc.perform(
-                        post(BASE_PATH)
+                        post(BASE_PATH).principal(authenticatedUser())
                                 .contentType(MediaType.APPLICATION_JSON)
                                 .content(
                                         """
@@ -247,7 +241,7 @@ class InterviewControllerTest {
 
         // when / then
         mockMvc.perform(
-                        post(BASE_PATH)
+                        post(BASE_PATH).principal(authenticatedUser())
                                 .contentType(MediaType.APPLICATION_JSON)
                                 .content(
                                         """
@@ -278,7 +272,7 @@ class InterviewControllerTest {
 
         // when / then
         mockMvc.perform(
-                        put(BASE_PATH + "/2")
+                        put(BASE_PATH + "/2").principal(authenticatedUser())
                                 .contentType(MediaType.APPLICATION_JSON)
                                 .content(
                                         """
@@ -301,7 +295,7 @@ class InterviewControllerTest {
     void replaceInterview_withMissingOutcome_returns400() throws Exception {
         // when / then
         mockMvc.perform(
-                        put(BASE_PATH + "/2")
+                        put(BASE_PATH + "/2").principal(authenticatedUser())
                                 .contentType(MediaType.APPLICATION_JSON)
                                 .content(
                                         """
@@ -322,7 +316,7 @@ class InterviewControllerTest {
 
         // when / then
         mockMvc.perform(
-                        put(BASE_PATH + "/99")
+                        put(BASE_PATH + "/99").principal(authenticatedUser())
                                 .contentType(MediaType.APPLICATION_JSON)
                                 .content(
                                         """
@@ -342,7 +336,7 @@ class InterviewControllerTest {
         doNothing().when(interviewService).deleteInterview(USER_ID, 10L, 2L);
 
         // when / then
-        mockMvc.perform(delete(BASE_PATH + "/2")).andExpect(status().isNoContent());
+        mockMvc.perform(delete(BASE_PATH + "/2").principal(authenticatedUser())).andExpect(status().isNoContent());
 
         verify(interviewService).deleteInterview(USER_ID, 10L, 2L);
     }
@@ -355,7 +349,7 @@ class InterviewControllerTest {
                 .deleteInterview(USER_ID, 10L, 99L);
 
         // when / then
-        mockMvc.perform(delete(BASE_PATH + "/99"))
+        mockMvc.perform(delete(BASE_PATH + "/99").principal(authenticatedUser()))
                 .andExpect(status().isNotFound())
                 .andExpect(jsonPath("$.code").value("INTERVIEW_NOT_FOUND"));
     }
@@ -371,5 +365,9 @@ class InterviewControllerTest {
                 InterviewOutcome.PENDING,
                 TIMESTAMP,
                 TIMESTAMP);
+    }
+
+    private static Principal authenticatedUser() {
+        return () -> USER_ID_VALUE;
     }
 }

@@ -26,6 +26,7 @@ import com.ricard0g.jobtrackr_api.config.security.RefreshTokenCookieService;
 import com.ricard0g.jobtrackr_api.dto.AuthDto.AuthResponse;
 import com.ricard0g.jobtrackr_api.dto.UserDto.UserResponseDto;
 import com.ricard0g.jobtrackr_api.exception.GlobalExceptionHandler;
+import com.ricard0g.jobtrackr_api.exception.InvalidRefreshTokenException;
 import com.ricard0g.jobtrackr_api.service.AuthService;
 import com.ricard0g.jobtrackr_api.service.AuthService.AuthTokenPair;
 
@@ -140,6 +141,15 @@ class AuthControllerTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.accessToken").value("new-access-token"))
                 .andExpect(cookie().exists("refresh_token"));
+    }
+
+    @Test
+    void refresh_withoutRefreshCookie_shouldReturn401() throws Exception {
+        when(authService.refresh(null)).thenThrow(new InvalidRefreshTokenException("Refresh token is missing"));
+
+        mockMvc.perform(post("/auth/refresh"))
+                .andExpect(status().isUnauthorized())
+                .andExpect(jsonPath("$.code").value("INVALID_REFRESH_TOKEN"));
     }
 
     @Test

@@ -14,6 +14,7 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
+import java.security.Principal;
 import java.math.BigDecimal;
 import java.time.OffsetDateTime;
 import java.util.List;
@@ -57,7 +58,7 @@ class ApplicationControllerTest {
 
     private static final String USER_ID_VALUE = "11111111-1111-1111-1111-111111111111";
     private static final UUID USER_ID = UUID.fromString(USER_ID_VALUE);
-    private static final String BASE_PATH = "/api/v1/users/" + USER_ID_VALUE + "/applications";
+    private static final String BASE_PATH = "/api/v1/applications";
     private static final OffsetDateTime TIMESTAMP = OffsetDateTime.parse("2026-06-04T12:00:00Z");
 
     @Autowired
@@ -73,7 +74,7 @@ class ApplicationControllerTest {
         when(applicationService.getAllApplications(USER_ID)).thenReturn(List.of(application));
 
         // when / then
-        mockMvc.perform(get(BASE_PATH))
+        mockMvc.perform(get(BASE_PATH).principal(authenticatedUser()))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$[0].applicationId").value(1))
                 .andExpect(jsonPath("$[0].applicationTitle").value("Backend Engineer"))
@@ -87,15 +88,9 @@ class ApplicationControllerTest {
         when(applicationService.getAllApplications(USER_ID)).thenThrow(new UserNotFoundException(USER_ID));
 
         // when / then
-        mockMvc.perform(get(BASE_PATH))
+        mockMvc.perform(get(BASE_PATH).principal(authenticatedUser()))
                 .andExpect(status().isNotFound())
                 .andExpect(jsonPath("$.code").value("USER_NOT_FOUND"));
-    }
-
-    @Test
-    void getAllApplications_withInvalidUserId_returns400() throws Exception {
-        // when / then
-        mockMvc.perform(get("/api/v1/users/not-a-uuid/applications")).andExpect(status().isBadRequest());
     }
 
     @Test
@@ -105,7 +100,7 @@ class ApplicationControllerTest {
         when(applicationService.getApplicationById(USER_ID, 2L)).thenReturn(application);
 
         // when / then
-        mockMvc.perform(get(BASE_PATH + "/2"))
+        mockMvc.perform(get(BASE_PATH + "/2").principal(authenticatedUser()))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.applicationId").value(2))
                 .andExpect(jsonPath("$.applicationTitle").value("Staff Engineer"))
@@ -119,7 +114,7 @@ class ApplicationControllerTest {
                 .thenThrow(new ApplicationNotFoundException(USER_ID, 99L));
 
         // when / then
-        mockMvc.perform(get(BASE_PATH + "/99"))
+        mockMvc.perform(get(BASE_PATH + "/99").principal(authenticatedUser()))
                 .andExpect(status().isNotFound())
                 .andExpect(jsonPath("$.code").value("APPLICATION_NOT_FOUND"));
     }
@@ -127,7 +122,7 @@ class ApplicationControllerTest {
     @Test
     void getApplicationById_withInvalidApplicationId_returns400() throws Exception {
         // when / then
-        mockMvc.perform(get(BASE_PATH + "/0")).andExpect(status().isBadRequest());
+        mockMvc.perform(get(BASE_PATH + "/0").principal(authenticatedUser())).andExpect(status().isBadRequest());
     }
 
     @Test
@@ -139,7 +134,7 @@ class ApplicationControllerTest {
 
         // when / then
         mockMvc.perform(
-                        post(BASE_PATH)
+                        post(BASE_PATH).principal(authenticatedUser())
                                 .contentType(MediaType.APPLICATION_JSON)
                                 .content(
                                         """
@@ -168,7 +163,7 @@ class ApplicationControllerTest {
 
         // when / then
         mockMvc.perform(
-                        post(BASE_PATH)
+                        post(BASE_PATH).principal(authenticatedUser())
                                 .contentType(MediaType.APPLICATION_JSON)
                                 .content(
                                         """
@@ -188,7 +183,7 @@ class ApplicationControllerTest {
     void createApplication_withBlankTitle_returns400() throws Exception {
         // when / then
         mockMvc.perform(
-                        post(BASE_PATH)
+                        post(BASE_PATH).principal(authenticatedUser())
                                 .contentType(MediaType.APPLICATION_JSON)
                                 .content(
                                         """
@@ -206,7 +201,7 @@ class ApplicationControllerTest {
     void createApplication_withInvalidJobUrl_returns400() throws Exception {
         // when / then
         mockMvc.perform(
-                        post(BASE_PATH)
+                        post(BASE_PATH).principal(authenticatedUser())
                                 .contentType(MediaType.APPLICATION_JSON)
                                 .content(
                                         """
@@ -230,7 +225,7 @@ class ApplicationControllerTest {
 
         // when / then
         mockMvc.perform(
-                        post(BASE_PATH)
+                        post(BASE_PATH).principal(authenticatedUser())
                                 .contentType(MediaType.APPLICATION_JSON)
                                 .content(
                                         """
@@ -252,7 +247,7 @@ class ApplicationControllerTest {
 
         // when / then
         mockMvc.perform(
-                        post(BASE_PATH)
+                        post(BASE_PATH).principal(authenticatedUser())
                                 .contentType(MediaType.APPLICATION_JSON)
                                 .content(
                                         """
@@ -275,7 +270,7 @@ class ApplicationControllerTest {
 
         // when / then
         mockMvc.perform(
-                        post(BASE_PATH)
+                        post(BASE_PATH).principal(authenticatedUser())
                                 .contentType(MediaType.APPLICATION_JSON)
                                 .content(
                                         """
@@ -299,7 +294,7 @@ class ApplicationControllerTest {
 
         // when / then
         mockMvc.perform(
-                        post(BASE_PATH)
+                        post(BASE_PATH).principal(authenticatedUser())
                                 .contentType(MediaType.APPLICATION_JSON)
                                 .content(
                                         """
@@ -323,7 +318,7 @@ class ApplicationControllerTest {
 
         // when / then
         mockMvc.perform(
-                        put(BASE_PATH + "/2")
+                        put(BASE_PATH + "/2").principal(authenticatedUser())
                                 .contentType(MediaType.APPLICATION_JSON)
                                 .content(
                                         """
@@ -347,7 +342,7 @@ class ApplicationControllerTest {
 
         // when / then
         mockMvc.perform(
-                        put(BASE_PATH + "/99")
+                        put(BASE_PATH + "/99").principal(authenticatedUser())
                                 .contentType(MediaType.APPLICATION_JSON)
                                 .content(
                                         """
@@ -368,7 +363,7 @@ class ApplicationControllerTest {
         when(applicationService.getStatusHistory(USER_ID, 2L)).thenReturn(List.of(entry));
 
         // when / then
-        mockMvc.perform(get(BASE_PATH + "/2/status-history"))
+        mockMvc.perform(get(BASE_PATH + "/2/status-history").principal(authenticatedUser()))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$[0].statusHistoryId").value(1))
                 .andExpect(jsonPath("$[0].applicationId").value(2))
@@ -385,7 +380,7 @@ class ApplicationControllerTest {
                 .thenThrow(new ApplicationNotFoundException(USER_ID, 99L));
 
         // when / then
-        mockMvc.perform(get(BASE_PATH + "/99/status-history"))
+        mockMvc.perform(get(BASE_PATH + "/99/status-history").principal(authenticatedUser()))
                 .andExpect(status().isNotFound())
                 .andExpect(jsonPath("$.code").value("APPLICATION_NOT_FOUND"));
     }
@@ -400,7 +395,7 @@ class ApplicationControllerTest {
 
         // when / then
         mockMvc.perform(
-                        patch(BASE_PATH + "/2/status")
+                        patch(BASE_PATH + "/2/status").principal(authenticatedUser())
                                 .contentType(MediaType.APPLICATION_JSON)
                                 .content(
                                         """
@@ -424,7 +419,7 @@ class ApplicationControllerTest {
 
         // when / then
         mockMvc.perform(
-                        patch(BASE_PATH + "/99/status")
+                        patch(BASE_PATH + "/99/status").principal(authenticatedUser())
                                 .contentType(MediaType.APPLICATION_JSON)
                                 .content(
                                         """
@@ -440,7 +435,7 @@ class ApplicationControllerTest {
     void patchApplicationStatus_withMissingStatus_returns400() throws Exception {
         // when / then
         mockMvc.perform(
-                        patch(BASE_PATH + "/2/status")
+                        patch(BASE_PATH + "/2/status").principal(authenticatedUser())
                                 .contentType(MediaType.APPLICATION_JSON)
                                 .content("{}"))
                 .andExpect(status().isBadRequest())
@@ -456,7 +451,7 @@ class ApplicationControllerTest {
 
         // when / then
         mockMvc.perform(
-                        patch(BASE_PATH + "/2")
+                        patch(BASE_PATH + "/2").principal(authenticatedUser())
                                 .contentType(MediaType.APPLICATION_JSON)
                                 .content(
                                         """
@@ -479,7 +474,7 @@ class ApplicationControllerTest {
 
         // when / then
         mockMvc.perform(
-                        patch(BASE_PATH + "/2")
+                        patch(BASE_PATH + "/2").principal(authenticatedUser())
                                 .contentType(MediaType.APPLICATION_JSON)
                                 .content(
                                         """
@@ -501,7 +496,7 @@ class ApplicationControllerTest {
 
         // when / then
         mockMvc.perform(
-                        patch(BASE_PATH + "/2")
+                        patch(BASE_PATH + "/2").principal(authenticatedUser())
                                 .contentType(MediaType.APPLICATION_JSON)
                                 .content(
                                         """
@@ -522,7 +517,7 @@ class ApplicationControllerTest {
 
         // when / then
         mockMvc.perform(
-                        post(BASE_PATH + "/2/tags")
+                        post(BASE_PATH + "/2/tags").principal(authenticatedUser())
                                 .contentType(MediaType.APPLICATION_JSON)
                                 .content(
                                         """
@@ -547,7 +542,7 @@ class ApplicationControllerTest {
 
         // when / then
         mockMvc.perform(
-                        post(BASE_PATH + "/2/tags")
+                        post(BASE_PATH + "/2/tags").principal(authenticatedUser())
                                 .contentType(MediaType.APPLICATION_JSON)
                                 .content(
                                         """
@@ -566,7 +561,7 @@ class ApplicationControllerTest {
         doNothing().when(applicationService).deleteApplication(USER_ID, 2L);
 
         // when / then
-        mockMvc.perform(delete(BASE_PATH + "/2")).andExpect(status().isNoContent());
+        mockMvc.perform(delete(BASE_PATH + "/2").principal(authenticatedUser())).andExpect(status().isNoContent());
 
         verify(applicationService).deleteApplication(USER_ID, 2L);
     }
@@ -579,7 +574,7 @@ class ApplicationControllerTest {
                 .deleteApplication(USER_ID, 99L);
 
         // when / then
-        mockMvc.perform(delete(BASE_PATH + "/99"))
+        mockMvc.perform(delete(BASE_PATH + "/99").principal(authenticatedUser()))
                 .andExpect(status().isNotFound())
                 .andExpect(jsonPath("$.code").value("APPLICATION_NOT_FOUND"));
     }
@@ -641,5 +636,9 @@ class ApplicationControllerTest {
             final ApplicationStatus newStatus) {
         return new StatusHistoryResponseDto(
                 statusHistoryId, applicationId, oldStatus, newStatus, TIMESTAMP, TIMESTAMP);
+    }
+
+    private static Principal authenticatedUser() {
+        return () -> USER_ID_VALUE;
     }
 }

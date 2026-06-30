@@ -1,5 +1,6 @@
 package com.ricard0g.jobtrackr_api.controller;
 
+import java.security.Principal;
 import java.util.List;
 import java.util.UUID;
 
@@ -31,7 +32,7 @@ import jakarta.validation.constraints.Positive;
 import lombok.RequiredArgsConstructor;
 
 @RestController
-@RequestMapping("/api/v1/users/{userId}/applications")
+@RequestMapping("/api/v1/applications")
 @RequiredArgsConstructor
 @Validated
 public class ApplicationController {
@@ -40,66 +41,75 @@ public class ApplicationController {
 
     @GetMapping
     public ResponseEntity<List<ApplicationResponseDto>> getAllApplications(
-            @PathVariable final UUID userId) {
+            final Principal principal) {
+        final UUID userId = AuthenticatedUserId.from(principal);
         return ResponseEntity.ok(applicationService.getAllApplications(userId));
     }
 
     @GetMapping("/{applicationId}")
     public ResponseEntity<ApplicationResponseDto> getApplicationById(
-            @PathVariable final UUID userId, @PathVariable @Positive final Long applicationId) {
+            final Principal principal, @PathVariable @Positive final Long applicationId) {
+        final UUID userId = AuthenticatedUserId.from(principal);
         return ResponseEntity.ok(applicationService.getApplicationById(userId, applicationId));
     }
 
     @PostMapping
     public ResponseEntity<ApplicationResponseDto> createApplication(
-            @PathVariable final UUID userId,
+            final Principal principal,
             @Valid @RequestBody final ApplicationCreateRequestDto request) {
+        final UUID userId = AuthenticatedUserId.from(principal);
         return ResponseEntity.status(HttpStatus.CREATED)
                 .body(applicationService.createApplication(userId, request));
     }
 
     @PutMapping("/{applicationId}")
     public ResponseEntity<ApplicationResponseDto> replaceApplication(
-            @PathVariable final UUID userId,
+            final Principal principal,
             @PathVariable @Positive final Long applicationId,
             @Valid @RequestBody final ApplicationPutRequestDto request) {
+        final UUID userId = AuthenticatedUserId.from(principal);
         return ResponseEntity.ok(applicationService.replaceApplication(userId, applicationId, request));
     }
 
     @GetMapping("/{applicationId}/status-history")
     public ResponseEntity<List<StatusHistoryResponseDto>> getStatusHistory(
-            @PathVariable final UUID userId, @PathVariable @Positive final Long applicationId) {
+            final Principal principal, @PathVariable @Positive final Long applicationId) {
+        final UUID userId = AuthenticatedUserId.from(principal);
         return ResponseEntity.ok(applicationService.getStatusHistory(userId, applicationId));
     }
 
     @PatchMapping("/{applicationId}/status")
     public ResponseEntity<ApplicationResponseDto> patchApplicationStatus(
-            @PathVariable final UUID userId,
+            final Principal principal,
             @PathVariable @Positive final Long applicationId,
             @Valid @RequestBody final ApplicationStatusPatchRequestDto request) {
+        final UUID userId = AuthenticatedUserId.from(principal);
         return ResponseEntity.ok(applicationService.patchApplicationStatus(userId, applicationId, request));
     }
 
     @PatchMapping("/{applicationId}")
     public ResponseEntity<ApplicationResponseDto> patchApplication(
-            @PathVariable final UUID userId,
+            final Principal principal,
             @PathVariable @Positive final Long applicationId,
             @Valid @RequestBody final ApplicationPatchRequestDto request) {
+        final UUID userId = AuthenticatedUserId.from(principal);
         return ResponseEntity.ok(applicationService.patchApplication(userId, applicationId, request));
     }
 
     @PostMapping("/{applicationId}/tags")
     public ResponseEntity<TagResponseDto> createAndAttachTag(
-            @PathVariable final UUID userId,
+            final Principal principal,
             @PathVariable @Positive final Long applicationId,
             @Valid @RequestBody final CreateTagRequestDto request) {
+        final UUID userId = AuthenticatedUserId.from(principal);
         return ResponseEntity.status(HttpStatus.CREATED)
                 .body(applicationService.createAndAttachTag(userId, applicationId, request));
     }
 
     @DeleteMapping("/{applicationId}")
     public ResponseEntity<Void> deleteApplication(
-            @PathVariable final UUID userId, @PathVariable @Positive final Long applicationId) {
+            final Principal principal, @PathVariable @Positive final Long applicationId) {
+        final UUID userId = AuthenticatedUserId.from(principal);
         applicationService.deleteApplication(userId, applicationId);
         return ResponseEntity.noContent().build();
     }

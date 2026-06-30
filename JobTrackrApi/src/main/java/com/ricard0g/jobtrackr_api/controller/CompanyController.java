@@ -1,5 +1,6 @@
 package com.ricard0g.jobtrackr_api.controller;
 
+import java.security.Principal;
 import java.util.List;
 import java.util.UUID;
 import org.springframework.http.HttpStatus;
@@ -24,7 +25,7 @@ import jakarta.validation.constraints.Positive;
 import lombok.RequiredArgsConstructor;
 
 @RestController
-@RequestMapping("/api/v1/users/{userId}/companies")
+@RequestMapping("/api/v1/companies")
 @RequiredArgsConstructor
 @Validated
 public class CompanyController {
@@ -33,34 +34,39 @@ public class CompanyController {
 
     @GetMapping
     public ResponseEntity<List<CompanyResponseDto>> getAllCompanies(
-            @PathVariable final UUID userId) {
+            final Principal principal) {
+        final UUID userId = AuthenticatedUserId.from(principal);
         return ResponseEntity.ok(companyService.getAllCompanies(userId));
     }
 
     @GetMapping("/{companyId}")
     public ResponseEntity<CompanyResponseDto> getCompanyById(
-            @PathVariable final UUID userId, @PathVariable @Positive final Long companyId) {
+            final Principal principal, @PathVariable @Positive final Long companyId) {
+        final UUID userId = AuthenticatedUserId.from(principal);
         return ResponseEntity.ok(companyService.getCompanyById(userId, companyId));
     }
 
     @PostMapping
     public ResponseEntity<CompanyResponseDto> createCompany(
-            @PathVariable final UUID userId,
+            final Principal principal,
             @Valid @RequestBody final CompanyCreateRequestDto request) {
+        final UUID userId = AuthenticatedUserId.from(principal);
         return ResponseEntity.status(HttpStatus.CREATED).body(companyService.createCompany(userId, request));
     }
 
     @PutMapping("/{companyId}")
     public ResponseEntity<CompanyResponseDto> replaceCompany(
-            @PathVariable final UUID userId,
+            final Principal principal,
             @PathVariable @Positive final Long companyId,
             @Valid @RequestBody final CompanyPutRequestDto request) {
+        final UUID userId = AuthenticatedUserId.from(principal);
         return ResponseEntity.ok(companyService.replaceCompany(userId, companyId, request));
     }
 
     @DeleteMapping("/{companyId}")
     public ResponseEntity<Void> deleteCompany(
-            @PathVariable final UUID userId, @PathVariable @Positive final Long companyId) {
+            final Principal principal, @PathVariable @Positive final Long companyId) {
+        final UUID userId = AuthenticatedUserId.from(principal);
         companyService.deleteCompany(userId, companyId);
         return ResponseEntity.noContent().build();
     }

@@ -9,6 +9,7 @@ import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.stereotype.Service;
 
 import io.jsonwebtoken.Claims;
+import io.jsonwebtoken.JwtException;
 import io.jsonwebtoken.Jwts;
 import io.jsonwebtoken.security.Keys;
 
@@ -37,10 +38,16 @@ public class JwtService {
     }
 
     public boolean isValid(final String token, final UserDetails userDetails) {
-        final UUID userId = extractUserId(token);
-        final Claims claims = parseClaims(token);
-        return userId.toString().equals(userDetails.getUsername())
-                && !claims.getExpiration().before(new Date());
+        try {
+            final Claims claims = parseClaims(token);
+            final String subject = claims.getSubject();
+            final boolean subjectMatches = subject != null && subject.equals(userDetails.getUsername());
+            final boolean tokenNotExpired = claims.getExpiration().after(new Date());
+            final boolean userCanAuthenticate = userDetails.isEnabled() && userDetails.isAccountNonLocked();
+            return subjectMatches && tokenNotExpired && userCanAuthenticate;
+        } catch (JwtException | IllegalArgumentException exception) {
+            return false;
+        }
     }
 
     public long getAccessExpirationSeconds() {
