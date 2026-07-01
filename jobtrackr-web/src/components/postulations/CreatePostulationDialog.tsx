@@ -1,0 +1,500 @@
+import { CirclePlus, Loader2 } from "lucide-react";
+import { type FormEvent, useMemo, useState } from "react";
+import { useRevalidator } from "react-router";
+
+import { Button } from "@/components/ui/button";
+import {
+	Dialog,
+	DialogContent,
+	DialogDescription,
+	DialogFooter,
+	DialogHeader,
+	DialogTitle,
+	DialogTrigger,
+} from "@/components/ui/dialog";
+import {
+	Form,
+	FormControl,
+	FormField,
+	FormLabel,
+	FormMessage,
+} from "@/components/ui/form";
+import { Input } from "@/components/ui/input";
+import {
+	Select,
+	SelectContent,
+	SelectItem,
+	SelectTrigger,
+	SelectValue,
+} from "@/components/ui/select";
+import { ApiError, api } from "@/lib/api";
+import {
+	applicationStatusOptions,
+	type Application,
+	type ApplicationCreateRequest,
+	type ApplicationStatus,
+	type RemoteType,
+} from "@/types/application";
+import type { Company } from "@/types/company";
+
+type CreateApplicationFormValues = {
+	companyId: string;
+	applicationTitle: string;
+	applicationStatus: ApplicationStatus;
+	applicationSalaryMin: string;
+	applicationSalaryMax: string;
+	applicationCurrency: string;
+	applicationLocation: string;
+	applicationRemoteType: RemoteType | "NONE";
+	applicationSource: string;
+	applicationJobUrl: string;
+	applicationAppliedAt: string;
+};
+
+type FormErrors = Partial<Record<keyof CreateApplicationFormValues, string>>;
+
+interface CreatePostulationDialogProps {
+	companies: Company[];
+	applications: Application[];
+}
+
+const remoteTypeOptions: Array<{ value: RemoteType; label: string }> = [
+	{ value: "ON_SITE", label: "Presencial" },
+	{ value: "HYBRID", label: "Hibrido" },
+	{ value: "REMOTE", label: "Remoto" },
+];
+
+const getTodayInputValue = () => new Date().toISOString().slice(0, 10);
+
+const initialFormValues = (): CreateApplicationFormValues => ({
+	companyId: "",
+	applicationTitle: "",
+	applicationStatus: "APPLIED",
+	applicationSalaryMin: "",
+	applicationSalaryMax: "",
+	applicationCurrency: "EUR",
+	applicationLocation: "",
+	applicationRemoteType: "NONE",
+	applicationSource: "",
+	applicationJobUrl: "",
+	applicationAppliedAt: getTodayInputValue(),
+});
+
+const toNullableString = (value: string) => {
+	const trimmedValue = value.trim();
+	return trimmedValue.length > 0 ? trimmedValue : null;
+};
+
+const toNullableNumber = (value: string) => {
+	const trimmedValue = value.trim();
+	return trimmedValue.length > 0 ? Number(trimmedValue) : null;
+};
+
+const toOffsetDateTime = (value: string) =>
+	value ? new Date(`${value}T00:00:00`).toISOString() : null;
+
+export function CreatePostulationDialog({
+	companies,
+	applications,
+}: CreatePostulationDialogProps) {
+	const revalidator = useRevalidator();
+	const [open, setOpen] = useState(false);
+	const [values, setValues] = useState<CreateApplicationFormValues>(() =>
+		initialFormValues(),
+	);
+	const [errors, setErrors] = useState<FormErrors>({});
+	const [serverError, setServerError] = useState<string | null>(null);
+	const [isSubmitting, setIsSubmitting] = useState(false);
+
+	const statusOptions = useMemo(() => applicationStatusOptions, []);
+
+	const updateValue = <T extends keyof CreateApplicationFormValues>(
+		name: T,
+		value: CreateApplicationFormValues[T],
+	) => {
+		setValues((currentValues) => ({
+			...currentValues,
+			[name]: value,
+		}));
+		setErrors((currentErrors) => ({
+			...currentErrors,
+			[name]: undefined,
+		}));
+		setServerError(null);
+	};
+
+	const resetForm = () => {
+		setValues(initialFormValues());
+		setErrors({});
+		setServerError(null);
+	};
+
+	const buildPayload = () => {
+		const nextErrors: FormErrors = {};
+		const applicationSalaryMin = toNullableNumber(values.applicationSalaryMin);
+		const applicationSalaryMax = toNullableNumber(values.applicationSalaryMax);
+
+		if (!values.companyId) nextErrors.companyId = "Selecciona una empresa.";
+		if (!values.applicationTitle.trim()) {
+			nextErrors.applicationTitle = "Indica el rol de la oferta.";
+		}
+		if (!values.applicationStatus) {
+			nextErrors.applicationStatus = "Selecciona un estatus.";
+		}
+
+		if (
+			applicationSalaryMin !== null &&
+			(!Number.isFinite(applicationSalaryMin) || applicationSalaryMin < 0)
+		) {
+			nextErrors.applicationSalaryMin = "Debe ser un numero mayor o igual a 0.";
+		}
+
+		if (
+			applicationSalaryMax !== null &&
+			(!Number.isFinite(applicationSalaryMax) || applicationSalaryMax < 0)
+		) {
+			nextErrors.applicationSalaryMax = "Debe ser un numero mayor o igual a 0.";
+		}
+
+		if (
+			applicationSalaryMin !== null &&
+			applicationSalaryMax !== null &&
+			Number.isFinite(applicationSalaryMin) &&
+			Number.isFinite(applicationSalaryMax) &&
+			applicationSalaryMax < applicationSalaryMin
+		) {
+			nextErrors.applicationSalaryMax = "Debe ser mayor que el salario minimo.";
+		}
+
+		if (
+			values.applicationCurrency.trim() &&
+			!/^[A-Z]{3}$/.test(values.applicationCurrency.trim())
+		) {
+			nextErrors.applicationCurrency = "Usa un codigo ISO de 3 letras.";
+		}
+
+		setErrors(nextErrors);
+		if (Object.keys(nextErrors).length > 0) return null;
+
+		const applicationKanbanOrder = applications.filter(
+			(application) =>
+				application.applicationStatus === values.applicationStatus,
+		).length;
+
+		return {
+			companyId: Number(values.companyId),
+			applicationTitle: values.applicationTitle.trim(),
+			applicationStatus: values.applicationStatus,
+			applicationSalaryMin,
+			applicationSalaryMax,
+			applicationCurrency: toNullableString(values.applicationCurrency),
+			applicationLocation: toNullableString(values.applicationLocation),
+			applicationRemoteType:
+				values.applicationRemoteType === "NONE"
+					? null
+					: values.applicationRemoteType,
+			applicationSource: toNullableString(values.applicationSource),
+			applicationJobUrl: toNullableString(values.applicationJobUrl),
+			applicationAppliedAt: toOffsetDateTime(values.applicationAppliedAt),
+			applicationKanbanOrder,
+		} satisfies ApplicationCreateRequest;
+	};
+
+	const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
+		event.preventDefault();
+		const payload = buildPayload();
+		if (!payload) return;
+
+		setIsSubmitting(true);
+		setServerError(null);
+
+		try {
+			await api.createApplication(payload);
+			resetForm();
+			setOpen(false);
+			void revalidator.revalidate();
+		} catch (error) {
+			setServerError(
+				error instanceof ApiError
+					? error.message
+					: "No se pudo crear la postulacion.",
+			);
+		} finally {
+			setIsSubmitting(false);
+		}
+	};
+
+	return (
+		<Dialog
+			open={open}
+			onOpenChange={(nextOpen) => {
+				setOpen(nextOpen);
+				if (!nextOpen) resetForm();
+			}}
+		>
+			<DialogTrigger asChild>
+				<Button size="lg" variant="default">
+					<CirclePlus /> Crear Postulacion
+				</Button>
+			</DialogTrigger>
+			<DialogContent>
+				<DialogHeader>
+					<DialogTitle>Crear postulacion</DialogTitle>
+					<DialogDescription>
+						Registra los datos principales de la oferta para anadirla al tablero.
+					</DialogDescription>
+				</DialogHeader>
+
+				<Form className="grid gap-4" onSubmit={handleSubmit}>
+					<div className="grid gap-4 sm:grid-cols-2">
+						<FormField name="companyId">
+							<FormLabel>Empresa</FormLabel>
+							<Select
+								value={values.companyId}
+								onValueChange={(value) => updateValue("companyId", value)}
+								disabled={isSubmitting}
+							>
+								<SelectTrigger aria-invalid={Boolean(errors.companyId)}>
+									<SelectValue placeholder="Seleccionar empresa" />
+								</SelectTrigger>
+								<SelectContent>
+									{companies.map((company) => (
+										<SelectItem
+											key={company.companyId}
+											value={String(company.companyId)}
+										>
+											{company.companyName}
+										</SelectItem>
+									))}
+								</SelectContent>
+							</Select>
+							{errors.companyId && <FormMessage>{errors.companyId}</FormMessage>}
+						</FormField>
+
+						<FormField name="applicationStatus">
+							<FormLabel>Estatus</FormLabel>
+							<Select
+								value={values.applicationStatus}
+								onValueChange={(value) =>
+									updateValue("applicationStatus", value as ApplicationStatus)
+								}
+								disabled={isSubmitting}
+							>
+								<SelectTrigger
+									aria-invalid={Boolean(errors.applicationStatus)}
+								>
+									<SelectValue placeholder="Seleccionar estatus" />
+								</SelectTrigger>
+								<SelectContent>
+									{statusOptions.map((status) => (
+										<SelectItem key={status.value} value={status.value}>
+											{status.label}
+										</SelectItem>
+									))}
+								</SelectContent>
+							</Select>
+							{errors.applicationStatus && (
+								<FormMessage>{errors.applicationStatus}</FormMessage>
+							)}
+						</FormField>
+					</div>
+
+					<FormField name="applicationTitle">
+						<FormLabel>Rol</FormLabel>
+						<FormControl asChild>
+							<Input
+								value={values.applicationTitle}
+								onChange={(event) =>
+									updateValue("applicationTitle", event.target.value)
+								}
+								aria-invalid={Boolean(errors.applicationTitle)}
+								disabled={isSubmitting}
+								maxLength={255}
+								placeholder="Junior Frontend Developer"
+							/>
+						</FormControl>
+						{errors.applicationTitle && (
+							<FormMessage>{errors.applicationTitle}</FormMessage>
+						)}
+					</FormField>
+
+					<div className="grid gap-4 sm:grid-cols-3">
+						<FormField name="applicationSalaryMin">
+							<FormLabel>Salario minimo</FormLabel>
+							<FormControl asChild>
+								<Input
+									type="number"
+									value={values.applicationSalaryMin}
+									onChange={(event) =>
+										updateValue("applicationSalaryMin", event.target.value)
+									}
+									aria-invalid={Boolean(errors.applicationSalaryMin)}
+									disabled={isSubmitting}
+									min="0"
+									step="0.01"
+									placeholder="20000"
+								/>
+							</FormControl>
+							{errors.applicationSalaryMin && (
+								<FormMessage>{errors.applicationSalaryMin}</FormMessage>
+							)}
+						</FormField>
+
+						<FormField name="applicationSalaryMax">
+							<FormLabel>Salario maximo</FormLabel>
+							<FormControl asChild>
+								<Input
+									type="number"
+									value={values.applicationSalaryMax}
+									onChange={(event) =>
+										updateValue("applicationSalaryMax", event.target.value)
+									}
+									aria-invalid={Boolean(errors.applicationSalaryMax)}
+									disabled={isSubmitting}
+									min="0"
+									step="0.01"
+									placeholder="26000"
+								/>
+							</FormControl>
+							{errors.applicationSalaryMax && (
+								<FormMessage>{errors.applicationSalaryMax}</FormMessage>
+							)}
+						</FormField>
+
+						<FormField name="applicationCurrency">
+							<FormLabel>Moneda</FormLabel>
+							<FormControl asChild>
+								<Input
+									value={values.applicationCurrency}
+									onChange={(event) =>
+										updateValue(
+											"applicationCurrency",
+											event.target.value.toUpperCase(),
+										)
+									}
+									aria-invalid={Boolean(errors.applicationCurrency)}
+									disabled={isSubmitting}
+									maxLength={3}
+								/>
+							</FormControl>
+							{errors.applicationCurrency && (
+								<FormMessage>{errors.applicationCurrency}</FormMessage>
+							)}
+						</FormField>
+					</div>
+
+					<div className="grid gap-4 sm:grid-cols-2">
+						<FormField name="applicationLocation">
+							<FormLabel>Ubicacion</FormLabel>
+							<FormControl asChild>
+								<Input
+									value={values.applicationLocation}
+									onChange={(event) =>
+										updateValue("applicationLocation", event.target.value)
+									}
+									disabled={isSubmitting}
+									maxLength={255}
+									placeholder="Madrid, Espana"
+								/>
+							</FormControl>
+						</FormField>
+
+						<FormField name="applicationRemoteType">
+							<FormLabel>Modalidad</FormLabel>
+							<Select
+								value={values.applicationRemoteType}
+								onValueChange={(value) =>
+									updateValue(
+										"applicationRemoteType",
+										value as RemoteType | "NONE",
+									)
+								}
+								disabled={isSubmitting}
+							>
+								<SelectTrigger>
+									<SelectValue placeholder="Seleccionar modalidad" />
+								</SelectTrigger>
+								<SelectContent>
+									<SelectItem value="NONE">No indicada</SelectItem>
+									{remoteTypeOptions.map((option) => (
+										<SelectItem key={option.value} value={option.value}>
+											{option.label}
+										</SelectItem>
+									))}
+								</SelectContent>
+							</Select>
+						</FormField>
+					</div>
+
+					<FormField name="applicationJobUrl">
+						<FormLabel>URL de la oferta</FormLabel>
+						<FormControl asChild>
+							<Input
+								type="url"
+								value={values.applicationJobUrl}
+								onChange={(event) =>
+									updateValue("applicationJobUrl", event.target.value)
+								}
+								disabled={isSubmitting}
+								maxLength={1024}
+								placeholder="https://..."
+							/>
+						</FormControl>
+					</FormField>
+
+					<div className="grid gap-4 sm:grid-cols-2">
+						<FormField name="applicationSource">
+							<FormLabel>Fuente</FormLabel>
+							<FormControl asChild>
+								<Input
+									value={values.applicationSource}
+									onChange={(event) =>
+										updateValue("applicationSource", event.target.value)
+									}
+									disabled={isSubmitting}
+									maxLength={255}
+									placeholder="LinkedIn"
+								/>
+							</FormControl>
+						</FormField>
+
+						<FormField name="applicationAppliedAt">
+							<FormLabel>Fecha de postulacion</FormLabel>
+							<FormControl asChild>
+								<Input
+									type="date"
+									value={values.applicationAppliedAt}
+									onChange={(event) =>
+										updateValue("applicationAppliedAt", event.target.value)
+									}
+									disabled={isSubmitting}
+								/>
+							</FormControl>
+						</FormField>
+					</div>
+
+					{serverError && (
+						<p className="rounded-lg border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive">
+							{serverError}
+						</p>
+					)}
+
+					<DialogFooter>
+						<Button
+							type="button"
+							variant="ghost"
+							onClick={() => setOpen(false)}
+							disabled={isSubmitting}
+						>
+							Cancelar
+						</Button>
+						<Button type="submit" disabled={isSubmitting}>
+							{isSubmitting && <Loader2 className="animate-spin" />}
+							Crear
+						</Button>
+					</DialogFooter>
+				</Form>
+			</DialogContent>
+		</Dialog>
+	);
+}
