@@ -2,7 +2,9 @@ package com.ricard0g.jobtrackr_api.controller;
 
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.web.csrf.CsrfToken;
 import org.springframework.validation.annotation.Validated;
+import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -28,6 +30,11 @@ public class AuthController {
 
     private final AuthService authService;
     private final RefreshTokenCookieService refreshTokenCookieService;
+
+    @GetMapping("/csrf")
+    public CsrfToken csrfToken(final CsrfToken token) {
+        return token;
+    }
 
     @PostMapping("/register")
     public ResponseEntity<AuthResponse> register(
