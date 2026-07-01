@@ -72,12 +72,12 @@ export const applicationStatusOptions: Array<{
 	label: string;
 	color: string;
 }> = [
-	{ value: "APPLIED", label: "Postulada", color: "#5765BD" },
-	{ value: "IN_REVIEW", label: "Revision", color: "#F5D800" },
-	{ value: "INTERVIEW", label: "Entrevista", color: "#00A7D6" },
-	{ value: "OFFER", label: "Oferta", color: "#00A86B" },
-	{ value: "REJECTED", label: "Descartada", color: "#878787" },
-	{ value: "WITHDRAWN", label: "Retirada", color: "#9C7D48" },
+	{ value: "APPLIED", label: "Applied", color: "#5765BD" },
+	{ value: "IN_REVIEW", label: "In Review", color: "#F5D800" },
+	{ value: "INTERVIEW", label: "Interview", color: "#00A7D6" },
+	{ value: "OFFER", label: "Offer", color: "#00A86B" },
+	{ value: "REJECTED", label: "Rejected", color: "#878787" },
+	{ value: "WITHDRAWN", label: "Withdrawn", color: "#9C7D48" },
 ];
 
 export const getApplicationStatusOption = (value: ApplicationStatus | string) =>

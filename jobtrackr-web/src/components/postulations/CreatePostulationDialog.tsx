@@ -59,9 +59,9 @@ interface CreatePostulationDialogProps {
 }
 
 const remoteTypeOptions: Array<{ value: RemoteType; label: string }> = [
-	{ value: "ON_SITE", label: "Presencial" },
-	{ value: "HYBRID", label: "Hibrido" },
-	{ value: "REMOTE", label: "Remoto" },
+	{ value: "ON_SITE", label: "On-site" },
+	{ value: "HYBRID", label: "Hybrid" },
+	{ value: "REMOTE", label: "Remote" },
 ];
 
 const getTodayInputValue = () => new Date().toISOString().slice(0, 10);
@@ -134,26 +134,26 @@ export function CreatePostulationDialog({
 		const applicationSalaryMin = toNullableNumber(values.applicationSalaryMin);
 		const applicationSalaryMax = toNullableNumber(values.applicationSalaryMax);
 
-		if (!values.companyId) nextErrors.companyId = "Selecciona una empresa.";
+		if (!values.companyId) nextErrors.companyId = "Select a company.";
 		if (!values.applicationTitle.trim()) {
-			nextErrors.applicationTitle = "Indica el rol de la oferta.";
+			nextErrors.applicationTitle = "Enter the job title.";
 		}
 		if (!values.applicationStatus) {
-			nextErrors.applicationStatus = "Selecciona un estatus.";
+			nextErrors.applicationStatus = "Select a status.";
 		}
 
 		if (
 			applicationSalaryMin !== null &&
 			(!Number.isFinite(applicationSalaryMin) || applicationSalaryMin < 0)
 		) {
-			nextErrors.applicationSalaryMin = "Debe ser un numero mayor o igual a 0.";
+			nextErrors.applicationSalaryMin = "Must be a number greater than or equal to 0.";
 		}
 
 		if (
 			applicationSalaryMax !== null &&
 			(!Number.isFinite(applicationSalaryMax) || applicationSalaryMax < 0)
 		) {
-			nextErrors.applicationSalaryMax = "Debe ser un numero mayor o igual a 0.";
+			nextErrors.applicationSalaryMax = "Must be a number greater than or equal to 0.";
 		}
 
 		if (
@@ -163,14 +163,14 @@ export function CreatePostulationDialog({
 			Number.isFinite(applicationSalaryMax) &&
 			applicationSalaryMax < applicationSalaryMin
 		) {
-			nextErrors.applicationSalaryMax = "Debe ser mayor que el salario minimo.";
+			nextErrors.applicationSalaryMax = "Must be greater than the minimum salary.";
 		}
 
 		if (
 			values.applicationCurrency.trim() &&
 			!/^[A-Z]{3}$/.test(values.applicationCurrency.trim())
 		) {
-			nextErrors.applicationCurrency = "Usa un codigo ISO de 3 letras.";
+			nextErrors.applicationCurrency = "Use a 3-letter ISO code.";
 		}
 
 		setErrors(nextErrors);
@@ -217,7 +217,7 @@ export function CreatePostulationDialog({
 			setServerError(
 				error instanceof ApiError
 					? error.message
-					: "No se pudo crear la postulacion.",
+					: "Could not create the application.",
 			);
 		} finally {
 			setIsSubmitting(false);
@@ -234,28 +234,28 @@ export function CreatePostulationDialog({
 		>
 			<DialogTrigger asChild>
 				<Button size="lg" variant="default">
-					<CirclePlus /> Crear Postulacion
+					<CirclePlus /> Create Application
 				</Button>
 			</DialogTrigger>
 			<DialogContent>
 				<DialogHeader>
-					<DialogTitle>Crear postulacion</DialogTitle>
+					<DialogTitle>Create application</DialogTitle>
 					<DialogDescription>
-						Registra los datos principales de la oferta para anadirla al tablero.
+						Enter the main job details to add it to the board.
 					</DialogDescription>
 				</DialogHeader>
 
 				<Form className="grid gap-4" onSubmit={handleSubmit}>
 					<div className="grid gap-4 sm:grid-cols-2">
 						<FormField name="companyId">
-							<FormLabel>Empresa</FormLabel>
+							<FormLabel>Company</FormLabel>
 							<Select
 								value={values.companyId}
 								onValueChange={(value) => updateValue("companyId", value)}
 								disabled={isSubmitting}
 							>
 								<SelectTrigger aria-invalid={Boolean(errors.companyId)}>
-									<SelectValue placeholder="Seleccionar empresa" />
+									<SelectValue placeholder="Select company" />
 								</SelectTrigger>
 								<SelectContent>
 									{companies.map((company) => (
@@ -272,7 +272,7 @@ export function CreatePostulationDialog({
 						</FormField>
 
 						<FormField name="applicationStatus">
-							<FormLabel>Estatus</FormLabel>
+							<FormLabel>Status</FormLabel>
 							<Select
 								value={values.applicationStatus}
 								onValueChange={(value) =>
@@ -283,7 +283,7 @@ export function CreatePostulationDialog({
 								<SelectTrigger
 									aria-invalid={Boolean(errors.applicationStatus)}
 								>
-									<SelectValue placeholder="Seleccionar estatus" />
+									<SelectValue placeholder="Select status" />
 								</SelectTrigger>
 								<SelectContent>
 									{statusOptions.map((status) => (
@@ -300,7 +300,7 @@ export function CreatePostulationDialog({
 					</div>
 
 					<FormField name="applicationTitle">
-						<FormLabel>Rol</FormLabel>
+						<FormLabel>Job title</FormLabel>
 						<FormControl asChild>
 							<Input
 								value={values.applicationTitle}
@@ -320,7 +320,7 @@ export function CreatePostulationDialog({
 
 					<div className="grid gap-4 sm:grid-cols-3">
 						<FormField name="applicationSalaryMin">
-							<FormLabel>Salario minimo</FormLabel>
+							<FormLabel>Minimum salary</FormLabel>
 							<FormControl asChild>
 								<Input
 									type="number"
@@ -341,7 +341,7 @@ export function CreatePostulationDialog({
 						</FormField>
 
 						<FormField name="applicationSalaryMax">
-							<FormLabel>Salario maximo</FormLabel>
+							<FormLabel>Maximum salary</FormLabel>
 							<FormControl asChild>
 								<Input
 									type="number"
@@ -362,7 +362,7 @@ export function CreatePostulationDialog({
 						</FormField>
 
 						<FormField name="applicationCurrency">
-							<FormLabel>Moneda</FormLabel>
+							<FormLabel>Currency</FormLabel>
 							<FormControl asChild>
 								<Input
 									value={values.applicationCurrency}
@@ -385,7 +385,7 @@ export function CreatePostulationDialog({
 
 					<div className="grid gap-4 sm:grid-cols-2">
 						<FormField name="applicationLocation">
-							<FormLabel>Ubicacion</FormLabel>
+							<FormLabel>Location</FormLabel>
 							<FormControl asChild>
 								<Input
 									value={values.applicationLocation}
@@ -394,13 +394,13 @@ export function CreatePostulationDialog({
 									}
 									disabled={isSubmitting}
 									maxLength={255}
-									placeholder="Madrid, Espana"
+									placeholder="Madrid, Spain"
 								/>
 							</FormControl>
 						</FormField>
 
 						<FormField name="applicationRemoteType">
-							<FormLabel>Modalidad</FormLabel>
+							<FormLabel>Work mode</FormLabel>
 							<Select
 								value={values.applicationRemoteType}
 								onValueChange={(value) =>
@@ -412,10 +412,10 @@ export function CreatePostulationDialog({
 								disabled={isSubmitting}
 							>
 								<SelectTrigger>
-									<SelectValue placeholder="Seleccionar modalidad" />
+									<SelectValue placeholder="Select work mode" />
 								</SelectTrigger>
 								<SelectContent>
-									<SelectItem value="NONE">No indicada</SelectItem>
+									<SelectItem value="NONE">Not specified</SelectItem>
 									{remoteTypeOptions.map((option) => (
 										<SelectItem key={option.value} value={option.value}>
 											{option.label}
@@ -427,7 +427,7 @@ export function CreatePostulationDialog({
 					</div>
 
 					<FormField name="applicationJobUrl">
-						<FormLabel>URL de la oferta</FormLabel>
+						<FormLabel>Job URL</FormLabel>
 						<FormControl asChild>
 							<Input
 								type="url"
@@ -444,7 +444,7 @@ export function CreatePostulationDialog({
 
 					<div className="grid gap-4 sm:grid-cols-2">
 						<FormField name="applicationSource">
-							<FormLabel>Fuente</FormLabel>
+							<FormLabel>Source</FormLabel>
 							<FormControl asChild>
 								<Input
 									value={values.applicationSource}
@@ -459,7 +459,7 @@ export function CreatePostulationDialog({
 						</FormField>
 
 						<FormField name="applicationAppliedAt">
-							<FormLabel>Fecha de postulacion</FormLabel>
+							<FormLabel>Applied date</FormLabel>
 							<FormControl asChild>
 								<Input
 									type="date"
@@ -486,11 +486,11 @@ export function CreatePostulationDialog({
 							onClick={() => setOpen(false)}
 							disabled={isSubmitting}
 						>
-							Cancelar
+							Cancel
 						</Button>
 						<Button type="submit" disabled={isSubmitting}>
 							{isSubmitting && <Loader2 className="animate-spin" />}
-							Crear
+							Create
 						</Button>
 					</DialogFooter>
 				</Form>

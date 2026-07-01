@@ -85,12 +85,12 @@ type ApplicationFormValues = {
 type ApplicationFormErrors = Partial<Record<keyof ApplicationFormValues, string>>;
 
 const interviewTypeOptions: Array<{ value: InterviewType; label: string }> = [
-	{ value: "PHONE", label: "Telefonica" },
-	{ value: "TECHNICAL", label: "Tecnica" },
-	{ value: "ARCHITECTURE", label: "Arquitectura" },
-	{ value: "HR", label: "RRHH" },
+	{ value: "PHONE", label: "Phone" },
+	{ value: "TECHNICAL", label: "Technical" },
+	{ value: "ARCHITECTURE", label: "Architecture" },
+	{ value: "HR", label: "HR" },
 	{ value: "FINAL", label: "Final" },
-	{ value: "OTHER", label: "Otra" },
+	{ value: "OTHER", label: "Other" },
 ];
 
 const outcomeStyles: Record<
@@ -98,27 +98,27 @@ const outcomeStyles: Record<
 	{ label: string; className: string }
 > = {
 	PENDING: {
-		label: "Pendiente",
+		label: "Pending",
 		className: "border-yellow-300 bg-yellow-100 text-yellow-800",
 	},
 	PASSED: {
-		label: "Superada",
+		label: "Passed",
 		className: "border-green-300 bg-green-100 text-green-800",
 	},
 	FAILED: {
-		label: "Fallida",
+		label: "Failed",
 		className: "border-red-300 bg-red-100 text-red-800",
 	},
 	CANCELLED: {
-		label: "Cancelada",
+		label: "Cancelled",
 		className: "border-gray-300 bg-gray-100 text-gray-800",
 	},
 };
 
 const remoteTypeOptions: Array<{ value: RemoteType; label: string }> = [
-	{ value: "ON_SITE", label: "Presencial" },
-	{ value: "HYBRID", label: "Hibrido" },
-	{ value: "REMOTE", label: "Remoto" },
+	{ value: "ON_SITE", label: "On-site" },
+	{ value: "HYBRID", label: "Hybrid" },
+	{ value: "REMOTE", label: "Remote" },
 ];
 
 const initialInterviewValues = (): InterviewFormValues => ({
@@ -162,11 +162,11 @@ const toOffsetDateTimeFromLocal = (value: string) =>
 	value ? new Date(value).toISOString() : "";
 
 const formatDate = (date: string | null | undefined) => {
-	if (!date) return "No indicada";
+	if (!date) return "Not specified";
 	const parsedDate = new Date(date);
-	if (Number.isNaN(parsedDate.getTime())) return "No indicada";
+	if (Number.isNaN(parsedDate.getTime())) return "Not specified";
 
-	return new Intl.DateTimeFormat("es-ES", {
+	return new Intl.DateTimeFormat("en-US", {
 		dateStyle: "medium",
 		timeStyle: date.includes("T") ? "short" : undefined,
 	}).format(parsedDate);
@@ -186,11 +186,14 @@ const formatSalaryRange = (application: Application): string => {
 	const maxValue = formatSalaryValue(application.applicationSalaryMax);
 
 	if (minValue && maxValue) return `${currency} ${minValue} - ${maxValue}`;
-	if (minValue) return `Desde ${currency} ${minValue}`;
-	if (maxValue) return `Hasta ${currency} ${maxValue}`;
+	if (minValue) return `From ${currency} ${minValue}`;
+	if (maxValue) return `Up to ${currency} ${maxValue}`;
 
-	return "No indicado";
+	return "Not specified";
 };
+
+const getRemoteTypeLabel = (type: RemoteType): string =>
+	remoteTypeOptions.find((option) => option.value === type)?.label ?? type;
 
 const getInterviewTypeLabel = (type: InterviewType): string =>
 	interviewTypeOptions.find((option) => option.value === type)?.label ?? type;
@@ -287,7 +290,7 @@ export function PostulationDetailDrawer({
 				setInterviewError(
 					error instanceof ApiError
 						? error.message
-						: "No se pudieron cargar las entrevistas.",
+						: "Could not load interviews.",
 				);
 			})
 			.finally(() => {
@@ -337,21 +340,21 @@ export function PostulationDetailDrawer({
 		);
 
 		if (!applicationValues.applicationTitle.trim()) {
-			nextErrors.applicationTitle = "Indica el rol de la oferta.";
+			nextErrors.applicationTitle = "Enter the job title.";
 		}
 
 		if (
 			applicationSalaryMin !== null &&
 			(!Number.isFinite(applicationSalaryMin) || applicationSalaryMin < 0)
 		) {
-			nextErrors.applicationSalaryMin = "Debe ser un numero mayor o igual a 0.";
+			nextErrors.applicationSalaryMin = "Must be a number greater than or equal to 0.";
 		}
 
 		if (
 			applicationSalaryMax !== null &&
 			(!Number.isFinite(applicationSalaryMax) || applicationSalaryMax < 0)
 		) {
-			nextErrors.applicationSalaryMax = "Debe ser un numero mayor o igual a 0.";
+			nextErrors.applicationSalaryMax = "Must be a number greater than or equal to 0.";
 		}
 
 		if (
@@ -361,14 +364,14 @@ export function PostulationDetailDrawer({
 			Number.isFinite(applicationSalaryMax) &&
 			applicationSalaryMax < applicationSalaryMin
 		) {
-			nextErrors.applicationSalaryMax = "Debe ser mayor que el salario minimo.";
+			nextErrors.applicationSalaryMax = "Must be greater than the minimum salary.";
 		}
 
 		if (
 			applicationValues.applicationCurrency.trim() &&
 			!/^[A-Z]{3}$/.test(applicationValues.applicationCurrency.trim())
 		) {
-			nextErrors.applicationCurrency = "Usa un codigo ISO de 3 letras.";
+			nextErrors.applicationCurrency = "Use a 3-letter ISO code.";
 		}
 
 		setApplicationErrors(nextErrors);
@@ -431,7 +434,7 @@ export function PostulationDetailDrawer({
 			setApplicationServerError(
 				error instanceof ApiError
 					? error.message
-					: "No se pudo actualizar la postulacion.",
+					: "Could not update the application.",
 			);
 		} finally {
 			setIsSubmittingApplication(false);
@@ -440,7 +443,7 @@ export function PostulationDetailDrawer({
 
 	const handleDeleteApplication = async () => {
 		const confirmed = window.confirm(
-			"¿Eliminar esta postulacion? Esta accion no se puede deshacer.",
+			"Delete this application? This action cannot be undone.",
 		);
 		if (!confirmed) return;
 
@@ -455,7 +458,7 @@ export function PostulationDetailDrawer({
 			setApplicationServerError(
 				error instanceof ApiError
 					? error.message
-					: "No se pudo eliminar la postulacion.",
+					: "Could not delete the application.",
 			);
 		} finally {
 			setIsDeletingApplication(false);
@@ -499,7 +502,7 @@ export function PostulationDetailDrawer({
 			setTagError(
 				error instanceof ApiError
 					? error.message
-					: "No se pudieron actualizar las etiquetas.",
+					: "Could not update tags.",
 			);
 		} finally {
 			setIsSubmittingTags(false);
@@ -510,7 +513,7 @@ export function PostulationDetailDrawer({
 		event.preventDefault();
 
 		if (!formValues.interviewScheduledAt) {
-			setFormError("Indica la fecha de la entrevista.");
+			setFormError("Enter the interview date.");
 			return;
 		}
 
@@ -544,7 +547,7 @@ export function PostulationDetailDrawer({
 			setFormError(
 				error instanceof ApiError
 					? error.message
-					: "No se pudo crear la entrevista.",
+					: "Could not create the interview.",
 			);
 		} finally {
 			setIsSubmittingInterview(false);
@@ -553,7 +556,7 @@ export function PostulationDetailDrawer({
 
 	const handleDeleteInterview = async (interview: Interview) => {
 		const confirmed = window.confirm(
-			"¿Eliminar esta entrevista? Esta accion no se puede deshacer.",
+			"Delete this interview? This action cannot be undone.",
 		);
 		if (!confirmed) return;
 
@@ -572,7 +575,7 @@ export function PostulationDetailDrawer({
 			setInterviewError(
 				error instanceof ApiError
 					? error.message
-					: "No se pudo eliminar la entrevista.",
+					: "Could not delete the interview.",
 			);
 		} finally {
 			setDeletingInterviewId(null);
@@ -631,17 +634,19 @@ export function PostulationDetailDrawer({
 						</div>
 
 						<div className="grid gap-3 sm:grid-cols-2">
-							<DetailBox label="Salario">{formatSalaryRange(application)}</DetailBox>
-							<DetailBox label="Ubicacion">
-								{application.applicationLocation ?? "No indicada"}
+							<DetailBox label="Salary">{formatSalaryRange(application)}</DetailBox>
+							<DetailBox label="Location">
+								{application.applicationLocation ?? "Not specified"}
 							</DetailBox>
-							<DetailBox label="Modalidad">
-								{application.applicationRemoteType ?? "No indicada"}
+							<DetailBox label="Work mode">
+								{application.applicationRemoteType
+									? getRemoteTypeLabel(application.applicationRemoteType)
+									: "Not specified"}
 							</DetailBox>
-							<DetailBox label="Fuente">
-								{application.applicationSource ?? "No indicada"}
+							<DetailBox label="Source">
+								{application.applicationSource ?? "Not specified"}
 							</DetailBox>
-							<DetailBox label="Fecha de postulacion">
+							<DetailBox label="Applied date">
 								{formatDate(application.applicationAppliedAt)}
 							</DetailBox>
 							<DetailBox label="URL">
@@ -655,17 +660,17 @@ export function PostulationDetailDrawer({
 										{application.applicationJobUrl}
 									</a>
 								) : (
-									"No indicada"
+									"Not specified"
 								)}
 							</DetailBox>
 						</div>
 
 						<div className="flex flex-wrap gap-2">
 							<Button type="button" onClick={() => setMode("edit")}>
-								<Pencil /> Editar
+								<Pencil /> Edit
 							</Button>
 							<Button type="button" variant="secondary" onClick={() => setMode("tags")}>
-								<Tags /> Etiquetas
+								<Tags /> Tags
 							</Button>
 							<Button
 								type="button"
@@ -678,7 +683,7 @@ export function PostulationDetailDrawer({
 								) : (
 									<Trash2 />
 								)}
-								Eliminar
+								Delete
 							</Button>
 						</div>
 
@@ -690,13 +695,13 @@ export function PostulationDetailDrawer({
 
 						<section className="grid gap-3">
 							<div className="flex items-center justify-between">
-								<h3 className="font-display text-lg font-bold">Entrevistas</h3>
+								<h3 className="font-display text-lg font-bold">Interviews</h3>
 								<Button
 									type="button"
 									variant="secondary"
 									onClick={() => setIsAddFormOpen((current) => !current)}
 								>
-									<Plus /> Anadir
+									<Plus /> Add
 								</Button>
 							</div>
 
@@ -707,7 +712,7 @@ export function PostulationDetailDrawer({
 								>
 									<div className="grid gap-3 sm:grid-cols-2">
 										<FormField name="interviewType">
-											<FormLabel>Tipo</FormLabel>
+											<FormLabel>Type</FormLabel>
 											<Select
 												value={formValues.interviewType}
 												onValueChange={(value) =>
@@ -734,7 +739,7 @@ export function PostulationDetailDrawer({
 											</Select>
 										</FormField>
 										<FormField name="interviewScheduledAt">
-											<FormLabel>Fecha</FormLabel>
+											<FormLabel>Date</FormLabel>
 											<FormControl asChild>
 												<Input
 													type="datetime-local"
@@ -751,7 +756,7 @@ export function PostulationDetailDrawer({
 										</FormField>
 									</div>
 									<FormField name="interviewLocation">
-										<FormLabel>Ubicacion</FormLabel>
+										<FormLabel>Location</FormLabel>
 										<FormControl asChild>
 											<Input
 												value={formValues.interviewLocation}
@@ -767,7 +772,7 @@ export function PostulationDetailDrawer({
 										</FormControl>
 									</FormField>
 									<FormField name="interviewNotes">
-										<FormLabel>Notas</FormLabel>
+										<FormLabel>Notes</FormLabel>
 										<FormControl asChild>
 											<Textarea
 												value={formValues.interviewNotes}
@@ -786,20 +791,20 @@ export function PostulationDetailDrawer({
 											onClick={() => setIsAddFormOpen(false)}
 											disabled={isSubmittingInterview}
 										>
-											Cancelar
+											Cancel
 										</Button>
 										<Button type="submit" disabled={isSubmittingInterview}>
 											{isSubmittingInterview && (
 												<Loader2 className="animate-spin" />
 											)}
-											Crear
+											Create
 										</Button>
 									</div>
 								</form>
 							)}
 
 							{isLoadingInterviews && (
-								<p className="text-sm text-medium-gray">Cargando entrevistas...</p>
+								<p className="text-sm text-medium-gray">Loading interviews...</p>
 							)}
 							{interviewError && (
 								<p className="rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive">
@@ -807,7 +812,7 @@ export function PostulationDetailDrawer({
 								</p>
 							)}
 							{!isLoadingInterviews && interviews.length === 0 && (
-								<p className="text-sm text-medium-gray">No hay entrevistas registradas.</p>
+								<p className="text-sm text-medium-gray">No interviews recorded.</p>
 							)}
 							<div className="grid gap-2">
 								{interviews.map((interview) => {
@@ -867,7 +872,7 @@ export function PostulationDetailDrawer({
 					<div className="grid gap-4">
 						<div className="grid gap-4 sm:grid-cols-2">
 							<FormField name="applicationStatus">
-								<FormLabel>Estatus</FormLabel>
+								<FormLabel>Status</FormLabel>
 								<Select
 									value={applicationValues.applicationStatus}
 									onValueChange={(value) =>
@@ -891,7 +896,7 @@ export function PostulationDetailDrawer({
 								</Select>
 							</FormField>
 							<FormField name="applicationAppliedAt">
-								<FormLabel>Fecha de postulacion</FormLabel>
+								<FormLabel>Applied date</FormLabel>
 								<FormControl asChild>
 									<Input
 										type="date"
@@ -909,7 +914,7 @@ export function PostulationDetailDrawer({
 						</div>
 
 						<FormField name="applicationTitle">
-							<FormLabel>Rol</FormLabel>
+							<FormLabel>Job title</FormLabel>
 							<FormControl asChild>
 								<Input
 									value={applicationValues.applicationTitle}
@@ -931,7 +936,7 @@ export function PostulationDetailDrawer({
 
 						<div className="grid gap-4 sm:grid-cols-3">
 							<FormField name="applicationSalaryMin">
-								<FormLabel>Salario minimo</FormLabel>
+								<FormLabel>Minimum salary</FormLabel>
 								<FormControl asChild>
 									<Input
 										type="number"
@@ -954,7 +959,7 @@ export function PostulationDetailDrawer({
 								)}
 							</FormField>
 							<FormField name="applicationSalaryMax">
-								<FormLabel>Salario maximo</FormLabel>
+								<FormLabel>Maximum salary</FormLabel>
 								<FormControl asChild>
 									<Input
 										type="number"
@@ -977,7 +982,7 @@ export function PostulationDetailDrawer({
 								)}
 							</FormField>
 							<FormField name="applicationCurrency">
-								<FormLabel>Moneda</FormLabel>
+								<FormLabel>Currency</FormLabel>
 								<FormControl asChild>
 									<Input
 										value={applicationValues.applicationCurrency}
@@ -1001,7 +1006,7 @@ export function PostulationDetailDrawer({
 
 						<div className="grid gap-4 sm:grid-cols-2">
 							<FormField name="applicationLocation">
-								<FormLabel>Ubicacion</FormLabel>
+								<FormLabel>Location</FormLabel>
 								<FormControl asChild>
 									<Input
 										value={applicationValues.applicationLocation}
@@ -1017,7 +1022,7 @@ export function PostulationDetailDrawer({
 								</FormControl>
 							</FormField>
 							<FormField name="applicationRemoteType">
-								<FormLabel>Modalidad</FormLabel>
+								<FormLabel>Work mode</FormLabel>
 								<Select
 									value={applicationValues.applicationRemoteType}
 									onValueChange={(value) =>
@@ -1032,7 +1037,7 @@ export function PostulationDetailDrawer({
 										<SelectValue />
 									</SelectTrigger>
 									<SelectContent>
-										<SelectItem value="NONE">No indicada</SelectItem>
+										<SelectItem value="NONE">Not specified</SelectItem>
 										{remoteTypeOptions.map((option) => (
 											<SelectItem key={option.value} value={option.value}>
 												{option.label}
@@ -1044,7 +1049,7 @@ export function PostulationDetailDrawer({
 						</div>
 
 						<FormField name="applicationJobUrl">
-							<FormLabel>URL de la oferta</FormLabel>
+							<FormLabel>Job URL</FormLabel>
 							<FormControl asChild>
 								<Input
 									type="url"
@@ -1062,7 +1067,7 @@ export function PostulationDetailDrawer({
 						</FormField>
 
 						<FormField name="applicationSource">
-							<FormLabel>Fuente</FormLabel>
+							<FormLabel>Source</FormLabel>
 							<FormControl asChild>
 								<Input
 									value={applicationValues.applicationSource}
@@ -1091,7 +1096,7 @@ export function PostulationDetailDrawer({
 								onClick={() => setMode("view")}
 								disabled={isSubmittingApplication}
 							>
-								Cancelar
+								Cancel
 							</Button>
 							<Button
 								type="button"
@@ -1101,7 +1106,7 @@ export function PostulationDetailDrawer({
 								{isSubmittingApplication && (
 									<Loader2 className="animate-spin" />
 								)}
-								Guardar
+								Save
 							</Button>
 						</div>
 					</div>
@@ -1156,7 +1161,7 @@ export function PostulationDetailDrawer({
 								onClick={() => setMode("view")}
 								disabled={isSubmittingTags}
 							>
-								Cancelar
+								Cancel
 							</Button>
 							<Button
 								type="button"
@@ -1164,7 +1169,7 @@ export function PostulationDetailDrawer({
 								disabled={isSubmittingTags}
 							>
 								{isSubmittingTags && <Loader2 className="animate-spin" />}
-								Guardar etiquetas
+								Save tags
 							</Button>
 						</div>
 					</div>

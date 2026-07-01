@@ -12,11 +12,11 @@ interface PostulationCardProps {
 }
 
 const formatLocalDate = (date: string | null): string => {
-	if (!date) return "No indicada";
+	if (!date) return "Not specified";
 	const parsedDate = new Date(date);
-	if (Number.isNaN(parsedDate.getTime())) return "No indicada";
+	if (Number.isNaN(parsedDate.getTime())) return "Not specified";
 
-	return new Intl.DateTimeFormat("es-ES", {
+	return new Intl.DateTimeFormat("en-US", {
 		dateStyle: "medium",
 	}).format(parsedDate);
 };
@@ -35,10 +35,10 @@ const formatSalaryRange = (application: Application): string => {
 	const max = formatSalaryValue(application.applicationSalaryMax);
 
 	if (min && max) return `${currency} ${min} - ${max}`;
-	if (min) return `Desde ${currency} ${min}`;
-	if (max) return `Hasta ${currency} ${max}`;
+	if (min) return `From ${currency} ${min}`;
+	if (max) return `Up to ${currency} ${max}`;
 
-	return "Salario no indicado";
+	return "Salary not specified";
 };
 
 export function PostulationCard({
