@@ -2,23 +2,29 @@ import { CollisionPriority } from "@dnd-kit/abstract";
 import { useDroppable } from "@dnd-kit/react";
 import { Plus } from "lucide-react";
 
+import { CreatePostulationDialog } from "@/components/postulations/CreatePostulationDialog";
 import { Button } from "@/components/ui/button";
-import type { Application } from "@/types/application";
+import type { Application, ApplicationStatus } from "@/types/application";
+import type { Company } from "@/types/company";
 import { PostulationCard } from "./PostulationCard";
 
 interface StatusColumnProps {
 	status: {
-		value: string;
+		value: ApplicationStatus;
 		label: string;
 		color: string;
 	};
 	applications: Application[];
+	companies: Company[];
+	allApplications: Application[];
 	onOpenDetails: (application: Application) => void;
 }
 
 export function StatusColumn({
 	status,
 	applications,
+	companies,
+	allApplications,
 	onOpenDetails,
 }: StatusColumnProps) {
 	const { ref } = useDroppable({
@@ -41,14 +47,21 @@ export function StatusColumn({
 					/>
 					{status.label}
 				</div>
-				<Button
-					type="button"
-					variant="secondary"
-					className="rounded-lg hover:bg-light-gray"
-					aria-label={`Create application in ${status.label}`}
-				>
-					<Plus />
-				</Button>
+				<CreatePostulationDialog
+					companies={companies}
+					applications={allApplications}
+					defaultStatus={status.value}
+					trigger={
+						<Button
+							type="button"
+							variant="secondary"
+							className="rounded-lg hover:bg-light-gray"
+							aria-label={`Create application in ${status.label}`}
+						>
+							<Plus />
+						</Button>
+					}
+				/>
 			</div>
 
 			<div className="scrollbar-hide flex max-h-full flex-col gap-y-2 overflow-y-scroll pb-10">

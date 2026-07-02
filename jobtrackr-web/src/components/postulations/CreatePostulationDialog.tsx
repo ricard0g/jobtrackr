@@ -1,5 +1,5 @@
 import { CirclePlus, Loader2 } from "lucide-react";
-import { type FormEvent, useMemo, useState } from "react";
+import { type FormEvent, type ReactNode, useMemo, useState } from "react";
 import { useRevalidator } from "react-router";
 
 import { Button } from "@/components/ui/button";
@@ -56,6 +56,8 @@ type FormErrors = Partial<Record<keyof CreateApplicationFormValues, string>>;
 interface CreatePostulationDialogProps {
 	companies: Company[];
 	applications: Application[];
+	defaultStatus?: ApplicationStatus;
+	trigger?: ReactNode;
 }
 
 const remoteTypeOptions: Array<{ value: RemoteType; label: string }> = [
@@ -66,10 +68,12 @@ const remoteTypeOptions: Array<{ value: RemoteType; label: string }> = [
 
 const getTodayInputValue = () => new Date().toISOString().slice(0, 10);
 
-const initialFormValues = (): CreateApplicationFormValues => ({
+const initialFormValues = (
+	defaultStatus: ApplicationStatus = "APPLIED",
+): CreateApplicationFormValues => ({
 	companyId: "",
 	applicationTitle: "",
-	applicationStatus: "APPLIED",
+	applicationStatus: defaultStatus,
 	applicationSalaryMin: "",
 	applicationSalaryMax: "",
 	applicationCurrency: "EUR",
@@ -96,11 +100,13 @@ const toOffsetDateTime = (value: string) =>
 export function CreatePostulationDialog({
 	companies,
 	applications,
+	defaultStatus = "APPLIED",
+	trigger,
 }: CreatePostulationDialogProps) {
 	const revalidator = useRevalidator();
 	const [open, setOpen] = useState(false);
 	const [values, setValues] = useState<CreateApplicationFormValues>(() =>
-		initialFormValues(),
+		initialFormValues(defaultStatus),
 	);
 	const [errors, setErrors] = useState<FormErrors>({});
 	const [serverError, setServerError] = useState<string | null>(null);
@@ -124,7 +130,7 @@ export function CreatePostulationDialog({
 	};
 
 	const resetForm = () => {
-		setValues(initialFormValues());
+		setValues(initialFormValues(defaultStatus));
 		setErrors({});
 		setServerError(null);
 	};
@@ -233,9 +239,11 @@ export function CreatePostulationDialog({
 			}}
 		>
 			<DialogTrigger asChild>
-				<Button size="lg" variant="default">
-					<CirclePlus /> Create Application
-				</Button>
+				{trigger ?? (
+					<Button size="lg" variant="default">
+						<CirclePlus /> Create Application
+					</Button>
+				)}
 			</DialogTrigger>
 			<DialogContent>
 				<DialogHeader>

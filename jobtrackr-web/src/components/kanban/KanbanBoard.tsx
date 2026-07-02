@@ -11,6 +11,7 @@ import {
 	type Application,
 	type ApplicationStatus,
 } from "@/types/application";
+import type { Company } from "@/types/company";
 import { StatusColumn } from "./StatusColumn";
 
 type ApplicationsByStatus = Record<ApplicationStatus, Application[]>;
@@ -197,7 +198,7 @@ const persistKanbanMove = async (
 };
 
 export function KanbanBoard() {
-	const { applications } = useLoaderData() as AppLoaderData;
+	const { applications, companies } = useLoaderData() as AppLoaderData;
 	const boardKey = applications
 		.map(
 			(application) =>
@@ -205,13 +206,21 @@ export function KanbanBoard() {
 		)
 		.join("|");
 
-	return <KanbanBoardContent key={boardKey} applications={applications} />;
+	return (
+		<KanbanBoardContent
+			key={boardKey}
+			applications={applications}
+			companies={companies}
+		/>
+	);
 }
 
 function KanbanBoardContent({
 	applications,
+	companies,
 }: {
 	applications: Application[];
+	companies: Company[];
 }) {
 	const [applicationsState, setApplicationsState] =
 		useState<ApplicationsByStatus>(() =>
@@ -318,6 +327,8 @@ function KanbanBoardContent({
 						key={status.value}
 						status={status}
 						applications={applicationsState[status.value]}
+						companies={companies}
+						allApplications={applications}
 						onOpenDetails={setSelectedApplication}
 					/>
 				))}
