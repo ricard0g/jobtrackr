@@ -37,7 +37,7 @@ export function StatusColumn({
 	return (
 		<div
 			ref={ref}
-			className="h-[85vh] min-w-72 max-w-72 overflow-y-hidden rounded-lg border border-light-gray bg-off-white p-4 shadow-cool-light"
+			className="h-[85vh] w-72 overflow-y-hidden rounded-lg border border-light-gray bg-off-white p-4 shadow-cool-light"
 		>
 			<div className="mb-2 flex items-center justify-between">
 				<div className="flex items-center justify-start gap-x-2">

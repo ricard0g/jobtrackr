@@ -321,7 +321,7 @@ function KanbanBoardContent({
 
 	return (
 		<DragDropProvider onDragEnd={handleDragEnd}>
-			<div className="flex h-full w-fit max-w-full gap-x-4 overflow-x-scroll px-8 py-8">
+			<div className="grid grid-flow-col-dense max-w-full gap-x-4 overflow-x-scroll px-8 py-8">
 				{applicationStatusOptions.map((status) => (
 					<StatusColumn
 						key={status.value}
