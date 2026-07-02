@@ -26,3 +26,7 @@ export interface InterviewCreateRequest {
 	interviewLocation?: string | null;
 	interviewNotes?: string | null;
 }
+
+export interface InterviewPutRequest extends InterviewCreateRequest {
+	interviewOutcome: InterviewOutcome;
+}

@@ -47,6 +47,20 @@ export interface ApplicationCreateRequest {
 	tagIds?: number[];
 }
 
+export interface ApplicationPutRequest {
+	companyId: number;
+	applicationTitle: string;
+	applicationJobUrl?: string | null;
+	applicationLocation?: string | null;
+	applicationRemoteType?: RemoteType | null;
+	applicationSource?: string | null;
+	applicationSalaryMin?: number | null;
+	applicationSalaryMax?: number | null;
+	applicationCurrency?: string | null;
+	applicationKanbanOrder?: number | null;
+	applicationAppliedAt?: string | null;
+}
+
 export interface ApplicationPatchRequest {
 	companyId?: number;
 	applicationTitle?: string;
@@ -65,6 +79,15 @@ export interface ApplicationPatchRequest {
 
 export interface ApplicationStatusPatchRequest {
 	applicationStatus: ApplicationStatus;
+}
+
+export interface StatusHistory {
+	statusHistoryId: number;
+	applicationId: number;
+	statusHistoryOldStatus: ApplicationStatus | null;
+	statusHistoryNewStatus: ApplicationStatus;
+	statusHistoryChangedAt: string;
+	statusHistoryCreatedAt: string;
 }
 
 export const applicationStatusOptions: Array<{

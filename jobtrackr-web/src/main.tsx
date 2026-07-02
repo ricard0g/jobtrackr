@@ -37,6 +37,27 @@ const router = createBrowserRouter([
 	},
 ]);
 
+async function enableMocking() {
+	if (
+		!import.meta.env.DEV ||
+		import.meta.env.VITE_API_MOCKING !== "true" ||
+		typeof window === "undefined"
+	) {
+		return;
+	}
+
+	const { worker } = await import("@/mocks/browser");
+
+	await worker.start({
+		onUnhandledRequest: "bypass",
+		serviceWorker: {
+			url: "/mockServiceWorker.js",
+		},
+	});
+}
+
+await enableMocking();
+
 createRoot(document.getElementById("root")!).render(
 	<StrictMode>
 		<RouterProvider router={router} />

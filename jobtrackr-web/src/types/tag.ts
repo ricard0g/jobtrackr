@@ -7,3 +7,9 @@ export interface Tag {
 	tagColor: string | null;
 	global: boolean;
 }
+
+export interface TagWriteRequest {
+	tagCategory: TagCategory;
+	tagName: string;
+	tagColor?: string | null;
+}

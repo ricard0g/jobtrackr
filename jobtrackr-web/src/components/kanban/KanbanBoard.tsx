@@ -1,6 +1,6 @@
 import { DragDropProvider, type DragEndEvent } from "@dnd-kit/react";
 import { isSortable } from "@dnd-kit/react/sortable";
-import { useRef, useState } from "react";
+import { type Dispatch, type SetStateAction, useRef, useState } from "react";
 import { useLoaderData } from "react-router";
 
 import { PostulationDetailDrawer } from "@/components/postulations/PostulationDetailDrawer";
@@ -199,6 +199,8 @@ const persistKanbanMove = async (
 
 export function KanbanBoard() {
 	const { applications, companies } = useLoaderData() as AppLoaderData;
+	const [selectedApplication, setSelectedApplication] =
+		useState<Application | null>(null);
 	const boardKey = applications
 		.map(
 			(application) =>
@@ -211,6 +213,8 @@ export function KanbanBoard() {
 			key={boardKey}
 			applications={applications}
 			companies={companies}
+			selectedApplication={selectedApplication}
+			setSelectedApplication={setSelectedApplication}
 		/>
 	);
 }
@@ -218,16 +222,18 @@ export function KanbanBoard() {
 function KanbanBoardContent({
 	applications,
 	companies,
+	selectedApplication,
+	setSelectedApplication,
 }: {
 	applications: Application[];
 	companies: Company[];
+	selectedApplication: Application | null;
+	setSelectedApplication: Dispatch<SetStateAction<Application | null>>;
 }) {
 	const [applicationsState, setApplicationsState] =
 		useState<ApplicationsByStatus>(() =>
 			groupApplicationsByStatus(applications),
 		);
-	const [selectedApplication, setSelectedApplication] =
-		useState<Application | null>(null);
 	const persistenceVersionRef = useRef(0);
 
 	const getNextKanbanOrder = (

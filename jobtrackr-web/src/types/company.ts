@@ -9,3 +9,11 @@ export interface Company {
 	companyCreatedAt: string;
 	companyUpdatedAt: string;
 }
+
+export interface CompanyWriteRequest {
+	companyName: string;
+	companyWebsiteUrl?: string | null;
+	companyLocation?: string | null;
+	companyType?: string | null;
+	companyLogo?: string | null;
+}

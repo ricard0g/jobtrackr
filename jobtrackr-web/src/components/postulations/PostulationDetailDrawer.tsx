@@ -1,4 +1,4 @@
-import { Loader2, Pencil, Plus, Tags, Trash2, X } from "lucide-react";
+import { Loader2, Pencil, Plus, Tags, Trash2 } from "lucide-react";
 import {
 	type FormEvent,
 	type ReactNode,
@@ -12,7 +12,6 @@ import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
 	Dialog,
-	DialogClose,
 	DialogContent,
 	DialogTitle,
 } from "@/components/ui/dialog";
@@ -594,11 +593,6 @@ export function PostulationDetailDrawer({
 							{application.company.companyName}
 						</p>
 					</div>
-					<DialogClose asChild>
-						<Button type="button" variant="ghost" size="icon" aria-label="Close">
-							<X />
-						</Button>
-					</DialogClose>
 				</div>
 
 				{mode === "view" && (

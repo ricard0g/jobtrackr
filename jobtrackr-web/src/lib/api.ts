@@ -3,29 +3,22 @@ import { redirect } from "react-router";
 import type {
 	Application,
 	ApplicationPatchRequest,
+	ApplicationPutRequest,
 	ApplicationStatus,
 	ApplicationStatusPatchRequest,
 	ApplicationCreateRequest,
+	StatusHistory,
 } from "@/types/application";
 import type { AuthResponse, LoginRequest, RegisterRequest } from "@/types/auth";
-import type { Company } from "@/types/company";
+import type { Company, CompanyWriteRequest } from "@/types/company";
 import type {
 	Interview,
 	InterviewCreateRequest,
+	InterviewPutRequest,
 } from "@/types/interview";
-import type { Tag } from "@/types/tag";
+import { API_BASE_URL, AUTH_BASE_URL } from "@/lib/api-config";
+import type { Tag, TagWriteRequest } from "@/types/tag";
 import type { User } from "@/types/user";
-
-const legacyApiUrl = import.meta.env.VITE_API_URL as string | undefined;
-const configuredOrigin = import.meta.env.VITE_API_ORIGIN as string | undefined;
-
-const API_ORIGIN = (configuredOrigin ?? legacyApiUrl?.replace(/\/api\/v1\/?$/, "") ?? "http://localhost:8080").replace(
-	/\/$/,
-	"",
-);
-
-const API_BASE_URL = `${API_ORIGIN}/api/v1`;
-const AUTH_BASE_URL = `${API_ORIGIN}/auth`;
 
 let accessToken: string | null = null;
 let csrfToken: string | null = null;
@@ -245,11 +238,50 @@ export async function requireSession() {
 export const api = {
 	getCurrentUser: () => apiRequest<User>("/user"),
 	getApplications: () => apiRequest<Application[]>("/applications"),
+	getApplicationById: (applicationId: number) =>
+		apiRequest<Application>(`/applications/${applicationId}`),
 	getCompanies: () => apiRequest<Company[]>("/companies"),
+	getCompanyById: (companyId: number) =>
+		apiRequest<Company>(`/companies/${companyId}`),
+	createCompany: (request: CompanyWriteRequest) =>
+		apiRequest<Company>("/companies", {
+			method: "POST",
+			headers: jsonHeaders,
+			body: JSON.stringify(request),
+		}),
+	putCompany: (companyId: number, request: CompanyWriteRequest) =>
+		apiRequest<Company>(`/companies/${companyId}`, {
+			method: "PUT",
+			headers: jsonHeaders,
+			body: JSON.stringify(request),
+		}),
+	deleteCompany: (companyId: number) =>
+		apiRequest<void>(`/companies/${companyId}`, { method: "DELETE" }),
 	getTags: () => apiRequest<Tag[]>("/tags"),
+	getTagById: (tagId: number) => apiRequest<Tag>(`/tags/${tagId}`),
+	createTag: (request: TagWriteRequest) =>
+		apiRequest<Tag>("/tags", {
+			method: "POST",
+			headers: jsonHeaders,
+			body: JSON.stringify(request),
+		}),
+	putTag: (tagId: number, request: TagWriteRequest) =>
+		apiRequest<Tag>(`/tags/${tagId}`, {
+			method: "PUT",
+			headers: jsonHeaders,
+			body: JSON.stringify(request),
+		}),
+	deleteTag: (tagId: number) =>
+		apiRequest<void>(`/tags/${tagId}`, { method: "DELETE" }),
 	createApplication: (request: ApplicationCreateRequest) =>
 		apiRequest<Application>("/applications", {
 			method: "POST",
+			headers: jsonHeaders,
+			body: JSON.stringify(request),
+		}),
+	putApplication: (applicationId: number, request: ApplicationPutRequest) =>
+		apiRequest<Application>(`/applications/${applicationId}`, {
+			method: "PUT",
 			headers: jsonHeaders,
 			body: JSON.stringify(request),
 		}),
@@ -265,16 +297,41 @@ export const api = {
 			headers: jsonHeaders,
 			body: JSON.stringify(request),
 		}),
+	getApplicationStatusHistory: (applicationId: number) =>
+		apiRequest<StatusHistory[]>(`/applications/${applicationId}/status-history`),
+	createAndAttachTag: (applicationId: number, request: TagWriteRequest) =>
+		apiRequest<Tag>(`/applications/${applicationId}/tags`, {
+			method: "POST",
+			headers: jsonHeaders,
+			body: JSON.stringify(request),
+		}),
 	deleteApplication: (applicationId: number) =>
 		apiRequest<void>(`/applications/${applicationId}`, { method: "DELETE" }),
 	getInterviews: (applicationId: number) =>
 		apiRequest<Interview[]>(`/applications/${applicationId}/interviews`),
+	getInterviewById: (applicationId: number, interviewId: number) =>
+		apiRequest<Interview>(
+			`/applications/${applicationId}/interviews/${interviewId}`,
+		),
 	createInterview: (applicationId: number, request: InterviewCreateRequest) =>
 		apiRequest<Interview>(`/applications/${applicationId}/interviews`, {
 			method: "POST",
 			headers: jsonHeaders,
 			body: JSON.stringify(request),
 		}),
+	putInterview: (
+		applicationId: number,
+		interviewId: number,
+		request: InterviewPutRequest,
+	) =>
+		apiRequest<Interview>(
+			`/applications/${applicationId}/interviews/${interviewId}`,
+			{
+				method: "PUT",
+				headers: jsonHeaders,
+				body: JSON.stringify(request),
+			},
+		),
 	deleteInterview: (applicationId: number, interviewId: number) =>
 		apiRequest<void>(`/applications/${applicationId}/interviews/${interviewId}`, {
 			method: "DELETE",
