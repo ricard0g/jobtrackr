@@ -1,14 +1,14 @@
 import { LogOut, User as UserIcon, X } from "lucide-react";
 import { useState } from "react";
-import { Form as RouterForm, useLoaderData } from "react-router";
+import { Form as RouterForm } from "react-router";
 
 import { CreatePostulationDialog } from "@/components/postulations/CreatePostulationDialog";
 import { Button } from "@/components/ui/button";
-import type { AppLoaderData } from "@/lib/api";
+import { useBoard } from "@/components/kanban/useBoard";
 
 export function Navbar() {
 	const [openUserData, setOpenUserData] = useState(false);
-	const { applications, companies, user } = useLoaderData() as AppLoaderData;
+	const { allApplications, companies, user } = useBoard();
 	const displayName = user.userDisplayName ?? user.userEmail;
 
 	return (
@@ -53,7 +53,7 @@ export function Navbar() {
 					<li className="flex items-center gap-2">
 						<CreatePostulationDialog
 							companies={companies}
-							applications={applications}
+							applications={allApplications}
 						/>
 						<RouterForm method="post">
 							<input type="hidden" name="intent" value="logout" />

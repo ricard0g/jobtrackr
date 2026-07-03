@@ -1,7 +1,7 @@
 import { CirclePlus, Loader2 } from "lucide-react";
 import { type FormEvent, type ReactNode, useMemo, useState } from "react";
-import { useRevalidator } from "react-router";
 
+import { useBoard } from "@/components/kanban/useBoard";
 import { Button } from "@/components/ui/button";
 import {
 	Dialog,
@@ -103,7 +103,7 @@ export function CreatePostulationDialog({
 	defaultStatus = "APPLIED",
 	trigger,
 }: CreatePostulationDialogProps) {
-	const revalidator = useRevalidator();
+	const { upsertApplication } = useBoard();
 	const [open, setOpen] = useState(false);
 	const [values, setValues] = useState<CreateApplicationFormValues>(() =>
 		initialFormValues(defaultStatus),
@@ -215,10 +215,10 @@ export function CreatePostulationDialog({
 		setServerError(null);
 
 		try {
-			await api.createApplication(payload);
+			const createdApplication = await api.createApplication(payload);
+			upsertApplication(createdApplication, "append-to-status");
 			resetForm();
 			setOpen(false);
-			void revalidator.revalidate();
 		} catch (error) {
 			setServerError(
 				error instanceof ApiError

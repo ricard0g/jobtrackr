@@ -1,4 +1,4 @@
-import type { ActionFunctionArgs } from "react-router";
+import type { ActionFunctionArgs, ShouldRevalidateFunctionArgs } from "react-router";
 import { redirect } from "react-router";
 
 import { api, logout, requireSession, type AppLoaderData } from "@/lib/api";
@@ -26,4 +26,27 @@ export async function appAction({ request }: ActionFunctionArgs) {
 	}
 
 	throw new Response("Unsupported action", { status: 400 });
+}
+
+export function appShouldRevalidate({
+	formAction,
+	currentUrl,
+	nextUrl,
+	defaultShouldRevalidate,
+}: ShouldRevalidateFunctionArgs) {
+	if (formAction?.startsWith("/applications/")) {
+		return false;
+	}
+
+	const isCurrentBoardRoute =
+		currentUrl.pathname === "/" ||
+		currentUrl.pathname.startsWith("/applications/");
+	const isNextBoardRoute =
+		nextUrl.pathname === "/" || nextUrl.pathname.startsWith("/applications/");
+
+	if (isCurrentBoardRoute && isNextBoardRoute) {
+		return false;
+	}
+
+	return defaultShouldRevalidate;
 }

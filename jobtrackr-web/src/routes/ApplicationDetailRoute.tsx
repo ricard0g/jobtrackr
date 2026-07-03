@@ -1,13 +1,20 @@
 import { Loader2, Pencil, Plus, Tags, Trash2 } from "lucide-react";
 import {
-	type FormEvent,
 	type ReactNode,
 	useEffect,
 	useMemo,
 	useState,
 } from "react";
-import { useLoaderData, useRevalidator } from "react-router";
+import {
+	isRouteErrorResponse,
+	Link,
+	useFetcher,
+	useLoaderData,
+	useNavigate,
+	useRouteError,
+} from "react-router";
 
+import { useBoard } from "@/components/kanban/useBoard";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
@@ -31,33 +38,21 @@ import {
 	SelectValue,
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
-import { ApiError, api, type AppLoaderData } from "@/lib/api";
 import {
 	applicationStatusOptions,
 	getApplicationStatusOption,
 	type Application,
-	type ApplicationPatchRequest,
 	type ApplicationStatus,
 	type RemoteType,
 } from "@/types/application";
 import type {
-	Interview,
-	InterviewCreateRequest,
 	InterviewOutcome,
 	InterviewType,
 } from "@/types/interview";
-
-interface PostulationDetailDrawerProps {
-	open: boolean;
-	onOpenChange: (open: boolean) => void;
-	application: Application | null;
-	getNextKanbanOrder: (
-		applicationStatus: ApplicationStatus,
-		applicationId: number,
-	) => number;
-	onApplicationUpdated: (application: Application) => void;
-	onApplicationDeleted: (applicationId: number) => void;
-}
+import type {
+	ApplicationDetailActionData,
+	ApplicationDetailLoaderData,
+} from "./application-detail-data";
 
 type DrawerMode = "view" | "edit" | "tags";
 
@@ -80,8 +75,6 @@ type ApplicationFormValues = {
 	applicationJobUrl: string;
 	applicationAppliedAt: string;
 };
-
-type ApplicationFormErrors = Partial<Record<keyof ApplicationFormValues, string>>;
 
 const interviewTypeOptions: Array<{ value: InterviewType; label: string }> = [
 	{ value: "PHONE", label: "Phone" },
@@ -130,35 +123,19 @@ const initialInterviewValues = (): InterviewFormValues => ({
 const toInputDate = (date: string | null | undefined) => date?.slice(0, 10) ?? "";
 
 const initialApplicationValues = (
-	application: Application | null,
+	application: Application,
 ): ApplicationFormValues => ({
-	applicationTitle: application?.applicationTitle ?? "",
-	applicationStatus: application?.applicationStatus ?? "APPLIED",
-	applicationSalaryMin: application?.applicationSalaryMin?.toString() ?? "",
-	applicationSalaryMax: application?.applicationSalaryMax?.toString() ?? "",
-	applicationCurrency: application?.applicationCurrency ?? "EUR",
-	applicationLocation: application?.applicationLocation ?? "",
-	applicationRemoteType: application?.applicationRemoteType ?? "NONE",
-	applicationSource: application?.applicationSource ?? "",
-	applicationJobUrl: application?.applicationJobUrl ?? "",
-	applicationAppliedAt: toInputDate(application?.applicationAppliedAt),
+	applicationTitle: application.applicationTitle,
+	applicationStatus: application.applicationStatus,
+	applicationSalaryMin: application.applicationSalaryMin?.toString() ?? "",
+	applicationSalaryMax: application.applicationSalaryMax?.toString() ?? "",
+	applicationCurrency: application.applicationCurrency ?? "EUR",
+	applicationLocation: application.applicationLocation ?? "",
+	applicationRemoteType: application.applicationRemoteType ?? "NONE",
+	applicationSource: application.applicationSource ?? "",
+	applicationJobUrl: application.applicationJobUrl ?? "",
+	applicationAppliedAt: toInputDate(application.applicationAppliedAt),
 });
-
-const toNullableString = (value: string) => {
-	const trimmedValue = value.trim();
-	return trimmedValue.length > 0 ? trimmedValue : null;
-};
-
-const toNullableNumber = (value: string) => {
-	const trimmedValue = value.trim();
-	return trimmedValue.length > 0 ? Number(trimmedValue) : null;
-};
-
-const toOffsetDateTime = (value: string) =>
-	value ? new Date(`${value}T00:00:00`).toISOString() : null;
-
-const toOffsetDateTimeFromLocal = (value: string) =>
-	value ? new Date(value).toISOString() : "";
 
 const formatDate = (date: string | null | undefined) => {
 	if (!date) return "Not specified";
@@ -197,6 +174,11 @@ const getRemoteTypeLabel = (type: RemoteType): string =>
 const getInterviewTypeLabel = (type: InterviewType): string =>
 	interviewTypeOptions.find((option) => option.value === type)?.label ?? type;
 
+const fetcherData = (
+	data: unknown,
+): ApplicationDetailActionData | undefined =>
+	data as ApplicationDetailActionData | undefined;
+
 function DetailBox({ label, children }: { label: string; children: ReactNode }) {
 	return (
 		<div className="min-w-0 rounded-md border border-light-gray bg-off-white p-2 text-left">
@@ -208,100 +190,160 @@ function DetailBox({ label, children }: { label: string; children: ReactNode }) 
 	);
 }
 
-export function PostulationDetailDrawer({
-	open,
-	onOpenChange,
-	application,
-	getNextKanbanOrder,
-	onApplicationUpdated,
-	onApplicationDeleted,
-}: PostulationDetailDrawerProps) {
-	const { tags: allTags } = useLoaderData() as AppLoaderData;
-	const revalidator = useRevalidator();
-	const [interviews, setInterviews] = useState<Interview[]>([]);
-	const [isLoadingInterviews, setIsLoadingInterviews] = useState(false);
-	const [interviewError, setInterviewError] = useState<string | null>(null);
+export function ApplicationDetailRoute() {
+	const { application, interviews } =
+		useLoaderData() as ApplicationDetailLoaderData;
+	const {
+		getNextKanbanOrder,
+		removeApplication,
+		tags: allTags,
+		upsertApplication,
+	} = useBoard();
+	const navigate = useNavigate();
+	const applicationFetcher = useFetcher();
+	const tagFetcher = useFetcher();
+	const interviewFetcher = useFetcher();
+	const deleteApplicationFetcher = useFetcher();
+	const deleteInterviewFetcher = useFetcher();
+	const [currentApplication, setCurrentApplication] = useState(application);
+	const [mode, setMode] = useState<DrawerMode>("view");
 	const [isAddFormOpen, setIsAddFormOpen] = useState(false);
 	const [formValues, setFormValues] = useState<InterviewFormValues>(() =>
 		initialInterviewValues(),
 	);
-	const [formError, setFormError] = useState<string | null>(null);
-	const [isSubmittingInterview, setIsSubmittingInterview] = useState(false);
+	const [applicationValues, setApplicationValues] =
+		useState<ApplicationFormValues>(() => initialApplicationValues(application));
+	const [selectedTagIds, setSelectedTagIds] = useState<Set<number>>(
+		() => new Set(application.tags.map((tag) => tag.tagId)),
+	);
 	const [deletingInterviewId, setDeletingInterviewId] = useState<number | null>(
 		null,
 	);
-	const [mode, setMode] = useState<DrawerMode>("view");
-	const [applicationValues, setApplicationValues] =
-		useState<ApplicationFormValues>(() => initialApplicationValues(null));
-	const [applicationErrors, setApplicationErrors] =
-		useState<ApplicationFormErrors>({});
-	const [applicationServerError, setApplicationServerError] = useState<
-		string | null
-	>(null);
-	const [isSubmittingApplication, setIsSubmittingApplication] = useState(false);
-	const [isDeletingApplication, setIsDeletingApplication] = useState(false);
-	const [selectedTagIds, setSelectedTagIds] = useState<Set<number>>(
-		() => new Set(),
-	);
-	const [tagError, setTagError] = useState<string | null>(null);
-	const [isSubmittingTags, setIsSubmittingTags] = useState(false);
 
+	const applicationData = fetcherData(applicationFetcher.data);
+	const tagData = fetcherData(tagFetcher.data);
+	const interviewData = fetcherData(interviewFetcher.data);
+	const deleteApplicationData = fetcherData(deleteApplicationFetcher.data);
+	const deleteInterviewData = fetcherData(deleteInterviewFetcher.data);
+	const isSubmittingApplication = applicationFetcher.state !== "idle";
+	const isSubmittingTags = tagFetcher.state !== "idle";
+	const isSubmittingInterview = interviewFetcher.state !== "idle";
+	const isDeletingApplication = deleteApplicationFetcher.state !== "idle";
+	const isDeletingInterview = deleteInterviewFetcher.state !== "idle";
+	const applicationFieldErrors =
+		applicationData?.ok === false &&
+		applicationData.intent === "updateApplication"
+			? applicationData.fieldErrors
+			: undefined;
+	const applicationServerError =
+		applicationData?.ok === false &&
+		applicationData.intent === "updateApplication"
+			? applicationData.formError
+			: deleteApplicationData?.ok === false
+				? deleteApplicationData.formError
+				: undefined;
+	const tagError =
+		tagData?.ok === false && tagData.intent === "updateTags"
+			? tagData.formError
+			: undefined;
+	const interviewError =
+		deleteInterviewData?.ok === false &&
+		deleteInterviewData.intent === "deleteInterview"
+			? deleteInterviewData.formError
+			: undefined;
+	const formError =
+		interviewData?.ok === false && interviewData.intent === "createInterview"
+			? interviewData.formError
+			: undefined;
 	const statusDisplay = useMemo(
-		() => getApplicationStatusOption(application?.applicationStatus ?? ""),
-		[application?.applicationStatus],
+		() => getApplicationStatusOption(currentApplication.applicationStatus),
+		[currentApplication.applicationStatus],
 	);
+	const nextApplicationKanbanOrder =
+		applicationValues.applicationStatus === currentApplication.applicationStatus
+			? currentApplication.applicationKanbanOrder
+			: getNextKanbanOrder(
+					applicationValues.applicationStatus,
+					currentApplication.applicationId,
+				);
 
 	useEffect(() => {
-		if (!open || !application) return;
-
 		let isCurrent = true;
 
 		queueMicrotask(() => {
 			if (!isCurrent) return;
-
+			setCurrentApplication(application);
 			setMode("view");
-			setApplicationValues(initialApplicationValues(application));
-			setApplicationErrors({});
-			setApplicationServerError(null);
-			setSelectedTagIds(new Set(application.tags.map((tag) => tag.tagId)));
-			setTagError(null);
 			setIsAddFormOpen(false);
 			setFormValues(initialInterviewValues());
-			setFormError(null);
-			setInterviewError(null);
-			setIsLoadingInterviews(true);
+			setApplicationValues(initialApplicationValues(application));
+			setSelectedTagIds(new Set(application.tags.map((tag) => tag.tagId)));
+			setDeletingInterviewId(null);
 		});
-
-		api.getInterviews(application.applicationId)
-			.then((data) =>
-				isCurrent &&
-				setInterviews(
-					data.toSorted(
-						(a, b) =>
-							new Date(a.interviewScheduledAt).getTime() -
-							new Date(b.interviewScheduledAt).getTime(),
-					),
-				),
-			)
-			.catch((error) => {
-				if (!isCurrent) return;
-
-				setInterviewError(
-					error instanceof ApiError
-						? error.message
-						: "Could not load interviews.",
-				);
-			})
-			.finally(() => {
-				if (isCurrent) setIsLoadingInterviews(false);
-			});
 
 		return () => {
 			isCurrent = false;
 		};
-	}, [open, application]);
+	}, [application]);
 
-	if (!application) return null;
+	useEffect(() => {
+		if (applicationData?.ok && applicationData.intent === "updateApplication") {
+			upsertApplication(
+				applicationData.application,
+				applicationData.boardPlacement,
+			);
+			queueMicrotask(() => {
+				setCurrentApplication(applicationData.application);
+				setApplicationValues(
+					initialApplicationValues(applicationData.application),
+				);
+				setMode("view");
+			});
+		}
+	}, [applicationData, upsertApplication]);
+
+	useEffect(() => {
+		if (tagData?.ok && tagData.intent === "updateTags") {
+			upsertApplication(tagData.application, tagData.boardPlacement);
+			queueMicrotask(() => {
+				setCurrentApplication(tagData.application);
+				setSelectedTagIds(
+					new Set(tagData.application.tags.map((tag) => tag.tagId)),
+				);
+				setMode("view");
+			});
+		}
+	}, [tagData, upsertApplication]);
+
+	useEffect(() => {
+		if (interviewData?.ok && interviewData.intent === "createInterview") {
+			queueMicrotask(() => {
+				setFormValues(initialInterviewValues());
+				setIsAddFormOpen(false);
+			});
+		}
+	}, [interviewData]);
+
+	useEffect(() => {
+		if (
+			deleteInterviewData?.ok &&
+			deleteInterviewData.intent === "deleteInterview"
+		) {
+			queueMicrotask(() => {
+				setDeletingInterviewId(null);
+			});
+		}
+	}, [deleteInterviewData]);
+
+	useEffect(() => {
+		if (
+			deleteApplicationData?.ok &&
+			deleteApplicationData.intent === "deleteApplication"
+		) {
+			removeApplication(deleteApplicationData.applicationId);
+			navigate("/", { replace: true });
+		}
+	}, [deleteApplicationData, navigate, removeApplication]);
 
 	const updateFormValue = <T extends keyof InterviewFormValues>(
 		name: T,
@@ -311,7 +353,6 @@ export function PostulationDetailDrawer({
 			...currentValues,
 			[name]: value,
 		}));
-		setFormError(null);
 	};
 
 	const updateApplicationValue = <T extends keyof ApplicationFormValues>(
@@ -322,146 +363,6 @@ export function PostulationDetailDrawer({
 			...currentValues,
 			[name]: value,
 		}));
-		setApplicationErrors((currentErrors) => ({
-			...currentErrors,
-			[name]: undefined,
-		}));
-		setApplicationServerError(null);
-	};
-
-	const buildApplicationPayload = () => {
-		const nextErrors: ApplicationFormErrors = {};
-		const applicationSalaryMin = toNullableNumber(
-			applicationValues.applicationSalaryMin,
-		);
-		const applicationSalaryMax = toNullableNumber(
-			applicationValues.applicationSalaryMax,
-		);
-
-		if (!applicationValues.applicationTitle.trim()) {
-			nextErrors.applicationTitle = "Enter the job title.";
-		}
-
-		if (
-			applicationSalaryMin !== null &&
-			(!Number.isFinite(applicationSalaryMin) || applicationSalaryMin < 0)
-		) {
-			nextErrors.applicationSalaryMin = "Must be a number greater than or equal to 0.";
-		}
-
-		if (
-			applicationSalaryMax !== null &&
-			(!Number.isFinite(applicationSalaryMax) || applicationSalaryMax < 0)
-		) {
-			nextErrors.applicationSalaryMax = "Must be a number greater than or equal to 0.";
-		}
-
-		if (
-			applicationSalaryMin !== null &&
-			applicationSalaryMax !== null &&
-			Number.isFinite(applicationSalaryMin) &&
-			Number.isFinite(applicationSalaryMax) &&
-			applicationSalaryMax < applicationSalaryMin
-		) {
-			nextErrors.applicationSalaryMax = "Must be greater than the minimum salary.";
-		}
-
-		if (
-			applicationValues.applicationCurrency.trim() &&
-			!/^[A-Z]{3}$/.test(applicationValues.applicationCurrency.trim())
-		) {
-			nextErrors.applicationCurrency = "Use a 3-letter ISO code.";
-		}
-
-		setApplicationErrors(nextErrors);
-		if (Object.keys(nextErrors).length > 0) return null;
-
-		const nextOrder =
-			applicationValues.applicationStatus === application.applicationStatus
-				? application.applicationKanbanOrder
-				: getNextKanbanOrder(
-						applicationValues.applicationStatus,
-						application.applicationId,
-					);
-
-		return {
-			applicationTitle: applicationValues.applicationTitle.trim(),
-			applicationJobUrl: toNullableString(applicationValues.applicationJobUrl),
-			applicationLocation: toNullableString(
-				applicationValues.applicationLocation,
-			),
-			applicationRemoteType:
-				applicationValues.applicationRemoteType === "NONE"
-					? null
-					: applicationValues.applicationRemoteType,
-			applicationSource: toNullableString(applicationValues.applicationSource),
-			applicationSalaryMin,
-			applicationSalaryMax,
-			applicationCurrency: toNullableString(
-				applicationValues.applicationCurrency,
-			),
-			applicationKanbanOrder: nextOrder,
-			applicationAppliedAt: toOffsetDateTime(
-				applicationValues.applicationAppliedAt,
-			),
-		} satisfies ApplicationPatchRequest;
-	};
-
-	const handleUpdateApplication = async () => {
-		const payload = buildApplicationPayload();
-		if (!payload) return;
-
-		setIsSubmittingApplication(true);
-		setApplicationServerError(null);
-
-		try {
-			const updatedApplication =
-				applicationValues.applicationStatus === application.applicationStatus
-					? await api.patchApplication(application.applicationId, payload)
-					: await api
-							.setApplicationStatus(
-								application.applicationId,
-								applicationValues.applicationStatus,
-							)
-							.then(() =>
-								api.patchApplication(application.applicationId, payload),
-							);
-			onApplicationUpdated(updatedApplication);
-			setMode("view");
-			void revalidator.revalidate();
-		} catch (error) {
-			setApplicationServerError(
-				error instanceof ApiError
-					? error.message
-					: "Could not update the application.",
-			);
-		} finally {
-			setIsSubmittingApplication(false);
-		}
-	};
-
-	const handleDeleteApplication = async () => {
-		const confirmed = window.confirm(
-			"Delete this application? This action cannot be undone.",
-		);
-		if (!confirmed) return;
-
-		setIsDeletingApplication(true);
-		setApplicationServerError(null);
-
-		try {
-			await api.deleteApplication(application.applicationId);
-			onApplicationDeleted(application.applicationId);
-			void revalidator.revalidate();
-		} catch (error) {
-			setApplicationServerError(
-				error instanceof ApiError
-					? error.message
-					: "Could not delete the application.",
-			);
-		} finally {
-			setIsDeletingApplication(false);
-		}
 	};
 
 	const toggleSelectedTag = (tagId: number) => {
@@ -474,123 +375,47 @@ export function PostulationDetailDrawer({
 			}
 			return nextTagIds;
 		});
-		setTagError(null);
 	};
 
-	const handleUpdateTags = async () => {
-		setIsSubmittingTags(true);
-		setTagError(null);
-
-		const currentTagIds = new Set(application.tags.map((tag) => tag.tagId));
-		const addTagIds = Array.from(selectedTagIds).filter(
-			(tagId) => !currentTagIds.has(tagId),
+	const handleDeleteApplication = () => {
+		const confirmed = window.confirm(
+			"Delete this application? This action cannot be undone.",
 		);
-		const removeTagIds = Array.from(currentTagIds).filter(
-			(tagId) => !selectedTagIds.has(tagId),
-		);
+		if (!confirmed) return;
 
-		try {
-			const updatedApplication = await api.patchApplication(
-				application.applicationId,
-				{ addTagIds, removeTagIds },
-			);
-			onApplicationUpdated(updatedApplication);
-			setMode("view");
-			void revalidator.revalidate();
-		} catch (error) {
-			setTagError(
-				error instanceof ApiError
-					? error.message
-					: "Could not update tags.",
-			);
-		} finally {
-			setIsSubmittingTags(false);
-		}
+		const formData = new FormData();
+		formData.set("intent", "deleteApplication");
+		void deleteApplicationFetcher.submit(formData, { method: "post" });
 	};
 
-	const handleCreateInterview = async (event: FormEvent<HTMLFormElement>) => {
-		event.preventDefault();
-
-		if (!formValues.interviewScheduledAt) {
-			setFormError("Enter the interview date.");
-			return;
-		}
-
-		const payload: InterviewCreateRequest = {
-			interviewType: formValues.interviewType,
-			interviewScheduledAt: toOffsetDateTimeFromLocal(
-				formValues.interviewScheduledAt,
-			),
-			interviewLocation: toNullableString(formValues.interviewLocation),
-			interviewNotes: toNullableString(formValues.interviewNotes),
-		};
-
-		setIsSubmittingInterview(true);
-		setFormError(null);
-
-		try {
-			const createdInterview = await api.createInterview(
-				application.applicationId,
-				payload,
-			);
-			setInterviews((currentInterviews) =>
-				[...currentInterviews, createdInterview].toSorted(
-					(a, b) =>
-						new Date(a.interviewScheduledAt).getTime() -
-						new Date(b.interviewScheduledAt).getTime(),
-				),
-			);
-			setFormValues(initialInterviewValues());
-			setIsAddFormOpen(false);
-		} catch (error) {
-			setFormError(
-				error instanceof ApiError
-					? error.message
-					: "Could not create the interview.",
-			);
-		} finally {
-			setIsSubmittingInterview(false);
-		}
-	};
-
-	const handleDeleteInterview = async (interview: Interview) => {
+	const handleDeleteInterview = (interviewId: number) => {
 		const confirmed = window.confirm(
 			"Delete this interview? This action cannot be undone.",
 		);
 		if (!confirmed) return;
 
-		setDeletingInterviewId(interview.interviewId);
-		setInterviewError(null);
-
-		try {
-			await api.deleteInterview(application.applicationId, interview.interviewId);
-			setInterviews((currentInterviews) =>
-				currentInterviews.filter(
-					(currentInterview) =>
-						currentInterview.interviewId !== interview.interviewId,
-				),
-			);
-		} catch (error) {
-			setInterviewError(
-				error instanceof ApiError
-					? error.message
-					: "Could not delete the interview.",
-			);
-		} finally {
-			setDeletingInterviewId(null);
-		}
+		const formData = new FormData();
+		formData.set("intent", "deleteInterview");
+		formData.set("interviewId", String(interviewId));
+		setDeletingInterviewId(interviewId);
+		void deleteInterviewFetcher.submit(formData, { method: "post" });
 	};
 
 	return (
-		<Dialog open={open} onOpenChange={onOpenChange}>
+		<Dialog
+			open
+			onOpenChange={(open) => {
+				if (!open) navigate("/", { replace: true });
+			}}
+		>
 			<DialogContent className="max-h-[90vh] max-w-3xl overflow-y-auto">
 				<div className="flex items-start justify-between gap-4">
 					<div className="min-w-0">
 						<DialogTitle className="font-display text-2xl">
-							{application.applicationTitle}
+							{currentApplication.applicationTitle}
 						</DialogTitle>
 						<p className="mt-1 text-sm text-medium-gray">
-							{application.company.companyName}
+							{currentApplication.company.companyName}
 						</p>
 					</div>
 				</div>
@@ -608,7 +433,7 @@ export function PostulationDetailDrawer({
 							>
 								{statusDisplay.label}
 							</span>
-							{application.tags.map((tag) => {
+							{currentApplication.tags.map((tag) => {
 								const tagColor = tag.tagColor ?? "#666666";
 
 								return (
@@ -628,30 +453,32 @@ export function PostulationDetailDrawer({
 						</div>
 
 						<div className="grid gap-3 sm:grid-cols-2">
-							<DetailBox label="Salary">{formatSalaryRange(application)}</DetailBox>
+							<DetailBox label="Salary">
+								{formatSalaryRange(currentApplication)}
+							</DetailBox>
 							<DetailBox label="Location">
-								{application.applicationLocation ?? "Not specified"}
+								{currentApplication.applicationLocation ?? "Not specified"}
 							</DetailBox>
 							<DetailBox label="Work mode">
-								{application.applicationRemoteType
-									? getRemoteTypeLabel(application.applicationRemoteType)
+								{currentApplication.applicationRemoteType
+									? getRemoteTypeLabel(currentApplication.applicationRemoteType)
 									: "Not specified"}
 							</DetailBox>
 							<DetailBox label="Source">
-								{application.applicationSource ?? "Not specified"}
+								{currentApplication.applicationSource ?? "Not specified"}
 							</DetailBox>
 							<DetailBox label="Applied date">
-								{formatDate(application.applicationAppliedAt)}
+								{formatDate(currentApplication.applicationAppliedAt)}
 							</DetailBox>
 							<DetailBox label="URL">
-								{application.applicationJobUrl ? (
+								{currentApplication.applicationJobUrl ? (
 									<a
-										href={application.applicationJobUrl}
+										href={currentApplication.applicationJobUrl}
 										target="_blank"
 										rel="noreferrer"
 										className="truncate text-darkest-accent underline"
 									>
-										{application.applicationJobUrl}
+										{currentApplication.applicationJobUrl}
 									</a>
 								) : (
 									"Not specified"
@@ -663,7 +490,11 @@ export function PostulationDetailDrawer({
 							<Button type="button" onClick={() => setMode("edit")}>
 								<Pencil /> Edit
 							</Button>
-							<Button type="button" variant="secondary" onClick={() => setMode("tags")}>
+							<Button
+								type="button"
+								variant="secondary"
+								onClick={() => setMode("tags")}
+							>
 								<Tags /> Tags
 							</Button>
 							<Button
@@ -700,10 +531,16 @@ export function PostulationDetailDrawer({
 							</div>
 
 							{isAddFormOpen && (
-								<form
+								<interviewFetcher.Form
+									method="post"
 									className="grid gap-3 rounded-md border border-light-gray bg-off-white p-3"
-									onSubmit={handleCreateInterview}
 								>
+									<input type="hidden" name="intent" value="createInterview" />
+									<input
+										type="hidden"
+										name="interviewType"
+										value={formValues.interviewType}
+									/>
 									<div className="grid gap-3 sm:grid-cols-2">
 										<FormField name="interviewType">
 											<FormLabel>Type</FormLabel>
@@ -736,6 +573,7 @@ export function PostulationDetailDrawer({
 											<FormLabel>Date</FormLabel>
 											<FormControl asChild>
 												<Input
+													name="interviewScheduledAt"
 													type="datetime-local"
 													value={formValues.interviewScheduledAt}
 													onChange={(event) =>
@@ -753,6 +591,7 @@ export function PostulationDetailDrawer({
 										<FormLabel>Location</FormLabel>
 										<FormControl asChild>
 											<Input
+												name="interviewLocation"
 												value={formValues.interviewLocation}
 												onChange={(event) =>
 													updateFormValue(
@@ -769,6 +608,7 @@ export function PostulationDetailDrawer({
 										<FormLabel>Notes</FormLabel>
 										<FormControl asChild>
 											<Textarea
+												name="interviewNotes"
 												value={formValues.interviewNotes}
 												onChange={(event) =>
 													updateFormValue("interviewNotes", event.target.value)
@@ -794,18 +634,15 @@ export function PostulationDetailDrawer({
 											Create
 										</Button>
 									</div>
-								</form>
+								</interviewFetcher.Form>
 							)}
 
-							{isLoadingInterviews && (
-								<p className="text-sm text-medium-gray">Loading interviews...</p>
-							)}
 							{interviewError && (
 								<p className="rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive">
 									{interviewError}
 								</p>
 							)}
-							{!isLoadingInterviews && interviews.length === 0 && (
+							{interviews.length === 0 && (
 								<p className="text-sm text-medium-gray">No interviews recorded.</p>
 							)}
 							<div className="grid gap-2">
@@ -830,7 +667,9 @@ export function PostulationDetailDrawer({
 													</p>
 												)}
 												{interview.interviewNotes && (
-													<p className="mt-1 text-sm">{interview.interviewNotes}</p>
+													<p className="mt-1 text-sm">
+														{interview.interviewNotes}
+													</p>
 												)}
 											</div>
 											<div className="flex shrink-0 items-center gap-2">
@@ -843,11 +682,15 @@ export function PostulationDetailDrawer({
 													type="button"
 													variant="ghost"
 													size="icon"
-													onClick={() => void handleDeleteInterview(interview)}
-													disabled={deletingInterviewId === interview.interviewId}
+													onClick={() => handleDeleteInterview(interview.interviewId)}
+													disabled={
+														isDeletingInterview &&
+														deletingInterviewId === interview.interviewId
+													}
 													aria-label="Delete interview"
 												>
-													{deletingInterviewId === interview.interviewId ? (
+													{isDeletingInterview &&
+													deletingInterviewId === interview.interviewId ? (
 														<Loader2 className="animate-spin" />
 													) : (
 														<Trash2 />
@@ -863,7 +706,28 @@ export function PostulationDetailDrawer({
 				)}
 
 				{mode === "edit" && (
-					<div className="grid gap-4">
+					<applicationFetcher.Form method="post" className="grid gap-4">
+						<input type="hidden" name="intent" value="updateApplication" />
+						<input
+							type="hidden"
+							name="applicationStatus"
+							value={applicationValues.applicationStatus}
+						/>
+						<input
+							type="hidden"
+							name="applicationRemoteType"
+							value={applicationValues.applicationRemoteType}
+						/>
+						<input
+							type="hidden"
+							name="previousStatus"
+							value={currentApplication.applicationStatus}
+						/>
+						<input
+							type="hidden"
+							name="applicationKanbanOrder"
+							value={nextApplicationKanbanOrder}
+						/>
 						<div className="grid gap-4 sm:grid-cols-2">
 							<FormField name="applicationStatus">
 								<FormLabel>Status</FormLabel>
@@ -888,11 +752,17 @@ export function PostulationDetailDrawer({
 										))}
 									</SelectContent>
 								</Select>
+								{applicationFieldErrors?.applicationStatus && (
+									<FormMessage>
+										{applicationFieldErrors.applicationStatus}
+									</FormMessage>
+								)}
 							</FormField>
 							<FormField name="applicationAppliedAt">
 								<FormLabel>Applied date</FormLabel>
 								<FormControl asChild>
 									<Input
+										name="applicationAppliedAt"
 										type="date"
 										value={applicationValues.applicationAppliedAt}
 										onChange={(event) =>
@@ -904,6 +774,11 @@ export function PostulationDetailDrawer({
 										disabled={isSubmittingApplication}
 									/>
 								</FormControl>
+								{applicationFieldErrors?.applicationAppliedAt && (
+									<FormMessage>
+										{applicationFieldErrors.applicationAppliedAt}
+									</FormMessage>
+								)}
 							</FormField>
 						</div>
 
@@ -911,6 +786,7 @@ export function PostulationDetailDrawer({
 							<FormLabel>Job title</FormLabel>
 							<FormControl asChild>
 								<Input
+									name="applicationTitle"
 									value={applicationValues.applicationTitle}
 									onChange={(event) =>
 										updateApplicationValue(
@@ -918,13 +794,17 @@ export function PostulationDetailDrawer({
 											event.target.value,
 										)
 									}
-									aria-invalid={Boolean(applicationErrors.applicationTitle)}
+									aria-invalid={Boolean(
+										applicationFieldErrors?.applicationTitle,
+									)}
 									disabled={isSubmittingApplication}
 									maxLength={255}
 								/>
 							</FormControl>
-							{applicationErrors.applicationTitle && (
-								<FormMessage>{applicationErrors.applicationTitle}</FormMessage>
+							{applicationFieldErrors?.applicationTitle && (
+								<FormMessage>
+									{applicationFieldErrors.applicationTitle}
+								</FormMessage>
 							)}
 						</FormField>
 
@@ -933,6 +813,7 @@ export function PostulationDetailDrawer({
 								<FormLabel>Minimum salary</FormLabel>
 								<FormControl asChild>
 									<Input
+										name="applicationSalaryMin"
 										type="number"
 										value={applicationValues.applicationSalaryMin}
 										onChange={(event) =>
@@ -946,9 +827,9 @@ export function PostulationDetailDrawer({
 										step="0.01"
 									/>
 								</FormControl>
-								{applicationErrors.applicationSalaryMin && (
+								{applicationFieldErrors?.applicationSalaryMin && (
 									<FormMessage>
-										{applicationErrors.applicationSalaryMin}
+										{applicationFieldErrors.applicationSalaryMin}
 									</FormMessage>
 								)}
 							</FormField>
@@ -956,6 +837,7 @@ export function PostulationDetailDrawer({
 								<FormLabel>Maximum salary</FormLabel>
 								<FormControl asChild>
 									<Input
+										name="applicationSalaryMax"
 										type="number"
 										value={applicationValues.applicationSalaryMax}
 										onChange={(event) =>
@@ -969,9 +851,9 @@ export function PostulationDetailDrawer({
 										step="0.01"
 									/>
 								</FormControl>
-								{applicationErrors.applicationSalaryMax && (
+								{applicationFieldErrors?.applicationSalaryMax && (
 									<FormMessage>
-										{applicationErrors.applicationSalaryMax}
+										{applicationFieldErrors.applicationSalaryMax}
 									</FormMessage>
 								)}
 							</FormField>
@@ -979,6 +861,7 @@ export function PostulationDetailDrawer({
 								<FormLabel>Currency</FormLabel>
 								<FormControl asChild>
 									<Input
+										name="applicationCurrency"
 										value={applicationValues.applicationCurrency}
 										onChange={(event) =>
 											updateApplicationValue(
@@ -990,9 +873,9 @@ export function PostulationDetailDrawer({
 										maxLength={3}
 									/>
 								</FormControl>
-								{applicationErrors.applicationCurrency && (
+								{applicationFieldErrors?.applicationCurrency && (
 									<FormMessage>
-										{applicationErrors.applicationCurrency}
+										{applicationFieldErrors.applicationCurrency}
 									</FormMessage>
 								)}
 							</FormField>
@@ -1003,6 +886,7 @@ export function PostulationDetailDrawer({
 								<FormLabel>Location</FormLabel>
 								<FormControl asChild>
 									<Input
+										name="applicationLocation"
 										value={applicationValues.applicationLocation}
 										onChange={(event) =>
 											updateApplicationValue(
@@ -1046,6 +930,7 @@ export function PostulationDetailDrawer({
 							<FormLabel>Job URL</FormLabel>
 							<FormControl asChild>
 								<Input
+									name="applicationJobUrl"
 									type="url"
 									value={applicationValues.applicationJobUrl}
 									onChange={(event) =>
@@ -1064,6 +949,7 @@ export function PostulationDetailDrawer({
 							<FormLabel>Source</FormLabel>
 							<FormControl asChild>
 								<Input
+									name="applicationSource"
 									value={applicationValues.applicationSource}
 									onChange={(event) =>
 										updateApplicationValue(
@@ -1092,22 +978,27 @@ export function PostulationDetailDrawer({
 							>
 								Cancel
 							</Button>
-							<Button
-								type="button"
-								onClick={handleUpdateApplication}
-								disabled={isSubmittingApplication}
-							>
+							<Button type="submit" disabled={isSubmittingApplication}>
 								{isSubmittingApplication && (
 									<Loader2 className="animate-spin" />
 								)}
 								Save
 							</Button>
 						</div>
-					</div>
+					</applicationFetcher.Form>
 				)}
 
 				{mode === "tags" && (
-					<div className="grid gap-4">
+					<tagFetcher.Form method="post" className="grid gap-4">
+						<input type="hidden" name="intent" value="updateTags" />
+						{Array.from(selectedTagIds).map((tagId) => (
+							<input
+								key={tagId}
+								type="hidden"
+								name="tagIds"
+								value={tagId}
+							/>
+						))}
 						<div className="grid max-h-80 gap-2 overflow-y-auto rounded-md border border-light-gray p-3">
 							{allTags.map((tag) => {
 								const checkboxId = `tag-${tag.tagId}`;
@@ -1157,17 +1048,43 @@ export function PostulationDetailDrawer({
 							>
 								Cancel
 							</Button>
-							<Button
-								type="button"
-								onClick={handleUpdateTags}
-								disabled={isSubmittingTags}
-							>
+							<Button type="submit" disabled={isSubmittingTags}>
 								{isSubmittingTags && <Loader2 className="animate-spin" />}
 								Save tags
 							</Button>
 						</div>
-					</div>
+					</tagFetcher.Form>
 				)}
+			</DialogContent>
+		</Dialog>
+	);
+}
+
+export function ApplicationDetailErrorBoundary() {
+	const error = useRouteError();
+	const status = isRouteErrorResponse(error) ? error.status : 500;
+	const message = isRouteErrorResponse(error)
+		? error.statusText || error.data
+		: error instanceof Error
+			? error.message
+			: "Unexpected error";
+	const title =
+		status === 404
+			? "Application not found"
+			: status === 400
+				? "Invalid application"
+				: "Could not load application";
+
+	return (
+		<Dialog open onOpenChange={() => undefined}>
+			<DialogContent className="max-w-md">
+				<DialogTitle>{title}</DialogTitle>
+				<p className="text-sm text-medium-gray">{message}</p>
+				<Button asChild className="justify-self-start">
+					<Link to="/" replace>
+						Return to board
+					</Link>
+				</Button>
 			</DialogContent>
 		</Dialog>
 	);

@@ -1,9 +1,11 @@
 import { CollisionPriority } from "@dnd-kit/abstract";
 import { useDroppable } from "@dnd-kit/react";
 import { Plus } from "lucide-react";
+import { memo } from "react";
 
 import { CreatePostulationDialog } from "@/components/postulations/CreatePostulationDialog";
 import { Button } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
 import type { Application, ApplicationStatus } from "@/types/application";
 import type { Company } from "@/types/company";
 import { PostulationCard } from "./PostulationCard";
@@ -17,17 +19,15 @@ interface StatusColumnProps {
 	applications: Application[];
 	companies: Company[];
 	allApplications: Application[];
-	onOpenDetails: (application: Application) => void;
 }
 
-export function StatusColumn({
+export const StatusColumn = memo(function StatusColumn({
 	status,
 	applications,
 	companies,
 	allApplications,
-	onOpenDetails,
 }: StatusColumnProps) {
-	const { ref } = useDroppable({
+	const { ref, isDropTarget } = useDroppable({
 		id: status.value,
 		type: "column",
 		accept: "item",
@@ -37,9 +37,14 @@ export function StatusColumn({
 	return (
 		<div
 			ref={ref}
-			className="h-[85vh] w-72 overflow-y-hidden rounded-lg border border-light-gray bg-off-white p-4 shadow-cool-light"
+			data-drop-target={isDropTarget}
+			className={cn(
+				"flex h-[85vh] min-w-80 flex-col overflow-hidden rounded-lg border border-light-gray bg-off-white p-4 shadow-cool-light transition-[background-color,border-color,box-shadow] duration-150",
+				isDropTarget &&
+					"border-primary/50 bg-primary/5 shadow-lg ring-2 ring-primary/15",
+			)}
 		>
-			<div className="mb-2 flex items-center justify-between">
+			<div className="mb-2 flex shrink-0 items-center justify-between">
 				<div className="flex items-center justify-start gap-x-2">
 					<div
 						className="h-2 w-2 rounded-full"
@@ -64,17 +69,16 @@ export function StatusColumn({
 				/>
 			</div>
 
-			<div className="scrollbar-hide flex max-h-full flex-col gap-y-2 overflow-y-scroll pb-10">
+			<div className="scrollbar-hide flex min-h-0 flex-1 flex-col gap-y-2 overflow-y-auto pb-10 pt-1">
 				{applications.map((application, index) => (
 					<PostulationCard
 						key={application.applicationId}
 						index={index}
 						status={status.value}
 						application={application}
-						onOpenDetails={onOpenDetails}
 					/>
 				))}
 			</div>
 		</div>
 	);
-}
+});
