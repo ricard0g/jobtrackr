@@ -182,3 +182,14 @@ Before finishing a change, verify:
 * No Framework Mode-only files or APIs were introduced.
 * No unnecessary `useEffect` fetching was added.
 * TypeScript remains strict and avoids `any`.
+
+## ngrok Dev Tunnel (Phone Testing)
+
+When a user wants to preview the frontend on a phone through ngrok with the mock API, follow **`docs/cloud-agent/ngrok-dev.md`**.
+
+Summary:
+
+* `env VITE_API_MOCKING=true npm run dev` (no `--host 127.0.0.1`)
+* `ngrok http localhost:5173` (not `127.0.0.1:5173`)
+* Requires `server.allowedHosts: [".ngrok-free.app", ".ngrok.app"]` in `vite.config.ts` and same-origin API paths in mock mode (`src/lib/api-config.ts`)
+* User needs an ngrok authtoken; on phone they must tap **Visit Site** on the ngrok warning page first
