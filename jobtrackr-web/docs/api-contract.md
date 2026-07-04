@@ -44,7 +44,9 @@ Base path: `/api/v1/companies`
 | PUT | `/{companyId}` | `CompanyPutRequestDto` | `CompanyResponseDto` | Missing |
 | DELETE | `/{companyId}` | none | `204` | Missing |
 
-Company names must be unique per user. Deleting a company with applications returns conflict code `COMPANY_HAS_APPLICATIONS`.
+Company names must be unique per user and cannot duplicate a global company name. Deleting a company with applications returns conflict code `COMPANY_HAS_APPLICATIONS`.
+
+`GET /companies` returns global pre-seeded companies plus user-owned companies. Global companies are readable and attachable to applications but cannot be updated or deleted (404). Applications may reference global `companyId` values.
 
 ## Tags
 

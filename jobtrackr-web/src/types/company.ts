@@ -1,6 +1,7 @@
 export interface Company {
 	companyId: number;
-	userId: string;
+	userId: string | null;
+	global: boolean;
 	companyName: string;
 	companyWebsiteUrl: string | null;
 	companyLocation: string | null;

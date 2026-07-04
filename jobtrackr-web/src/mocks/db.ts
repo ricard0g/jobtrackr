@@ -1,4 +1,5 @@
 import type { Application } from "@/types/application";
+import type { Company } from "@/types/company";
 import type { Tag } from "@/types/tag";
 import { createSeedState } from "@/mocks/seed";
 import type {
@@ -7,14 +8,15 @@ import type {
 	MockState,
 } from "@/mocks/types";
 
-const STORAGE_KEY = "jobtrackr:mock-state:v1";
+const STORAGE_KEY = "jobtrackr:mock-state:v2";
 const DEFAULT_TAG_COLOR = "#808080";
+const HUNTER_LOGO_BASE_URL = "https://logos.hunter.io/";
 
 const isMockState = (value: unknown): value is MockState =>
 	typeof value === "object" &&
 	value !== null &&
 	"version" in value &&
-	(value as { version?: unknown }).version === 1;
+	(value as { version?: unknown }).version === 2;
 
 export const loadState = (): MockState => {
 	const rawValue = window.localStorage.getItem(STORAGE_KEY);
@@ -68,6 +70,26 @@ export const normalizeTagColor = (value: string | null | undefined) => {
 	return normalizedValue ?? DEFAULT_TAG_COLOR;
 };
 
+export const hunterLogoUrlFromWebsite = (websiteUrl: string | null | undefined) => {
+	const normalizedWebsite = normalizeOptional(websiteUrl);
+	if (!normalizedWebsite) return null;
+	const normalizedUrl = normalizedWebsite.includes("://")
+		? normalizedWebsite
+		: `https://${normalizedWebsite}`;
+	try {
+		const host = new URL(normalizedUrl).hostname;
+		const domain = host.startsWith("www.") ? host.slice(4) : host;
+		return domain ? `${HUNTER_LOGO_BASE_URL}${domain}` : null;
+	} catch {
+		return null;
+	}
+};
+
+export const resolveCompanyLogo = (
+	companyLogo: string | null | undefined,
+	companyWebsiteUrl: string | null | undefined,
+) => normalizeOptional(companyLogo) ?? hunterLogoUrlFromWebsite(companyWebsiteUrl);
+
 export const toApplication = (
 	state: MockState,
 	record: MockApplicationRecord,
@@ -94,6 +116,34 @@ export const toApplication = (
 		tags,
 	};
 };
+
+export const isUserOwnedCompany = (company: Company, userId: string) =>
+	!company.global && company.userId === userId;
+
+export const getAccessibleCompanies = (state: MockState, userId: string): Company[] =>
+	state.companies
+		.filter((company) => company.global || isUserOwnedCompany(company, userId))
+		.toSorted((left, right) => left.companyName.localeCompare(right.companyName));
+
+export const findAccessibleCompany = (
+	state: MockState,
+	userId: string,
+	companyId: number,
+) =>
+	state.companies.find(
+		(company) =>
+			company.companyId === companyId &&
+			(company.global || isUserOwnedCompany(company, userId)),
+	);
+
+export const findOwnedCompany = (
+	state: MockState,
+	userId: string,
+	companyId: number,
+) =>
+	state.companies.find(
+		(company) => company.companyId === companyId && isUserOwnedCompany(company, userId),
+	);
 
 export const getAccessibleTags = (state: MockState, userId: string): Tag[] =>
 	state.tags

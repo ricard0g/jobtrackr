@@ -73,6 +73,7 @@ Applications:
 Companies:
 
 - Add company CRUD UI.
+- Handle `global` on `Company` responses; block edit/delete for global companies.
 - Add inline company creation from application create.
 - Surface delete conflict when company has applications.
 

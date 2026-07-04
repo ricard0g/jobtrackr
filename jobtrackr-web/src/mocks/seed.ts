@@ -6,7 +6,7 @@ const baseCreatedAt = "2026-06-24T09:00:00.000Z";
 const baseUpdatedAt = "2026-07-01T12:00:00.000Z";
 
 export const createSeedState = (): MockState => ({
-	version: 1,
+	version: 2,
 	csrfToken: "mock-csrf-token",
 	activeRefreshToken: null,
 	users: [
@@ -35,7 +35,44 @@ export const createSeedState = (): MockState => ({
 	companies: [
 		{
 			companyId: 1,
+			userId: null,
+			global: true,
+			companyName: "Google",
+			companyWebsiteUrl: "https://www.google.com",
+			companyLocation: "Mountain View, CA",
+			companyType: "Enterprise",
+			companyLogo: "https://logos.hunter.io/google.com",
+			companyCreatedAt: baseCreatedAt,
+			companyUpdatedAt: baseUpdatedAt,
+		},
+		{
+			companyId: 2,
+			userId: null,
+			global: true,
+			companyName: "Stripe",
+			companyWebsiteUrl: "https://www.stripe.com",
+			companyLocation: "San Francisco, CA",
+			companyType: "Fintech",
+			companyLogo: "https://logos.hunter.io/stripe.com",
+			companyCreatedAt: baseCreatedAt,
+			companyUpdatedAt: baseUpdatedAt,
+		},
+		{
+			companyId: 3,
+			userId: null,
+			global: true,
+			companyName: "Microsoft",
+			companyWebsiteUrl: "https://www.microsoft.com",
+			companyLocation: "Redmond, WA",
+			companyType: "Enterprise",
+			companyLogo: "https://logos.hunter.io/microsoft.com",
+			companyCreatedAt: baseCreatedAt,
+			companyUpdatedAt: baseUpdatedAt,
+		},
+		{
+			companyId: 4,
 			userId: demoUserId,
+			global: false,
 			companyName: "Northstar Labs",
 			companyWebsiteUrl: "https://northstar.example",
 			companyLocation: "Madrid, Spain",
@@ -45,8 +82,9 @@ export const createSeedState = (): MockState => ({
 			companyUpdatedAt: baseUpdatedAt,
 		},
 		{
-			companyId: 2,
+			companyId: 5,
 			userId: demoUserId,
+			global: false,
 			companyName: "Cobalt Systems",
 			companyWebsiteUrl: "https://cobalt.example",
 			companyLocation: "Remote",
@@ -56,8 +94,9 @@ export const createSeedState = (): MockState => ({
 			companyUpdatedAt: baseUpdatedAt,
 		},
 		{
-			companyId: 3,
+			companyId: 6,
 			userId: demoUserId,
+			global: false,
 			companyName: "Atlas Cloud",
 			companyWebsiteUrl: "https://atlas.example",
 			companyLocation: "Barcelona, Spain",
@@ -102,7 +141,7 @@ export const createSeedState = (): MockState => ({
 		{
 			applicationId: 1,
 			userId: demoUserId,
-			companyId: 1,
+			companyId: 4,
 			tagIds: [1, 4],
 			applicationTitle: "Frontend Engineer",
 			applicationJobUrl: "https://northstar.example/jobs/frontend-engineer",
@@ -121,7 +160,7 @@ export const createSeedState = (): MockState => ({
 		{
 			applicationId: 2,
 			userId: demoUserId,
-			companyId: 2,
+			companyId: 5,
 			tagIds: [1, 3],
 			applicationTitle: "Full Stack Developer",
 			applicationJobUrl: null,
@@ -140,7 +179,7 @@ export const createSeedState = (): MockState => ({
 		{
 			applicationId: 3,
 			userId: demoUserId,
-			companyId: 3,
+			companyId: 6,
 			tagIds: [2],
 			applicationTitle: "Backend Engineer",
 			applicationJobUrl: "https://atlas.example/careers/backend",
@@ -193,7 +232,7 @@ export const createSeedState = (): MockState => ({
 	],
 	counters: {
 		applicationId: 4,
-		companyId: 4,
+		companyId: 7,
 		interviewId: 3,
 		statusHistoryId: 2,
 		tagId: 5,

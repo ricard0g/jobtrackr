@@ -46,14 +46,18 @@ Fields:
 
 Backend conflicts:
 
-- Duplicate company name per user returns `DUPLICATE_COMPANY_NAME`.
+- Duplicate company name per user or against a global company returns `DUPLICATE_COMPANY_NAME`.
 - Delete with existing applications returns `COMPANY_HAS_APPLICATIONS`.
+- Global companies can be selected for applications but not edited or deleted.
+
+Logo URL is optional on create. If omitted but website URL is present, the backend derives `https://logos.hunter.io/<domain>`.
 
 Suggested UI workflows:
 
 - Company management page or drawer.
 - Inline "Create company" from application create form, because applications require a company.
 - Disable or explain delete when company has applications.
+- Disable edit/delete controls for global companies.
 
 ## Tag Forms
 

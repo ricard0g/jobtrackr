@@ -33,7 +33,7 @@ export type MockCounters = {
 };
 
 export type MockState = {
-	version: 1;
+	version: 2;
 	csrfToken: string;
 	activeRefreshToken: string | null;
 	users: User[];

@@ -102,7 +102,7 @@ Kanban:
 
 Application create:
 
-- Dialog uses loaded companies.
+- Dialog uses loaded companies from `GET /companies`, which includes global pre-seeded companies plus user-owned companies.
 - It does not allow creating a company inline.
 - It computes `applicationKanbanOrder` as the count of applications in the selected status.
 - It supports title, status, company, salary range, currency, location, remote type, URL, source, and applied date.

@@ -3,7 +3,10 @@ import { HttpResponse, http } from "msw";
 import { API_BASE_URL, AUTH_BASE_URL } from "@/lib/api-config";
 import {
 	createOwnedTag,
+	findAccessibleCompany,
 	findAccessibleTag,
+	findOwnedCompany,
+	getAccessibleCompanies,
 	getAccessibleTags,
 	loadState,
 	nextId,
@@ -12,6 +15,7 @@ import {
 	normalizeTagColor,
 	nowIso,
 	resolveAccessibleTagIds,
+	resolveCompanyLogo,
 	saveState,
 	statefulTagOwnerId,
 	toApplication,
@@ -113,8 +117,8 @@ const companyNameExists = (
 ) =>
 	state.companies.some(
 		(company) =>
-			company.userId === userId &&
 			company.companyId !== ignoredCompanyId &&
+			(company.global || company.userId === userId) &&
 			company.companyName.toLowerCase() === companyName.toLowerCase(),
 	);
 
@@ -146,15 +150,22 @@ const validateSalaryRange = (
 		: null;
 };
 
-const requireCompanyForUser = (
+const requireAccessibleCompany = (
 	state: MockState,
 	userId: string,
 	companyId: number | null | undefined,
 ) => {
 	if (!companyId) return null;
-	return state.companies.find(
-		(company) => company.companyId === companyId && company.userId === userId,
-	);
+	return findAccessibleCompany(state, userId, companyId);
+};
+
+const requireOwnedCompany = (
+	state: MockState,
+	userId: string,
+	companyId: number | null | undefined,
+) => {
+	if (!companyId) return null;
+	return findOwnedCompany(state, userId, companyId);
 };
 
 const requireApplicationForUser = (
@@ -348,9 +359,7 @@ export const handlers = [
 		const state = loadState();
 		const auth = requireAuth(request, state);
 		if (auth instanceof Response) return auth;
-		return HttpResponse.json(
-			state.companies.filter((company) => company.userId === auth.user.userId),
-		);
+		return HttpResponse.json(getAccessibleCompanies(state, auth.user.userId));
 	}),
 
 	http.get(`${API_BASE_URL}/companies/:companyId`, ({ request, params }) => {
@@ -358,7 +367,7 @@ export const handlers = [
 		const auth = requireAuth(request, state);
 		if (auth instanceof Response) return auth;
 		const companyId = getPositiveId(params, "companyId");
-		const company = requireCompanyForUser(state, auth.user.userId, companyId);
+		const company = requireAccessibleCompany(state, auth.user.userId, companyId);
 		if (!company) {
 			return errorJson(
 				404,
@@ -386,15 +395,17 @@ export const handlers = [
 			);
 		}
 
+		const companyWebsiteUrl = normalizeOptional(body.companyWebsiteUrl);
 		const timestamp = nowIso();
 		const company = {
 			companyId: nextId(state, "companyId"),
 			userId: auth.user.userId,
+			global: false,
 			companyName,
-			companyWebsiteUrl: normalizeOptional(body.companyWebsiteUrl),
+			companyWebsiteUrl,
 			companyLocation: normalizeOptional(body.companyLocation),
 			companyType: normalizeOptional(body.companyType),
-			companyLogo: normalizeOptional(body.companyLogo),
+			companyLogo: resolveCompanyLogo(body.companyLogo, companyWebsiteUrl),
 			companyCreatedAt: timestamp,
 			companyUpdatedAt: timestamp,
 		};
@@ -408,7 +419,7 @@ export const handlers = [
 		const auth = requireAuth(request, state);
 		if (auth instanceof Response) return auth;
 		const companyId = getPositiveId(params, "companyId");
-		const company = requireCompanyForUser(state, auth.user.userId, companyId);
+		const company = requireOwnedCompany(state, auth.user.userId, companyId);
 		if (!company) return errorJson(404, "COMPANY_NOT_FOUND", "Company not found");
 		const body = await readJson<CompanyWriteRequest>(request);
 		const validationResponse = validateCompanyRequest(body);
@@ -423,11 +434,12 @@ export const handlers = [
 			);
 		}
 
+		const companyWebsiteUrl = normalizeOptional(body.companyWebsiteUrl);
 		company.companyName = companyName;
-		company.companyWebsiteUrl = normalizeOptional(body.companyWebsiteUrl);
+		company.companyWebsiteUrl = companyWebsiteUrl;
 		company.companyLocation = normalizeOptional(body.companyLocation);
 		company.companyType = normalizeOptional(body.companyType);
-		company.companyLogo = normalizeOptional(body.companyLogo);
+		company.companyLogo = resolveCompanyLogo(body.companyLogo, companyWebsiteUrl);
 		company.companyUpdatedAt = nowIso();
 		saveState(state);
 		return HttpResponse.json(company);
@@ -438,7 +450,7 @@ export const handlers = [
 		const auth = requireAuth(request, state);
 		if (auth instanceof Response) return auth;
 		const companyId = getPositiveId(params, "companyId");
-		const company = requireCompanyForUser(state, auth.user.userId, companyId);
+		const company = requireOwnedCompany(state, auth.user.userId, companyId);
 		if (!company) return errorJson(404, "COMPANY_NOT_FOUND", "Company not found");
 		if (
 			state.applications.some(
@@ -590,7 +602,7 @@ export const handlers = [
 		const auth = requireAuth(request, state);
 		if (auth instanceof Response) return auth;
 		const body = await readJson<ApplicationCreateRequest>(request);
-		const company = requireCompanyForUser(state, auth.user.userId, body.companyId);
+		const company = requireAccessibleCompany(state, auth.user.userId, body.companyId);
 		if (!company) return errorJson(404, "COMPANY_NOT_FOUND", "Company not found");
 		if (!body.applicationTitle?.trim() || !isApplicationStatus(body.applicationStatus)) {
 			return validationError([
@@ -649,7 +661,7 @@ export const handlers = [
 		);
 		if (!application) return errorJson(404, "APPLICATION_NOT_FOUND", "Application not found");
 		const body = await readJson<ApplicationPutRequest>(request);
-		const company = requireCompanyForUser(state, auth.user.userId, body.companyId);
+		const company = requireAccessibleCompany(state, auth.user.userId, body.companyId);
 		if (!company) return errorJson(404, "COMPANY_NOT_FOUND", "Company not found");
 		if (!body.applicationTitle?.trim()) {
 			return validationError([
@@ -691,7 +703,7 @@ export const handlers = [
 		if (!application) return errorJson(404, "APPLICATION_NOT_FOUND", "Application not found");
 		const body = await readJson<ApplicationPatchRequest>(request);
 		if (body.companyId !== undefined && body.companyId !== null) {
-			const company = requireCompanyForUser(state, auth.user.userId, body.companyId);
+			const company = requireAccessibleCompany(state, auth.user.userId, body.companyId);
 			if (!company) return errorJson(404, "COMPANY_NOT_FOUND", "Company not found");
 			application.companyId = company.companyId;
 		}

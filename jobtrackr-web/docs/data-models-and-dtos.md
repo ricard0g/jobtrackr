@@ -85,7 +85,8 @@ Response DTO:
 ```ts
 type Company = {
   companyId: number;
-  userId: string;
+  userId: string | null;
+  global: boolean;
   companyName: string;
   companyWebsiteUrl: string | null;
   companyLocation: string | null;
@@ -110,9 +111,13 @@ type CompanyWriteRequest = {
 
 Service rules:
 
+- `GET /companies` returns global pre-seeded companies plus user-owned companies, sorted by name.
+- Global companies are readable and attachable to applications.
+- Global companies cannot be updated or deleted through user endpoints (404).
 - Company name is trimmed.
-- Company name must be unique per user.
+- Company name must be unique per user and cannot duplicate a global company name.
 - Blank optional strings are stored as `null`.
+- `companyLogo` is stored as a full image URL. Global companies use `https://logos.hunter.io/<domain>`. On user create, if logo is omitted but website URL is present, the backend derives the Hunter.io logo URL from the domain.
 - Company cannot be deleted while it has applications.
 
 ## Tag
