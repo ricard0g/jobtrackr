@@ -325,6 +325,30 @@ class CompanyControllerTest {
                 .andExpect(jsonPath("$.code").value("COMPANY_HAS_APPLICATIONS"));
     }
 
+    @Test
+    void getAllCompanies_whenGlobalCompany_returnsGlobalFlag() throws Exception {
+        // given
+        final CompanyResponseDto globalCompany = new CompanyResponseDto(
+                100L,
+                null,
+                "Google",
+                "https://www.google.com",
+                "Mountain View, CA",
+                "Enterprise",
+                "https://logos.hunter.io/google.com",
+                true,
+                TIMESTAMP,
+                TIMESTAMP);
+        when(companyService.getAllCompanies(USER_ID)).thenReturn(List.of(globalCompany));
+
+        // when / then
+        mockMvc.perform(get(BASE_PATH).principal(authenticatedUser()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[0].companyId").value(100))
+                .andExpect(jsonPath("$[0].global").value(true))
+                .andExpect(jsonPath("$[0].userId").doesNotExist());
+    }
+
     private static CompanyResponseDto sampleCompany(final Long companyId, final String companyName) {
         return sampleCompany(companyId, companyName, "https://example.com");
     }
@@ -339,6 +363,7 @@ class CompanyControllerTest {
                 "Madrid",
                 "Tech",
                 null,
+                false,
                 TIMESTAMP,
                 TIMESTAMP);
     }

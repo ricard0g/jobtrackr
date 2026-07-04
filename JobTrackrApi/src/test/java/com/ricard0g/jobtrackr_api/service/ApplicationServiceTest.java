@@ -17,6 +17,7 @@ import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
+import com.ricard0g.jobtrackr_api.dto.ApplicationDto.ApplicationCreateRequestDto;
 import com.ricard0g.jobtrackr_api.dto.ApplicationDto.ApplicationPatchRequestDto;
 import com.ricard0g.jobtrackr_api.dto.ApplicationDto.ApplicationPutRequestDto;
 import com.ricard0g.jobtrackr_api.dto.ApplicationDto.ApplicationStatusPatchRequestDto;
@@ -53,6 +54,42 @@ class ApplicationServiceTest {
 
     @InjectMocks
     private ApplicationService applicationService;
+
+    @Test
+    void createApplication_withGlobalCompany_usesAccessibleCompany() {
+        // given
+        final User user = mock(User.class);
+        final Company globalCompany = mock(Company.class);
+        when(userRepository.findById(USER_ID)).thenReturn(Optional.of(user));
+        when(companyRepository.findByCompanyIdAndAccessibleToUser(COMPANY_ID, USER_ID))
+                .thenReturn(Optional.of(globalCompany));
+        when(applicationRepository.save(any(Application.class))).thenAnswer(invocation -> {
+            final Application saved = invocation.getArgument(0);
+            saved.setApplicationId(APPLICATION_ID);
+            return saved;
+        });
+        final ApplicationCreateRequestDto dto = new ApplicationCreateRequestDto(
+                COMPANY_ID,
+                "Backend Engineer",
+                ApplicationStatus.APPLIED,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                0,
+                null,
+                null);
+
+        // when
+        applicationService.createApplication(USER_ID, dto);
+
+        // then
+        verify(companyRepository).findByCompanyIdAndAccessibleToUser(COMPANY_ID, USER_ID);
+        verify(applicationRepository).save(any(Application.class));
+    }
 
     @Test
     void patchApplicationStatus_whenStatusChanges_recordsHistory() {
@@ -111,7 +148,7 @@ class ApplicationServiceTest {
         final Application application = sampleApplication(ApplicationStatus.APPLIED);
         final Company company = application.getCompany();
         when(applicationRepository.findForUser(APPLICATION_ID, USER_ID)).thenReturn(Optional.of(application));
-        when(companyRepository.findForUser(COMPANY_ID, USER_ID)).thenReturn(Optional.of(company));
+        when(companyRepository.findByCompanyIdAndAccessibleToUser(COMPANY_ID, USER_ID)).thenReturn(Optional.of(company));
         when(applicationRepository.save(application)).thenReturn(application);
         final ApplicationPutRequestDto dto = new ApplicationPutRequestDto(
                 COMPANY_ID, "Updated Title", null, null, null, null, null, null, null, null, null);

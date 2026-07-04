@@ -13,18 +13,20 @@ public record CompanyResponseDto(
         String companyLocation,
         String companyType,
         String companyLogo,
+        boolean global,
         OffsetDateTime companyCreatedAt,
         OffsetDateTime companyUpdatedAt) {
 
     public static CompanyResponseDto from(final Company company) {
         return new CompanyResponseDto(
                 company.getCompanyId(),
-                company.getUser().getUserId(),
+                company.getUser() == null ? null : company.getUser().getUserId(),
                 company.getCompanyName(),
                 company.getCompanyWebsiteUrl(),
                 company.getCompanyLocation(),
                 company.getCompanyType(),
                 company.getCompanyLogo(),
+                company.isGlobal(),
                 company.getCompanyCreatedAt(),
                 company.getCompanyUpdatedAt());
     }

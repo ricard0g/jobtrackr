@@ -1,5 +1,6 @@
 package com.ricard0g.jobtrackr_api.service;
 
+import java.util.Comparator;
 import java.util.List;
 import java.util.UUID;
 
@@ -18,6 +19,7 @@ import com.ricard0g.jobtrackr_api.model.User;
 import com.ricard0g.jobtrackr_api.repository.ApplicationRepository;
 import com.ricard0g.jobtrackr_api.repository.CompanyRepository;
 import com.ricard0g.jobtrackr_api.repository.UserRepository;
+import com.ricard0g.jobtrackr_api.util.CompanyLogoUtils;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -34,7 +36,8 @@ public class CompanyService {
     @Transactional(readOnly = true)
     public List<CompanyResponseDto> getAllCompanies(final UUID userId) {
         requireUser(userId);
-        final List<CompanyResponseDto> companies = companyRepository.findAllForUser(userId).stream()
+        final List<CompanyResponseDto> companies = companyRepository.findAllGlobalAndByUserId(userId).stream()
+                .sorted(Comparator.comparing(Company::getCompanyName))
                 .map(CompanyResponseDto::from)
                 .toList();
         log.info("[CompanyService] - GET_ALL_COMPANIES: responseCount: {}, userId: {}", companies.size(), userId);
@@ -43,7 +46,7 @@ public class CompanyService {
 
     @Transactional(readOnly = true)
     public CompanyResponseDto getCompanyById(final UUID userId, final Long companyId) {
-        final Company company = requireCompanyForUser(userId, companyId);
+        final Company company = requireAccessibleCompany(userId, companyId);
         log.info("[CompanyService] - GET_COMPANY_BY_ID: companyId: {}, userId: {}", companyId, userId);
         return CompanyResponseDto.from(company);
     }
@@ -52,17 +55,16 @@ public class CompanyService {
     public CompanyResponseDto createCompany(final UUID userId, final CompanyCreateRequestDto dto) {
         final User user = requireUser(userId);
         final String companyName = dto.companyName().trim();
-        final boolean nameAlreadyExists = companyRepository.nameExistsForUser(userId, companyName);
-        if (nameAlreadyExists) {
-            throw new DuplicateCompanyNameException(userId, companyName);
-        }
+        ensureCompanyNameAvailable(userId, companyName);
+        final String companyWebsiteUrl = normalizeOptional(dto.companyWebsiteUrl());
+        final String companyLogo = resolveCompanyLogo(normalizeOptional(dto.companyLogo()), companyWebsiteUrl);
         final Company company = Company.create(
                 user,
                 companyName,
-                normalizeOptional(dto.companyWebsiteUrl()),
+                companyWebsiteUrl,
                 normalizeOptional(dto.companyLocation()),
                 normalizeOptional(dto.companyType()),
-                normalizeOptional(dto.companyLogo()));
+                companyLogo);
         final Company saved = companyRepository.save(company);
         log.info("[CompanyService] - CREATE_COMPANY: companyId: {}, userId: {}", saved.getCompanyId(), userId);
         return CompanyResponseDto.from(saved);
@@ -71,18 +73,15 @@ public class CompanyService {
     @Transactional
     public CompanyResponseDto replaceCompany(
             final UUID userId, final Long companyId, final CompanyPutRequestDto dto) {
-        final Company company = requireCompanyForUser(userId, companyId);
+        final Company company = requireOwnedCompany(userId, companyId);
         final String companyName = dto.companyName().trim();
-        final boolean nameAlreadyExists =
-                companyRepository.nameExistsForUserExcludingCompany(userId, companyName, companyId);
-        if (nameAlreadyExists) {
-            throw new DuplicateCompanyNameException(userId, companyName);
-        }
+        ensureCompanyNameAvailableForReplace(userId, companyName, companyId);
+        final String companyWebsiteUrl = normalizeOptional(dto.companyWebsiteUrl());
         company.setCompanyName(companyName);
-        company.setCompanyWebsiteUrl(normalizeOptional(dto.companyWebsiteUrl()));
+        company.setCompanyWebsiteUrl(companyWebsiteUrl);
         company.setCompanyLocation(normalizeOptional(dto.companyLocation()));
         company.setCompanyType(normalizeOptional(dto.companyType()));
-        company.setCompanyLogo(normalizeOptional(dto.companyLogo()));
+        company.setCompanyLogo(resolveCompanyLogo(normalizeOptional(dto.companyLogo()), companyWebsiteUrl));
         final Company saved = companyRepository.save(company);
         log.info("[CompanyService] - REPLACE_COMPANY: companyId: {}, userId: {}", companyId, userId);
         return CompanyResponseDto.from(saved);
@@ -90,7 +89,7 @@ public class CompanyService {
 
     @Transactional
     public void deleteCompany(final UUID userId, final Long companyId) {
-        final Company company = requireCompanyForUser(userId, companyId);
+        final Company company = requireOwnedCompany(userId, companyId);
         final boolean hasApplications = applicationRepository.hasApplications(companyId);
         if (hasApplications) {
             throw new CompanyHasApplicationsException(companyId);
@@ -103,10 +102,42 @@ public class CompanyService {
         return userRepository.findById(userId).orElseThrow(() -> new UserNotFoundException(userId));
     }
 
-    private Company requireCompanyForUser(final UUID userId, final Long companyId) {
+    private Company requireAccessibleCompany(final UUID userId, final Long companyId) {
         return companyRepository
-                .findForUser(companyId, userId)
+                .findByCompanyIdAndAccessibleToUser(companyId, userId)
                 .orElseThrow(() -> new CompanyNotFoundException(userId, companyId));
+    }
+
+    private Company requireOwnedCompany(final UUID userId, final Long companyId) {
+        return companyRepository
+                .findByCompanyIdAndUser_UserId(companyId, userId)
+                .orElseThrow(() -> new CompanyNotFoundException(userId, companyId));
+    }
+
+    private void ensureCompanyNameAvailable(final UUID userId, final String companyName) {
+        final boolean nameTaken = companyRepository.existsGlobalByCompanyName(companyName)
+                || companyRepository.nameExistsForUser(userId, companyName);
+        if (nameTaken) {
+            throw new DuplicateCompanyNameException(userId, companyName);
+        }
+    }
+
+    private void ensureCompanyNameAvailableForReplace(
+            final UUID userId, final String companyName, final Long companyId) {
+        final boolean globalConflict =
+                companyRepository.existsGlobalByCompanyNameAndCompanyIdNot(companyName, companyId);
+        final boolean userConflict =
+                companyRepository.nameExistsForUserExcludingCompany(userId, companyName, companyId);
+        if (globalConflict || userConflict) {
+            throw new DuplicateCompanyNameException(userId, companyName);
+        }
+    }
+
+    private String resolveCompanyLogo(final String companyLogo, final String companyWebsiteUrl) {
+        if (companyLogo != null) {
+            return companyLogo;
+        }
+        return CompanyLogoUtils.hunterLogoUrlFromWebsite(companyWebsiteUrl);
     }
 
     private String normalizeOptional(final String value) {

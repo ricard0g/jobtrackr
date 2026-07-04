@@ -77,24 +77,29 @@ CREATE TABLE users (
 );
 
 -- TABLE: companies
--- Companies are user-local: different users can store the same company
--- name independently. Used to group applications under the same org.
+-- Global companies (company_user_id IS NULL) are pre-seeded and readable by all users.
+-- User-created companies belong to one user and are writable only by that owner.
+-- Different users can still create their own company with the same name as a global one
+-- only if the service duplicate check allows it; global names are reserved.
 CREATE TABLE companies (
   company_id          BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
-  company_user_id     BIGINT NOT NULL
-    REFERENCES users(user_id) ON DELETE CASCADE,  -- hard-delete on user removal
+  company_user_id     UUID REFERENCES users(user_id) ON DELETE CASCADE,
 
   company_name        VARCHAR(255) NOT NULL,
-  company_website_url VARCHAR(1024),              -- optional public URL
-  company_location    VARCHAR(255),               -- free-form city/region
-  company_type        VARCHAR(100),               -- e.g. startup, FAANG, etc.
-  company_logo        VARCHAR(1024),              -- image URL if present
+  company_website_url VARCHAR(1024),
+  company_location    VARCHAR(255),
+  company_type        VARCHAR(100),
+  company_logo        VARCHAR(1024),              -- Hunter.io URL: https://logos.hunter.io/<domain>
 
   company_created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-  company_updated_at  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-
-  UNIQUE (company_user_id, company_name)          -- avoid duplicates per user
+  company_updated_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
+
+CREATE UNIQUE INDEX companies_global_name_unique
+  ON companies (company_name) WHERE company_user_id IS NULL;
+
+CREATE UNIQUE INDEX companies_user_name_unique
+  ON companies (company_user_id, company_name) WHERE company_user_id IS NOT NULL;
 
 -- TABLE: applications
 -- Central entity: one row per job application a user is tracking.

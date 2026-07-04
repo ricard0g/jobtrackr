@@ -14,16 +14,13 @@ import jakarta.persistence.Id;
 import jakarta.persistence.JoinColumn;
 import jakarta.persistence.ManyToOne;
 import jakarta.persistence.Table;
-import jakarta.persistence.UniqueConstraint;
 import lombok.AccessLevel;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
 
 @Entity
-@Table(
-        name = "companies",
-        uniqueConstraints = @UniqueConstraint(columnNames = {"company_user_id", "company_name"}))
+@Table(name = "companies")
 @Getter
 @Setter
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
@@ -34,8 +31,8 @@ public class Company {
     @Column(name = "company_id")
     private Long companyId;
 
-    @ManyToOne(optional = false, fetch = FetchType.LAZY)
-    @JoinColumn(name = "company_user_id", nullable = false)
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "company_user_id")
     private User user;
 
     @Column(name = "company_name", nullable = false, length = 255)
@@ -60,6 +57,10 @@ public class Company {
     @UpdateTimestamp
     @Column(name = "company_updated_at", nullable = false)
     private OffsetDateTime companyUpdatedAt;
+
+    public boolean isGlobal() {
+        return user == null;
+    }
 
     public static Company create(
             final User user,

@@ -82,7 +82,7 @@ public class ApplicationService {
     @Transactional
     public ApplicationResponseDto createApplication(final UUID userId, final ApplicationCreateRequestDto dto) {
         final User user = requireUser(userId);
-        final Company company = requireCompanyForUser(userId, dto.companyId());
+        final Company company = requireAccessibleCompany(userId, dto.companyId());
         validateSalaryRange(dto.applicationSalaryMin(), dto.applicationSalaryMax());
         final Set<Tag> tags = resolveTags(userId, dto.tagIds());
         final Application application = Application.create(
@@ -112,7 +112,7 @@ public class ApplicationService {
     public ApplicationResponseDto replaceApplication(
             final UUID userId, final Long applicationId, final ApplicationPutRequestDto dto) {
         final Application application = requireApplicationForUser(userId, applicationId);
-        final Company company = requireCompanyForUser(userId, dto.companyId());
+        final Company company = requireAccessibleCompany(userId, dto.companyId());
         validateSalaryRange(dto.applicationSalaryMin(), dto.applicationSalaryMax());
         application.setCompany(company);
         application.setApplicationTitle(dto.applicationTitle().trim());
@@ -139,7 +139,7 @@ public class ApplicationService {
             final UUID userId, final Long applicationId, final ApplicationPatchRequestDto dto) {
         final Application application = requireApplicationForUser(userId, applicationId);
         if (dto.companyId() != null) {
-            application.setCompany(requireCompanyForUser(userId, dto.companyId()));
+            application.setCompany(requireAccessibleCompany(userId, dto.companyId()));
         }
         if (dto.applicationTitle() != null) {
             application.setApplicationTitle(dto.applicationTitle().trim());
@@ -236,9 +236,9 @@ public class ApplicationService {
         return userRepository.findById(userId).orElseThrow(() -> new UserNotFoundException(userId));
     }
 
-    private Company requireCompanyForUser(final UUID userId, final Long companyId) {
+    private Company requireAccessibleCompany(final UUID userId, final Long companyId) {
         return companyRepository
-                .findForUser(companyId, userId)
+                .findByCompanyIdAndAccessibleToUser(companyId, userId)
                 .orElseThrow(() -> new CompanyNotFoundException(userId, companyId));
     }
 

@@ -626,7 +626,7 @@ class ApplicationControllerTest {
 
     private static CompanyResponseDto sampleCompany() {
         return new CompanyResponseDto(
-                5L, USER_ID, "Acme Corp", "https://acme.example", "Madrid", "Tech", null, TIMESTAMP, TIMESTAMP);
+                5L, USER_ID, "Acme Corp", "https://acme.example", "Madrid", "Tech", null, false, TIMESTAMP, TIMESTAMP);
     }
 
     private static StatusHistoryResponseDto sampleStatusHistory(
