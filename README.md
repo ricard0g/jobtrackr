@@ -40,3 +40,24 @@ To rebuild a local database from an exact snapshot:
 ```
 
 Do not run the API before restoring a full snapshot unless you intentionally want the restore script to replace the schema Flyway created.
+
+## Development Seed
+
+For a safe cloud-agent dataset, run the explicit seed after Flyway has created the schema:
+
+```bash
+cp .env.example .env
+./scripts/dev-up.sh
+./scripts/dev-api.sh
+./scripts/db-seed-dev.sh
+```
+
+The seed is not a Flyway migration. It is intentionally opt-in and guarded by `JOBTRACKR_SEED_ENV=dev`, `local`, or `cloud-agent`.
+
+Seed login:
+
+```text
+agent@example.test / dev-password
+```
+
+The committed seed file is `db/seed/dev.sql`. It contains fake users, user-scoped companies/tags, applications across every Kanban status, interviews, tasks, status history, saved views, and fake CV/job-description references.
