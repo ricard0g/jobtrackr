@@ -48,7 +48,17 @@ For a safe cloud-agent dataset, run the explicit seed after Flyway has created t
 ```bash
 cp .env.example .env
 ./scripts/dev-up.sh
+```
+
+Start the API once so Flyway creates the schema:
+
+```bash
 ./scripts/dev-api.sh
+```
+
+Then run the seed from another shell:
+
+```bash
 ./scripts/db-seed-dev.sh
 ```
 
