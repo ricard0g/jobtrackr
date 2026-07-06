@@ -1,0 +1,163 @@
+import { useCallback, useEffect, useRef, useState } from "react";
+
+import { ApiError, api } from "@/lib/api";
+import type { Company } from "@/types/company";
+
+const DEFAULT_PAGE_SIZE = 20;
+const SEARCH_DEBOUNCE_MS = 300;
+
+type UseCompanySearchOptions = {
+	enabled: boolean;
+	pageSize?: number;
+};
+
+const mergeCompanies = (current: Company[], next: Company[]) => {
+	const seenIds = new Set(current.map((company) => company.companyId));
+	const merged = [...current];
+
+	for (const company of next) {
+		if (seenIds.has(company.companyId)) continue;
+		seenIds.add(company.companyId);
+		merged.push(company);
+	}
+
+	return merged;
+};
+
+export function useCompanySearch({
+	enabled,
+	pageSize = DEFAULT_PAGE_SIZE,
+}: UseCompanySearchOptions) {
+	const [search, setSearch] = useState("");
+	const [companies, setCompanies] = useState<Company[]>([]);
+	const [page, setPage] = useState(0);
+	const [total, setTotal] = useState(0);
+	const [isLoading, setIsLoading] = useState(false);
+	const [isLoadingMore, setIsLoadingMore] = useState(false);
+	const [error, setError] = useState<string | null>(null);
+
+	const abortControllerRef = useRef<AbortController | null>(null);
+	const requestIdRef = useRef(0);
+
+	const hasMore = companies.length < total;
+
+	const reset = useCallback(() => {
+		abortControllerRef.current?.abort();
+		requestIdRef.current += 1;
+		setSearch("");
+		setCompanies([]);
+		setPage(0);
+		setTotal(0);
+		setError(null);
+		setIsLoading(false);
+		setIsLoadingMore(false);
+	}, []);
+
+	const fetchPage = useCallback(
+		async ({
+			searchQuery,
+			nextPage,
+			append,
+		}: {
+			searchQuery: string;
+			nextPage: number;
+			append: boolean;
+		}) => {
+			abortControllerRef.current?.abort();
+			const abortController = new AbortController();
+			abortControllerRef.current = abortController;
+			const requestId = requestIdRef.current + 1;
+			requestIdRef.current = requestId;
+
+			if (append) {
+				setIsLoadingMore(true);
+			} else {
+				setIsLoading(true);
+			}
+			setError(null);
+
+			try {
+				const response = await api.searchCompanies({
+					search: searchQuery,
+					page: nextPage,
+					size: pageSize,
+					signal: abortController.signal,
+				});
+
+				if (requestId !== requestIdRef.current) return;
+
+				setTotal(response.total);
+				setPage(response.page);
+				setCompanies((currentCompanies) =>
+					append
+						? mergeCompanies(currentCompanies, response.items)
+						: response.items,
+				);
+			} catch (fetchError) {
+				if (fetchError instanceof DOMException && fetchError.name === "AbortError") {
+					return;
+				}
+
+				if (requestId !== requestIdRef.current) return;
+
+				setError(
+					fetchError instanceof ApiError
+						? fetchError.message
+						: "Could not load companies.",
+				);
+
+				if (!append) {
+					setCompanies([]);
+					setTotal(0);
+					setPage(0);
+				}
+			} finally {
+				if (requestId === requestIdRef.current) {
+					setIsLoading(false);
+					setIsLoadingMore(false);
+				}
+			}
+		},
+		[pageSize],
+	);
+
+	useEffect(() => {
+		if (!enabled) return;
+
+		const timeoutId = window.setTimeout(() => {
+			void fetchPage({ searchQuery: search, nextPage: 0, append: false });
+		}, SEARCH_DEBOUNCE_MS);
+
+		return () => {
+			window.clearTimeout(timeoutId);
+		};
+	}, [enabled, fetchPage, search]);
+
+	useEffect(
+		() => () => {
+			abortControllerRef.current?.abort();
+		},
+		[],
+	);
+
+	const loadMore = useCallback(() => {
+		if (!enabled || isLoading || isLoadingMore || !hasMore) return;
+		void fetchPage({
+			searchQuery: search,
+			nextPage: page + 1,
+			append: true,
+		});
+	}, [enabled, fetchPage, hasMore, isLoading, isLoadingMore, page, search]);
+
+	return {
+		search,
+		setSearch,
+		companies,
+		isLoading,
+		isLoadingMore,
+		hasMore,
+		error,
+		loadMore,
+		reset,
+	};
+}
