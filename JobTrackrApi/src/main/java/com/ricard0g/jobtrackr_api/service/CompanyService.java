@@ -4,10 +4,13 @@ import java.util.Comparator;
 import java.util.List;
 import java.util.UUID;
 
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import com.ricard0g.jobtrackr_api.dto.CompanyDto.CompanyCreateRequestDto;
+import com.ricard0g.jobtrackr_api.dto.CompanyDto.CompanyPageResponseDto;
 import com.ricard0g.jobtrackr_api.dto.CompanyDto.CompanyPutRequestDto;
 import com.ricard0g.jobtrackr_api.dto.CompanyDto.CompanyResponseDto;
 import com.ricard0g.jobtrackr_api.exception.CompanyHasApplicationsException;
@@ -42,6 +45,23 @@ public class CompanyService {
                 .toList();
         log.info("[CompanyService] - GET_ALL_COMPANIES: responseCount: {}, userId: {}", companies.size(), userId);
         return companies;
+    }
+
+    @Transactional(readOnly = true)
+    public CompanyPageResponseDto searchCompanies(
+            final UUID userId, final String search, final Pageable pageable) {
+        requireUser(userId);
+        final String normalizedSearch = search == null ? "" : search.trim();
+        final Page<CompanyResponseDto> page = companyRepository
+                .findAllGlobalAndByUserId(userId, normalizedSearch, pageable)
+                .map(CompanyResponseDto::from);
+        log.info(
+                "[CompanyService] - SEARCH_COMPANIES: total: {}, page: {}, size: {}, userId: {}",
+                page.getTotalElements(),
+                page.getNumber(),
+                page.getSize(),
+                userId);
+        return CompanyPageResponseDto.from(page);
     }
 
     @Transactional(readOnly = true)

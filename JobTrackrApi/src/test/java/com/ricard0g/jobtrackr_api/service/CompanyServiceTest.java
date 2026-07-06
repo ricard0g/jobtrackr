@@ -3,6 +3,7 @@ package com.ricard0g.jobtrackr_api.service;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -17,8 +18,13 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageImpl;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
 
 import com.ricard0g.jobtrackr_api.dto.CompanyDto.CompanyCreateRequestDto;
+import com.ricard0g.jobtrackr_api.dto.CompanyDto.CompanyPageResponseDto;
 import com.ricard0g.jobtrackr_api.dto.CompanyDto.CompanyPutRequestDto;
 import com.ricard0g.jobtrackr_api.dto.CompanyDto.CompanyResponseDto;
 import com.ricard0g.jobtrackr_api.exception.CompanyNotFoundException;
@@ -61,6 +67,47 @@ class CompanyServiceTest {
         // then
         assertThat(companies).hasSize(2);
         assertThat(companies).extracting(CompanyResponseDto::global).containsExactlyInAnyOrder(true, false);
+    }
+
+    @Test
+    void searchCompanies_withEmptySearch_returnsPaginatedResponse() {
+        // given
+        final Company globalCompany = sampleGlobalCompany();
+        final Pageable pageable = PageRequest.of(0, 20);
+        when(userRepository.findById(USER_ID)).thenReturn(Optional.of(sampleUser()));
+        when(companyRepository.findAllGlobalAndByUserId(eq(USER_ID), eq(""), eq(pageable)))
+                .thenReturn(new PageImpl<>(List.of(globalCompany), pageable, 1));
+
+        // when
+        final CompanyPageResponseDto response = companyService.searchCompanies(USER_ID, null, pageable);
+
+        // then
+        assertThat(response.items()).hasSize(1);
+        assertThat(response.items().getFirst().companyName()).isEqualTo("Google");
+        assertThat(response.total()).isEqualTo(1);
+        assertThat(response.page()).isZero();
+        assertThat(response.size()).isEqualTo(20);
+    }
+
+    @Test
+    void searchCompanies_withSearchTerm_returnsFilteredPage() {
+        // given
+        final Company company = Company.create(sampleUser(), "Acme Corp", null, null, null, null);
+        final Pageable pageable = PageRequest.of(0, 10);
+        when(userRepository.findById(USER_ID)).thenReturn(Optional.of(sampleUser()));
+        when(companyRepository.findAllGlobalAndByUserId(eq(USER_ID), eq("acme"), eq(pageable)))
+                .thenReturn(new PageImpl<>(List.of(company), pageable, 1));
+
+        // when
+        final CompanyPageResponseDto response = companyService.searchCompanies(USER_ID, " acme ", pageable);
+
+        // then
+        assertThat(response.items()).hasSize(1);
+        assertThat(response.items().getFirst().companyName()).isEqualTo("Acme Corp");
+        assertThat(response.total()).isEqualTo(1);
+        assertThat(response.page()).isZero();
+        assertThat(response.size()).isEqualTo(10);
+        verify(companyRepository).findAllGlobalAndByUserId(USER_ID, "acme", pageable);
     }
 
     @Test

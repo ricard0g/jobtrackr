@@ -1,10 +1,11 @@
 package com.ricard0g.jobtrackr_api.controller;
 
 import java.security.Principal;
-import java.util.List;
 import java.util.UUID;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.web.PageableDefault;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -13,9 +14,11 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import com.ricard0g.jobtrackr_api.dto.CompanyDto.CompanyCreateRequestDto;
+import com.ricard0g.jobtrackr_api.dto.CompanyDto.CompanyPageResponseDto;
 import com.ricard0g.jobtrackr_api.dto.CompanyDto.CompanyPutRequestDto;
 import com.ricard0g.jobtrackr_api.dto.CompanyDto.CompanyResponseDto;
 import com.ricard0g.jobtrackr_api.service.CompanyService;
@@ -33,9 +36,18 @@ public class CompanyController {
     private final CompanyService companyService;
 
     @GetMapping
-    public ResponseEntity<List<CompanyResponseDto>> getAllCompanies(
-            final Principal principal) {
+    public ResponseEntity<?> getAllCompanies(
+            final Principal principal,
+            @RequestParam(required = false) final String search,
+            @RequestParam(required = false) final Integer page,
+            @RequestParam(required = false) final Integer size,
+            @PageableDefault(size = 20, sort = "companyName") final Pageable pageable) {
         final UUID userId = AuthenticatedUserId.from(principal);
+        final boolean paginated = search != null || page != null || size != null;
+        if (paginated) {
+            final CompanyPageResponseDto response = companyService.searchCompanies(userId, search, pageable);
+            return ResponseEntity.ok(response);
+        }
         return ResponseEntity.ok(companyService.getAllCompanies(userId));
     }
 

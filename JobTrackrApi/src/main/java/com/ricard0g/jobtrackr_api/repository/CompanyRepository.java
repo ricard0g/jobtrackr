@@ -4,6 +4,8 @@ import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
@@ -19,6 +21,22 @@ public interface CompanyRepository extends JpaRepository<Company, Long> {
             ORDER BY c.companyName ASC
             """)
     List<Company> findAllGlobalAndByUserId(@Param("userId") UUID userId);
+
+    @Query(
+            value =
+                    """
+                    SELECT c FROM Company c
+                    WHERE (c.user IS NULL OR c.user.userId = :userId)
+                      AND (:search = '' OR LOWER(c.companyName) LIKE LOWER(CONCAT('%', :search, '%')))
+                    """,
+            countQuery =
+                    """
+                    SELECT COUNT(c) FROM Company c
+                    WHERE (c.user IS NULL OR c.user.userId = :userId)
+                      AND (:search = '' OR LOWER(c.companyName) LIKE LOWER(CONCAT('%', :search, '%')))
+                    """)
+    Page<Company> findAllGlobalAndByUserId(
+            @Param("userId") UUID userId, @Param("search") String search, Pageable pageable);
 
     @Query(
             """

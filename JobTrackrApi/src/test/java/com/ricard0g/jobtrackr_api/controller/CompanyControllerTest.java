@@ -27,7 +27,9 @@ import org.springframework.http.MediaType;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 
+import com.ricard0g.jobtrackr_api.config.SpringDataWebConfig;
 import com.ricard0g.jobtrackr_api.dto.CompanyDto.CompanyCreateRequestDto;
+import com.ricard0g.jobtrackr_api.dto.CompanyDto.CompanyPageResponseDto;
 import com.ricard0g.jobtrackr_api.dto.CompanyDto.CompanyPutRequestDto;
 import com.ricard0g.jobtrackr_api.dto.CompanyDto.CompanyResponseDto;
 import com.ricard0g.jobtrackr_api.exception.CompanyHasApplicationsException;
@@ -39,7 +41,7 @@ import com.ricard0g.jobtrackr_api.service.CompanyService;
 
 @WebMvcTest(controllers = CompanyController.class)
 @AutoConfigureMockMvc(addFilters = false)
-@Import(GlobalExceptionHandler.class)
+@Import({GlobalExceptionHandler.class, SpringDataWebConfig.class})
 class CompanyControllerTest {
 
     private static final String USER_ID_VALUE = "11111111-1111-1111-1111-111111111111";
@@ -74,6 +76,67 @@ class CompanyControllerTest {
 
         // when / then
         mockMvc.perform(get(BASE_PATH).principal(authenticatedUser()))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.code").value("USER_NOT_FOUND"));
+    }
+
+    @Test
+    void searchCompanies_withSearchPageAndSize_returnsPaginatedResponse() throws Exception {
+        // given
+        final CompanyResponseDto company = sampleCompany(1L, "Acme Corp");
+        final CompanyPageResponseDto pageResponse = new CompanyPageResponseDto(List.of(company), 1L, 0, 20);
+        when(companyService.searchCompanies(eq(USER_ID), eq("acme"), any())).thenReturn(pageResponse);
+
+        // when / then
+        mockMvc.perform(get(BASE_PATH).principal(authenticatedUser()).param("search", "acme").param("page", "0").param("size", "20"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.items[0].companyId").value(1))
+                .andExpect(jsonPath("$.items[0].companyName").value("Acme Corp"))
+                .andExpect(jsonPath("$.total").value(1))
+                .andExpect(jsonPath("$.page").value(0))
+                .andExpect(jsonPath("$.size").value(20));
+    }
+
+    @Test
+    void searchCompanies_withEmptySearch_returnsPaginatedResponse() throws Exception {
+        // given
+        final CompanyResponseDto company = sampleCompany(1L, "Acme Corp");
+        final CompanyPageResponseDto pageResponse = new CompanyPageResponseDto(List.of(company), 1L, 0, 20);
+        when(companyService.searchCompanies(eq(USER_ID), eq(""), any())).thenReturn(pageResponse);
+
+        // when / then
+        mockMvc.perform(get(BASE_PATH).principal(authenticatedUser()).param("search", ""))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.items[0].companyName").value("Acme Corp"))
+                .andExpect(jsonPath("$.total").value(1))
+                .andExpect(jsonPath("$.page").value(0))
+                .andExpect(jsonPath("$.size").value(20));
+    }
+
+    @Test
+    void searchCompanies_withPageOnly_returnsPaginatedResponse() throws Exception {
+        // given
+        final CompanyResponseDto company = sampleCompany(1L, "Acme Corp");
+        final CompanyPageResponseDto pageResponse = new CompanyPageResponseDto(List.of(company), 1L, 0, 20);
+        when(companyService.searchCompanies(eq(USER_ID), eq(null), any())).thenReturn(pageResponse);
+
+        // when / then
+        mockMvc.perform(get(BASE_PATH).principal(authenticatedUser()).param("page", "0"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.items[0].companyName").value("Acme Corp"))
+                .andExpect(jsonPath("$.total").value(1))
+                .andExpect(jsonPath("$.page").value(0))
+                .andExpect(jsonPath("$.size").value(20));
+    }
+
+    @Test
+    void searchCompanies_whenUserNotFound_returns404() throws Exception {
+        // given
+        when(companyService.searchCompanies(eq(USER_ID), eq("acme"), any()))
+                .thenThrow(new UserNotFoundException(USER_ID));
+
+        // when / then
+        mockMvc.perform(get(BASE_PATH).principal(authenticatedUser()).param("search", "acme"))
                 .andExpect(status().isNotFound())
                 .andExpect(jsonPath("$.code").value("USER_NOT_FOUND"));
     }
