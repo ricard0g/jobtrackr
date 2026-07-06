@@ -28,16 +28,15 @@ The database schema is recreated from those migrations whenever the API starts a
 
 ## Database Portability
 
-Use `./scripts/db-dump-local-pg.sh` to export data from the existing `local-pg` Docker container into `db/dumps/local-data.sql`.
+Use `./scripts/db-dump-local-pg.sh` to export a full PostgreSQL snapshot from the existing `local-pg` Docker container into `db/dumps/local-snapshot.dump`.
 
-`db/dumps/` is intentionally ignored by Git because local database dumps may contain personal data, password hashes, refresh tokens, or other sensitive state. Commit a sanitized seed file under `db/seed/` only when it is safe for cloud agents and GitHub.
+`db/dumps/` is intentionally ignored by Git because local database dumps may contain personal data, password hashes, or other sensitive state. Commit a sanitized seed file under `db/seed/` only when it is safe for cloud agents and GitHub.
 
-To rebuild a local database:
+To rebuild a local database from an exact snapshot:
 
 ```bash
 ./scripts/db-reset.sh
-./scripts/dev-api.sh
-./scripts/db-restore-dump.sh db/dumps/local-data.sql
+./scripts/db-restore-dump.sh db/dumps/local-snapshot.dump
 ```
 
-Run the API before restoring a data-only dump so Flyway can create the schema first.
+Do not run the API before restoring a full snapshot unless you intentionally want the restore script to replace the schema Flyway created.
