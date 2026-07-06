@@ -45,8 +45,9 @@ Dependencies:
 
 - `api.getCurrentUser()`
 - `api.getApplications()`
-- `api.getCompanies()`
 - `api.getTags()`
+
+Companies are **not** preloaded on the board. The create-application dialog lazy-loads them through a searchable, paginated combobox (`CompanyCombobox` + `useCompanySearch` → `api.searchCompanies`).
 
 `appAction` currently supports only `intent=logout`.
 
@@ -64,7 +65,7 @@ Implemented API methods:
 
 - `getCurrentUser`
 - `getApplications`
-- `getCompanies`
+- `searchCompanies` (paginated company search for the create dialog combobox)
 - `getTags`
 - `createApplication`
 - `patchApplication`
@@ -102,7 +103,7 @@ Kanban:
 
 Application create:
 
-- Dialog uses loaded companies from `GET /companies`, which includes global pre-seeded companies plus user-owned companies.
+- Company picker uses lazy paginated search via `GET /companies?search=&page=&size=` (global pre-seeded companies plus user-owned companies).
 - It does not allow creating a company inline.
 - It computes `applicationKanbanOrder` as the count of applications in the selected status.
 - It supports title, status, company, salary range, currency, location, remote type, URL, source, and applied date.
