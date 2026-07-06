@@ -25,7 +25,6 @@ export function KanbanBoard() {
 		applicationsByStatus,
 		allApplications,
 		boardStateRef,
-		companies,
 		setBoardStateAndRef,
 	} = useBoard();
 	const snapshotRef = useRef<BoardState | null>(null);
@@ -148,7 +147,6 @@ export function KanbanBoard() {
 						key={status.value}
 						status={status}
 						applications={applicationsByStatus[status.value]}
-						companies={companies}
 						allApplications={allApplications}
 					/>
 				))}

@@ -7,7 +7,6 @@ import { CreatePostulationDialog } from "@/components/postulations/CreatePostula
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import type { Application, ApplicationStatus } from "@/types/application";
-import type { Company } from "@/types/company";
 import { PostulationCard } from "./PostulationCard";
 
 interface StatusColumnProps {
@@ -17,14 +16,12 @@ interface StatusColumnProps {
 		color: string;
 	};
 	applications: Application[];
-	companies: Company[];
 	allApplications: Application[];
 }
 
 export const StatusColumn = memo(function StatusColumn({
 	status,
 	applications,
-	companies,
 	allApplications,
 }: StatusColumnProps) {
 	const { ref, isDropTarget } = useDroppable({
@@ -53,7 +50,6 @@ export const StatusColumn = memo(function StatusColumn({
 					{status.label}
 				</div>
 				<CreatePostulationDialog
-					companies={companies}
 					applications={allApplications}
 					defaultStatus={status.value}
 					trigger={

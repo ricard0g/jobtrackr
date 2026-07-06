@@ -38,7 +38,7 @@ Base path: `/api/v1/companies`
 
 | Method | Path | Body | Response | Frontend status |
 | --- | --- | --- | --- | --- |
-| GET | `/` | none | `CompanyResponseDto[]` | Implemented list only |
+| GET | `/` | none | `CompanyResponseDto[]` or `CompanyPageResponseDto` | Implemented list + paginated search |
 | GET | `/{companyId}` | none | `CompanyResponseDto` | Missing |
 | POST | `/` | `CompanyCreateRequestDto` | `201 CompanyResponseDto` | Missing |
 | PUT | `/{companyId}` | `CompanyPutRequestDto` | `CompanyResponseDto` | Missing |
@@ -47,6 +47,27 @@ Base path: `/api/v1/companies`
 Company names must be unique per user and cannot duplicate a global company name. Deleting a company with applications returns conflict code `COMPANY_HAS_APPLICATIONS`.
 
 `GET /companies` returns global pre-seeded companies plus user-owned companies. Global companies are readable and attachable to applications but cannot be updated or deleted (404). Applications may reference global `companyId` values.
+
+Paginated search (frontend + MSW implemented; Java backend follow-up required):
+
+| Query param | Type | Default | Description |
+| --- | --- | --- | --- |
+| `search` | string | `""` | Case-insensitive substring match on `companyName` |
+| `page` | number | `0` | Zero-based page index |
+| `size` | number | `20` | Page size |
+
+When any query param is present, the response is:
+
+```ts
+type CompanyPageResponseDto = {
+  items: CompanyResponseDto[];
+  total: number;
+  page: number;
+  size: number;
+};
+```
+
+When no query params are present, the legacy full-array response is returned for backward compatibility.
 
 ## Tags
 

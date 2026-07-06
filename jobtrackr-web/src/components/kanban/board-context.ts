@@ -7,14 +7,12 @@ import {
 
 import type { AppLoaderData } from "@/lib/api";
 import type { Application, ApplicationStatus } from "@/types/application";
-import type { Company } from "@/types/company";
 import type { Tag } from "@/types/tag";
 import type { User } from "@/types/user";
 import type { BoardPlacement, BoardState } from "./board-state";
 
 export type BoardContextValue = {
 	user: User;
-	companies: Company[];
 	tags: Tag[];
 	boardState: BoardState;
 	boardStateRef: RefObject<BoardState>;

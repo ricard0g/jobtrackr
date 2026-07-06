@@ -6,14 +6,13 @@ import { api, logout, requireSession, type AppLoaderData } from "@/lib/api";
 export async function appLoader(): Promise<AppLoaderData> {
 	await requireSession();
 
-	const [user, applications, companies, tags] = await Promise.all([
+	const [user, applications, tags] = await Promise.all([
 		api.getCurrentUser(),
 		api.getApplications(),
-		api.getCompanies(),
 		api.getTags(),
 	]);
 
-	return { user, applications, companies, tags };
+	return { user, applications, tags };
 }
 
 export async function appAction({ request }: ActionFunctionArgs) {

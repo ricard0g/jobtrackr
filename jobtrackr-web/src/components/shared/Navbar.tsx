@@ -8,7 +8,7 @@ import { useBoard } from "@/components/kanban/useBoard";
 
 export function Navbar() {
 	const [openUserData, setOpenUserData] = useState(false);
-	const { allApplications, companies, user } = useBoard();
+	const { allApplications, user } = useBoard();
 	const displayName = user.userDisplayName ?? user.userEmail;
 
 	return (
@@ -51,10 +51,7 @@ export function Navbar() {
 						)}
 					</li>
 					<li className="flex items-center gap-2">
-						<CreatePostulationDialog
-							companies={companies}
-							applications={allApplications}
-						/>
+						<CreatePostulationDialog applications={allApplications} />
 						<RouterForm method="post">
 							<input type="hidden" name="intent" value="logout" />
 							<Button type="submit" variant="ghost" aria-label="Log out">

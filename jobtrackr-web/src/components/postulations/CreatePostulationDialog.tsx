@@ -2,6 +2,7 @@ import { CirclePlus, Loader2 } from "lucide-react";
 import { type FormEvent, type ReactNode, useMemo, useState } from "react";
 
 import { useBoard } from "@/components/kanban/useBoard";
+import { CompanyCombobox } from "@/components/postulations/CompanyCombobox";
 import { Button } from "@/components/ui/button";
 import {
 	Dialog,
@@ -54,7 +55,6 @@ type CreateApplicationFormValues = {
 type FormErrors = Partial<Record<keyof CreateApplicationFormValues, string>>;
 
 interface CreatePostulationDialogProps {
-	companies: Company[];
 	applications: Application[];
 	defaultStatus?: ApplicationStatus;
 	trigger?: ReactNode;
@@ -98,13 +98,13 @@ const toOffsetDateTime = (value: string) =>
 	value ? new Date(`${value}T00:00:00`).toISOString() : null;
 
 export function CreatePostulationDialog({
-	companies,
 	applications,
 	defaultStatus = "APPLIED",
 	trigger,
 }: CreatePostulationDialogProps) {
 	const { upsertApplication } = useBoard();
 	const [open, setOpen] = useState(false);
+	const [selectedCompany, setSelectedCompany] = useState<Company | null>(null);
 	const [values, setValues] = useState<CreateApplicationFormValues>(() =>
 		initialFormValues(defaultStatus),
 	);
@@ -131,6 +131,7 @@ export function CreatePostulationDialog({
 
 	const resetForm = () => {
 		setValues(initialFormValues(defaultStatus));
+		setSelectedCompany(null);
 		setErrors({});
 		setServerError(null);
 	};
@@ -257,25 +258,16 @@ export function CreatePostulationDialog({
 					<div className="grid gap-4 sm:grid-cols-2">
 						<FormField name="companyId">
 							<FormLabel>Company</FormLabel>
-							<Select
+							<CompanyCombobox
 								value={values.companyId}
-								onValueChange={(value) => updateValue("companyId", value)}
+								selectedCompany={selectedCompany}
+								onChange={(companyId, company) => {
+									updateValue("companyId", companyId);
+									setSelectedCompany(company);
+								}}
 								disabled={isSubmitting}
-							>
-								<SelectTrigger aria-invalid={Boolean(errors.companyId)}>
-									<SelectValue placeholder="Select company" />
-								</SelectTrigger>
-								<SelectContent>
-									{companies.map((company) => (
-										<SelectItem
-											key={company.companyId}
-											value={String(company.companyId)}
-										>
-											{company.companyName}
-										</SelectItem>
-									))}
-								</SelectContent>
-							</Select>
+								invalid={Boolean(errors.companyId)}
+							/>
 							{errors.companyId && <FormMessage>{errors.companyId}</FormMessage>}
 						</FormField>
 

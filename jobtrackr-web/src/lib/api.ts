@@ -10,7 +10,7 @@ import type {
 	StatusHistory,
 } from "@/types/application";
 import type { AuthResponse, LoginRequest, RegisterRequest } from "@/types/auth";
-import type { Company, CompanyWriteRequest } from "@/types/company";
+import type { Company, CompanyPage, CompanySearchParams, CompanyWriteRequest } from "@/types/company";
 import type {
 	Interview,
 	InterviewCreateRequest,
@@ -241,6 +241,20 @@ export const api = {
 	getApplicationById: (applicationId: number) =>
 		apiRequest<Application>(`/applications/${applicationId}`),
 	getCompanies: () => apiRequest<Company[]>("/companies"),
+	searchCompanies: ({
+		search = "",
+		page = 0,
+		size = 20,
+		signal,
+	}: CompanySearchParams = {}) => {
+		const params = new URLSearchParams({
+			search,
+			page: String(page),
+			size: String(size),
+		});
+
+		return apiRequest<CompanyPage>(`/companies?${params.toString()}`, { signal });
+	},
 	getCompanyById: (companyId: number) =>
 		apiRequest<Company>(`/companies/${companyId}`),
 	createCompany: (request: CompanyWriteRequest) =>
@@ -343,6 +357,5 @@ export const api = {
 export type AppLoaderData = {
 	user: User;
 	applications: Application[];
-	companies: Company[];
 	tags: Tag[];
 };

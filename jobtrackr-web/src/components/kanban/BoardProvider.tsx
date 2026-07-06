@@ -116,7 +116,6 @@ export function BoardProvider({ data, children }: BoardProviderProps) {
 	const value = useMemo(
 		() => ({
 			user: data.user,
-			companies: data.companies,
 			tags: data.tags,
 			boardState,
 			boardStateRef,
@@ -129,7 +128,6 @@ export function BoardProvider({ data, children }: BoardProviderProps) {
 			setBoardStateAndRef,
 		}),
 		[
-			data.companies,
 			data.tags,
 			data.user,
 			boardState,

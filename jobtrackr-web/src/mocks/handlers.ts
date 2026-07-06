@@ -359,7 +359,35 @@ export const handlers = [
 		const state = loadState();
 		const auth = requireAuth(request, state);
 		if (auth instanceof Response) return auth;
-		return HttpResponse.json(getAccessibleCompanies(state, auth.user.userId));
+
+		const url = new URL(request.url);
+		const search = url.searchParams.get("search")?.trim() ?? "";
+		const hasSearchParam = url.searchParams.has("search");
+		const hasPageParam = url.searchParams.has("page");
+		const hasSizeParam = url.searchParams.has("size");
+
+		if (!hasSearchParam && !hasPageParam && !hasSizeParam) {
+			return HttpResponse.json(getAccessibleCompanies(state, auth.user.userId));
+		}
+
+		const page = Math.max(0, Number(url.searchParams.get("page") ?? "0") || 0);
+		const size = Math.max(1, Number(url.searchParams.get("size") ?? "20") || 20);
+		const normalizedSearch = search.toLowerCase();
+
+		const filteredCompanies = getAccessibleCompanies(state, auth.user.userId).filter(
+			(company) =>
+				normalizedSearch.length === 0 ||
+				company.companyName.toLowerCase().includes(normalizedSearch),
+		);
+		const start = page * size;
+		const items = filteredCompanies.slice(start, start + size);
+
+		return HttpResponse.json({
+			items,
+			total: filteredCompanies.length,
+			page,
+			size,
+		});
 	}),
 
 	http.get(`${API_BASE_URL}/companies/:companyId`, ({ request, params }) => {

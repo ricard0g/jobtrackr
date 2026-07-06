@@ -18,3 +18,17 @@ export interface CompanyWriteRequest {
 	companyType?: string | null;
 	companyLogo?: string | null;
 }
+
+export interface CompanyPage {
+	items: Company[];
+	total: number;
+	page: number;
+	size: number;
+}
+
+export interface CompanySearchParams {
+	search?: string;
+	page?: number;
+	size?: number;
+	signal?: AbortSignal;
+}
