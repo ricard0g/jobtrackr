@@ -44,11 +44,16 @@ export function CompanyCombobox({
 		companies,
 		isLoading,
 		isLoadingMore,
+		isDebouncing,
 		hasMore,
 		error,
 		loadMore,
 		reset,
 	} = useCompanySearch({ enabled: open });
+
+	const isSearchPending = isLoading || isDebouncing;
+	const showInitialLoading = isSearchPending && companies.length === 0;
+	const showRefetchLoading = isLoading && companies.length > 0;
 
 	const handleOpenChange = (nextOpen: boolean) => {
 		setOpen(nextOpen);
@@ -59,6 +64,11 @@ export function CompanyCombobox({
 
 	const handleScroll = (event: UIEvent<HTMLDivElement>) => {
 		const list = event.currentTarget;
+		if (list.scrollHeight <= list.clientHeight) {
+			loadMore();
+			return;
+		}
+
 		const scrollProgress =
 			(list.scrollTop + list.clientHeight) / list.scrollHeight;
 
@@ -96,15 +106,15 @@ export function CompanyCombobox({
 						value={search}
 						onValueChange={setSearch}
 					/>
-					<CommandList onScroll={handleScroll}>
-						{isLoading && companies.length === 0 ? (
+					<CommandList className="max-h-60 overflow-y-auto" onScroll={handleScroll}>
+						{showInitialLoading ? (
 							<div className="flex items-center justify-center gap-2 py-6 text-sm text-muted-foreground">
 								<Loader2 className="size-4 animate-spin" />
 								Loading companies...
 							</div>
 						) : null}
 
-						{!isLoading && companies.length === 0 ? (
+						{!isSearchPending && companies.length === 0 ? (
 							<CommandEmpty>
 								{error ?? "No companies found."}
 							</CommandEmpty>
@@ -131,13 +141,20 @@ export function CompanyCombobox({
 							</CommandItem>
 						))}
 
+						{showRefetchLoading ? (
+							<div className="flex items-center justify-center gap-2 border-t border-input py-2 text-sm text-muted-foreground">
+								<Loader2 className="size-4 animate-spin" />
+								Searching...
+							</div>
+						) : null}
+
 						{hasMore ? (
 							<div className="border-t border-input p-1">
 								<Button
 									type="button"
 									variant="ghost"
 									className="h-8 w-full justify-center text-sm"
-									disabled={isLoadingMore}
+									disabled={isLoadingMore || isSearchPending}
 									onClick={loadMore}
 								>
 									{isLoadingMore ? (

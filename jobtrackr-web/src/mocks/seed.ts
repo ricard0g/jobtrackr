@@ -1,9 +1,60 @@
 import type { MockState } from "@/mocks/types";
+import type { Company } from "@/types/company";
 import type { Tag } from "@/types/tag";
 
 const demoUserId = "11111111-1111-4111-8111-111111111111";
 const baseCreatedAt = "2026-06-24T09:00:00.000Z";
 const baseUpdatedAt = "2026-07-01T12:00:00.000Z";
+
+const extraGlobalCompanyNames = [
+	"Adobe",
+	"Airbnb",
+	"Amazon",
+	"Apple",
+	"Asana",
+	"Atlassian",
+	"Canva",
+	"Cloudflare",
+	"Datadog",
+	"Discord",
+	"Dropbox",
+	"Figma",
+	"GitHub",
+	"HubSpot",
+	"IBM",
+	"Intel",
+	"Meta",
+	"Netflix",
+	"Notion",
+	"Nvidia",
+	"Oracle",
+	"Palantir",
+	"Salesforce",
+	"Shopify",
+	"Slack",
+	"Snowflake",
+	"Spotify",
+	"Square",
+	"Twilio",
+	"Uber",
+	"Zoom",
+] as const;
+
+const createGlobalCompany = (
+	companyId: number,
+	companyName: string,
+): Company => ({
+	companyId,
+	userId: null,
+	global: true,
+	companyName,
+	companyWebsiteUrl: `https://www.${companyName.toLowerCase().replace(/\s+/g, "")}.example`,
+	companyLocation: null,
+	companyType: "Enterprise",
+	companyLogo: null,
+	companyCreatedAt: baseCreatedAt,
+	companyUpdatedAt: baseUpdatedAt,
+});
 
 export const createSeedState = (): MockState => ({
 	version: 2,
@@ -105,6 +156,9 @@ export const createSeedState = (): MockState => ({
 			companyCreatedAt: baseCreatedAt,
 			companyUpdatedAt: baseUpdatedAt,
 		},
+		...extraGlobalCompanyNames.map((companyName, index) =>
+			createGlobalCompany(index + 7, companyName),
+		),
 	],
 	tags: [
 		{
@@ -232,7 +286,7 @@ export const createSeedState = (): MockState => ({
 	],
 	counters: {
 		applicationId: 4,
-		companyId: 7,
+		companyId: 7 + extraGlobalCompanyNames.length,
 		interviewId: 3,
 		statusHistoryId: 2,
 		tagId: 5,

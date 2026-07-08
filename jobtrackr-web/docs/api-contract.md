@@ -48,7 +48,7 @@ Company names must be unique per user and cannot duplicate a global company name
 
 `GET /companies` returns global pre-seeded companies plus user-owned companies. Global companies are readable and attachable to applications but cannot be updated or deleted (404). Applications may reference global `companyId` values.
 
-Paginated search (frontend + MSW implemented; Java backend follow-up required):
+Paginated search (frontend, MSW, and Java backend implemented):
 
 | Query param | Type | Default | Description |
 | --- | --- | --- | --- |

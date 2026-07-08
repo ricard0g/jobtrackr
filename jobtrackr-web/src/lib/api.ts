@@ -240,7 +240,6 @@ export const api = {
 	getApplications: () => apiRequest<Application[]>("/applications"),
 	getApplicationById: (applicationId: number) =>
 		apiRequest<Application>(`/applications/${applicationId}`),
-	getCompanies: () => apiRequest<Company[]>("/companies"),
 	searchCompanies: ({
 		search = "",
 		page = 0,
