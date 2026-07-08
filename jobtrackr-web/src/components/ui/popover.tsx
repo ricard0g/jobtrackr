@@ -19,20 +19,31 @@ function PopoverContent({
 	className,
 	align = "start",
 	sideOffset = 4,
+	portalled = true,
 	...props
-}: React.ComponentProps<typeof PopoverPrimitive.Content>) {
+}: React.ComponentProps<typeof PopoverPrimitive.Content> & {
+	portalled?: boolean;
+}) {
+	const content = (
+		<PopoverPrimitive.Content
+			data-slot="popover-content"
+			align={align}
+			sideOffset={sideOffset}
+			className={cn(
+				"z-50 w-[var(--radix-popover-trigger-width)] min-w-[12rem] overflow-hidden rounded-lg border border-input bg-background p-0 text-foreground shadow-md outline-none data-[state=closed]:animate-out data-[state=open]:animate-in data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95",
+				className,
+			)}
+			{...props}
+		/>
+	);
+
+	if (!portalled) {
+		return content;
+	}
+
 	return (
 		<PopoverPrimitive.Portal>
-			<PopoverPrimitive.Content
-				data-slot="popover-content"
-				align={align}
-				sideOffset={sideOffset}
-				className={cn(
-					"z-50 w-[var(--radix-popover-trigger-width)] min-w-[12rem] overflow-hidden rounded-lg border border-input bg-background p-0 text-foreground shadow-md outline-none data-[state=closed]:animate-out data-[state=open]:animate-in data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95",
-					className,
-				)}
-				{...props}
-			/>
+			{content}
 		</PopoverPrimitive.Portal>
 	);
 }
