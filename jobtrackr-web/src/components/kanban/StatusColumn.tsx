@@ -65,7 +65,7 @@ export const StatusColumn = memo(function StatusColumn({
 				/>
 			</div>
 
-			<div className="scrollbar-hide flex min-h-0 flex-1 flex-col gap-y-2 overflow-y-auto pb-10 pt-1">
+			<div className="scrollbar-hide flex min-h-0 flex-1 flex-col gap-y-2 overflow-y-scroll pb-10 pt-1 md:overflow-y-auto">
 				{applications.map((application, index) => (
 					<PostulationCard
 						key={application.applicationId}
