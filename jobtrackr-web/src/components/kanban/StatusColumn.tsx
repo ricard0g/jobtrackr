@@ -36,7 +36,7 @@ export const StatusColumn = memo(function StatusColumn({
 			ref={ref}
 			data-drop-target={isDropTarget}
 			className={cn(
-				"flex h-[85%] min-w-80 flex-col overflow-hidden rounded-lg border border-light-gray bg-off-white p-4 shadow-cool-light transition-[background-color,border-color,box-shadow] duration-150 md:h-[85dvh]",
+				"flex h-full min-w-80 flex-col overflow-hidden rounded-lg border border-light-gray bg-off-white p-4 shadow-cool-light transition-[background-color,border-color,box-shadow] duration-150 md:h-[85dvh]",
 				isDropTarget &&
 					"border-primary/50 bg-primary/5 shadow-lg ring-2 ring-primary/15",
 			)}
