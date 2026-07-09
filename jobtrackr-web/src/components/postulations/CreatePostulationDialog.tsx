@@ -246,7 +246,7 @@ export function CreatePostulationDialog({
 					</Button>
 				)}
 			</DialogTrigger>
-			<DialogContent>
+			<DialogContent className="h-[85dvh] max-h-[85dvh] min-w-0 overflow-y-auto">
 				<DialogHeader>
 					<DialogTitle>Create application</DialogTitle>
 					<DialogDescription>
@@ -254,7 +254,7 @@ export function CreatePostulationDialog({
 					</DialogDescription>
 				</DialogHeader>
 
-				<Form className="grid gap-4" onSubmit={handleSubmit}>
+				<Form className="grid min-w-0 gap-4" onSubmit={handleSubmit}>
 					<div className="grid gap-4 sm:grid-cols-2">
 						<FormField name="companyId">
 							<FormLabel>Company</FormLabel>
@@ -426,11 +426,12 @@ export function CreatePostulationDialog({
 						</FormField>
 					</div>
 
-					<FormField name="applicationJobUrl">
+					<FormField className="min-w-0" name="applicationJobUrl">
 						<FormLabel>Job URL</FormLabel>
 						<FormControl asChild>
 							<Input
 								type="url"
+								className="max-w-full"
 								value={values.applicationJobUrl}
 								onChange={(event) =>
 									updateValue("applicationJobUrl", event.target.value)
@@ -442,8 +443,8 @@ export function CreatePostulationDialog({
 						</FormControl>
 					</FormField>
 
-					<div className="grid gap-4 sm:grid-cols-2">
-						<FormField name="applicationSource">
+					<div className="grid min-w-0 gap-4 sm:grid-cols-2">
+						<FormField className="min-w-0" name="applicationSource">
 							<FormLabel>Source</FormLabel>
 							<FormControl asChild>
 								<Input
@@ -458,17 +459,20 @@ export function CreatePostulationDialog({
 							</FormControl>
 						</FormField>
 
-						<FormField name="applicationAppliedAt">
+						<FormField className="min-w-0 overflow-hidden" name="applicationAppliedAt">
 							<FormLabel>Applied date</FormLabel>
-							<FormControl asChild>
-								<Input
-									type="date"
-									value={values.applicationAppliedAt}
-									onChange={(event) =>
-										updateValue("applicationAppliedAt", event.target.value)
-									}
-									disabled={isSubmitting}
-								/>
+							<FormControl>
+								<div className="w-full min-w-0 max-w-full overflow-hidden">
+									<Input
+										type="date"
+										className="box-border w-full min-w-0 max-w-full"
+										value={values.applicationAppliedAt}
+										onChange={(event) =>
+											updateValue("applicationAppliedAt", event.target.value)
+										}
+										disabled={isSubmitting}
+									/>
+								</div>
 							</FormControl>
 						</FormField>
 					</div>

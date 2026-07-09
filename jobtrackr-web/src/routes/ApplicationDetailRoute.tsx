@@ -408,7 +408,7 @@ export function ApplicationDetailRoute() {
 				if (!open) navigate("/", { replace: true });
 			}}
 		>
-			<DialogContent className="max-h-[90vh] max-w-3xl overflow-y-auto">
+			<DialogContent className="h-[85dvh] max-h-[85dvh] min-w-0 max-w-3xl overflow-y-auto">
 				<div className="flex items-start justify-between gap-4">
 					<div className="min-w-0">
 						<DialogTitle className="font-display text-2xl">
@@ -476,7 +476,7 @@ export function ApplicationDetailRoute() {
 										href={currentApplication.applicationJobUrl}
 										target="_blank"
 										rel="noreferrer"
-										className="truncate text-darkest-accent underline"
+										className="block max-w-full truncate text-darkest-accent underline"
 									>
 										{currentApplication.applicationJobUrl}
 									</a>
@@ -706,7 +706,7 @@ export function ApplicationDetailRoute() {
 				)}
 
 				{mode === "edit" && (
-					<applicationFetcher.Form method="post" className="grid gap-4">
+					<applicationFetcher.Form method="post" className="grid min-w-0 gap-4">
 						<input type="hidden" name="intent" value="updateApplication" />
 						<input
 							type="hidden"
@@ -926,12 +926,13 @@ export function ApplicationDetailRoute() {
 							</FormField>
 						</div>
 
-						<FormField name="applicationJobUrl">
+						<FormField className="min-w-0" name="applicationJobUrl">
 							<FormLabel>Job URL</FormLabel>
 							<FormControl asChild>
 								<Input
 									name="applicationJobUrl"
 									type="url"
+									className="max-w-full"
 									value={applicationValues.applicationJobUrl}
 									onChange={(event) =>
 										updateApplicationValue(
