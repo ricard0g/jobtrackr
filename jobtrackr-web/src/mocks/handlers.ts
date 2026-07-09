@@ -41,7 +41,7 @@ import type {
 } from "@/types/application";
 import type { AuthResponse, LoginRequest, RegisterRequest } from "@/types/auth";
 import type { CompanyWriteRequest } from "@/types/company";
-import type { InterviewCreateRequest, InterviewPutRequest } from "@/types/interview";
+import type { InterviewCreateRequest, InterviewOutcomePatchRequest, InterviewPutRequest } from "@/types/interview";
 import type { TagWriteRequest } from "@/types/tag";
 import type { User } from "@/types/user";
 
@@ -1048,6 +1048,38 @@ export const handlers = [
 			interview.interviewScheduledAt = body.interviewScheduledAt;
 			interview.interviewLocation = normalizeOptional(body.interviewLocation);
 			interview.interviewNotes = normalizeOptional(body.interviewNotes);
+			interview.interviewOutcome = body.interviewOutcome;
+			interview.interviewUpdatedAt = nowIso();
+			saveState(state);
+			return HttpResponse.json(interview);
+		},
+	),
+
+	http.patch(
+		`${API_BASE_URL}/applications/:applicationId/interviews/:interviewId/outcome`,
+		async ({ request, params }) => {
+			const state = loadState();
+			const auth = requireAuth(request, state);
+			if (auth instanceof Response) return auth;
+			const applicationId = getPositiveId(params, "applicationId");
+			const interviewId = getPositiveId(params, "interviewId");
+			const interview = requireInterviewForUser(
+				state,
+				auth.user.userId,
+				applicationId,
+				interviewId,
+			);
+			if (!interview) {
+				return errorJson(404, "INTERVIEW_NOT_FOUND", "Interview not found");
+			}
+			const body = await readJson<InterviewOutcomePatchRequest>(request);
+			const validOutcomes = ["PENDING", "PASSED", "FAILED", "CANCELLED"] as const;
+			if (!body.interviewOutcome || !validOutcomes.includes(body.interviewOutcome)) {
+				return validationError([
+					toValidationField("interviewOutcome", "must not be null"),
+				]);
+			}
+
 			interview.interviewOutcome = body.interviewOutcome;
 			interview.interviewUpdatedAt = nowIso();
 			saveState(state);

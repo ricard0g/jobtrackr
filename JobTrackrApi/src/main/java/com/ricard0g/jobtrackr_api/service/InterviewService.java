@@ -7,12 +7,14 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import com.ricard0g.jobtrackr_api.dto.InterviewDto.InterviewCreateRequestDto;
+import com.ricard0g.jobtrackr_api.dto.InterviewDto.InterviewOutcomePatchRequestDto;
 import com.ricard0g.jobtrackr_api.dto.InterviewDto.InterviewPutRequestDto;
 import com.ricard0g.jobtrackr_api.dto.InterviewDto.InterviewResponseDto;
 import com.ricard0g.jobtrackr_api.exception.ApplicationNotFoundException;
 import com.ricard0g.jobtrackr_api.exception.InterviewNotFoundException;
 import com.ricard0g.jobtrackr_api.model.Application;
 import com.ricard0g.jobtrackr_api.model.Interview;
+import com.ricard0g.jobtrackr_api.model.enums.InterviewOutcome;
 import com.ricard0g.jobtrackr_api.repository.ApplicationRepository;
 import com.ricard0g.jobtrackr_api.repository.InterviewRepository;
 
@@ -93,6 +95,34 @@ public class InterviewService {
                 interviewId,
                 applicationId,
                 userId);
+        return InterviewResponseDto.from(saved, applicationId);
+    }
+
+    @Transactional
+    public InterviewResponseDto patchInterviewOutcome(
+            final UUID userId,
+            final Long applicationId,
+            final Long interviewId,
+            final InterviewOutcomePatchRequestDto dto) {
+        final Interview interview = requireInterviewForUser(userId, applicationId, interviewId);
+        final InterviewOutcome oldOutcome = interview.getInterviewOutcome();
+        final InterviewOutcome newOutcome = dto.interviewOutcome();
+        if (!oldOutcome.equals(newOutcome)) {
+            final int updated = interviewRepository.updateInterviewOutcomeForApplicationAndUser(
+                    interviewId, applicationId, userId, newOutcome);
+            if (updated == 0) {
+                ensureApplicationExistsForUser(userId, applicationId);
+                throw new InterviewNotFoundException(userId, applicationId, interviewId);
+            }
+        }
+        final Interview saved = requireInterviewForUser(userId, applicationId, interviewId);
+        log.info(
+                "[InterviewService] - PATCH_INTERVIEW_OUTCOME: interviewId: {}, applicationId: {}, userId: {}, oldOutcome: {}, newOutcome: {}",
+                interviewId,
+                applicationId,
+                userId,
+                oldOutcome,
+                newOutcome);
         return InterviewResponseDto.from(saved, applicationId);
     }
 

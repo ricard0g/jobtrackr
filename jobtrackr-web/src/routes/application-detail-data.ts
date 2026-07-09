@@ -15,6 +15,7 @@ import {
 import type {
 	Interview,
 	InterviewCreateRequest,
+	InterviewOutcome,
 	InterviewType,
 } from "@/types/interview";
 import type { BoardPlacement } from "@/components/kanban/board-state";
@@ -41,7 +42,7 @@ export type ApplicationDetailActionData =
 	  }
 	| {
 			ok: true;
-			intent: "createInterview" | "deleteInterview";
+			intent: "createInterview" | "deleteInterview" | "patchInterviewOutcome";
 	  }
 	| {
 			ok: true;
@@ -55,6 +56,7 @@ export type ApplicationDetailActionData =
 				| "updateTags"
 				| "createInterview"
 				| "deleteInterview"
+				| "patchInterviewOutcome"
 				| "deleteApplication";
 			formError?: string;
 			fieldErrors?: Partial<Record<ApplicationFormField, string>>;
@@ -83,6 +85,16 @@ const interviewTypeValues = [
 
 const isInterviewType = (value: string): value is InterviewType =>
 	interviewTypeValues.includes(value as InterviewType);
+
+const interviewOutcomeValues = [
+	"PENDING",
+	"PASSED",
+	"FAILED",
+	"CANCELLED",
+] satisfies InterviewOutcome[];
+
+const isInterviewOutcome = (value: string): value is InterviewOutcome =>
+	interviewOutcomeValues.includes(value as InterviewOutcome);
 
 const parsePositiveApplicationId = (value: string | undefined) => {
 	const applicationId = Number(value);
@@ -164,6 +176,9 @@ export async function applicationDetailAction({
 	}
 	if (intent === "deleteInterview") {
 		return deleteInterview(applicationId, formData);
+	}
+	if (intent === "patchInterviewOutcome") {
+		return patchInterviewOutcome(applicationId, formData);
 	}
 	if (intent === "deleteApplication") {
 		return deleteApplication(applicationId);
@@ -397,6 +412,47 @@ async function deleteInterview(
 	}
 }
 
+async function patchInterviewOutcome(
+	applicationId: number,
+	formData: FormData,
+): Promise<ApplicationDetailActionData> {
+	const interviewId = parsePositiveFormId(formData.get("interviewId"));
+	const interviewOutcomeValue = String(formData.get("interviewOutcome") ?? "");
+
+	if (!interviewId) {
+		return {
+			ok: false,
+			intent: "patchInterviewOutcome",
+			formError: "Invalid interview id.",
+		};
+	}
+	if (!isInterviewOutcome(interviewOutcomeValue)) {
+		return {
+			ok: false,
+			intent: "patchInterviewOutcome",
+			formError: "Select a valid interview outcome.",
+		};
+	}
+
+	try {
+		await api.setInterviewOutcome(
+			applicationId,
+			interviewId,
+			interviewOutcomeValue,
+		);
+		return { ok: true, intent: "patchInterviewOutcome" };
+	} catch (error) {
+		return {
+			ok: false,
+			intent: "patchInterviewOutcome",
+			formError: apiErrorMessage(
+				error,
+				"Could not update the interview outcome.",
+			),
+		};
+	}
+}
+
 async function deleteApplication(
 	applicationId: number,
 ): Promise<ApplicationDetailActionData> {
@@ -428,7 +484,11 @@ export function applicationDetailShouldRevalidate({
 		"intent" in actionResult
 	) {
 		const intent = (actionResult as ApplicationDetailActionData).intent;
-		return intent === "createInterview" || intent === "deleteInterview";
+		return (
+			intent === "createInterview" ||
+			intent === "deleteInterview" ||
+			intent === "patchInterviewOutcome"
+		);
 	}
 
 	return defaultShouldRevalidate;

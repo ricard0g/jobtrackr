@@ -8,6 +8,7 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
@@ -28,6 +29,7 @@ import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 
 import com.ricard0g.jobtrackr_api.dto.InterviewDto.InterviewCreateRequestDto;
+import com.ricard0g.jobtrackr_api.dto.InterviewDto.InterviewOutcomePatchRequestDto;
 import com.ricard0g.jobtrackr_api.dto.InterviewDto.InterviewPutRequestDto;
 import com.ricard0g.jobtrackr_api.dto.InterviewDto.InterviewResponseDto;
 import com.ricard0g.jobtrackr_api.exception.ApplicationNotFoundException;
@@ -328,6 +330,73 @@ class InterviewControllerTest {
                                         """))
                 .andExpect(status().isNotFound())
                 .andExpect(jsonPath("$.code").value("INTERVIEW_NOT_FOUND"));
+    }
+
+    @Test
+    void patchInterviewOutcome_withNewOutcome_returns200() throws Exception {
+        // given
+        final InterviewResponseDto patched = new InterviewResponseDto(
+                2L,
+                10L,
+                InterviewType.TECHNICAL,
+                TIMESTAMP,
+                "Zoom",
+                "System design focus",
+                InterviewOutcome.PASSED,
+                TIMESTAMP,
+                TIMESTAMP);
+        when(interviewService.patchInterviewOutcome(
+                eq(USER_ID), eq(10L), eq(2L), any(InterviewOutcomePatchRequestDto.class)))
+                .thenReturn(patched);
+
+        // when / then
+        mockMvc.perform(
+                        patch(BASE_PATH + "/2/outcome").principal(authenticatedUser())
+                                .contentType(MediaType.APPLICATION_JSON)
+                                .content(
+                                        """
+                                        {
+                                          "interviewOutcome": "PASSED"
+                                        }
+                                        """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.interviewId").value(2))
+                .andExpect(jsonPath("$.interviewOutcome").value("PASSED"));
+
+        verify(interviewService)
+                .patchInterviewOutcome(eq(USER_ID), eq(10L), eq(2L), any(InterviewOutcomePatchRequestDto.class));
+    }
+
+    @Test
+    void patchInterviewOutcome_whenNotFound_returns404() throws Exception {
+        // given
+        when(interviewService.patchInterviewOutcome(
+                eq(USER_ID), eq(10L), eq(99L), any(InterviewOutcomePatchRequestDto.class)))
+                .thenThrow(new InterviewNotFoundException(USER_ID, 10L, 99L));
+
+        // when / then
+        mockMvc.perform(
+                        patch(BASE_PATH + "/99/outcome").principal(authenticatedUser())
+                                .contentType(MediaType.APPLICATION_JSON)
+                                .content(
+                                        """
+                                        {
+                                          "interviewOutcome": "PASSED"
+                                        }
+                                        """))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.code").value("INTERVIEW_NOT_FOUND"));
+    }
+
+    @Test
+    void patchInterviewOutcome_withMissingOutcome_returns400() throws Exception {
+        // when / then
+        mockMvc.perform(
+                        patch(BASE_PATH + "/2/outcome").principal(authenticatedUser())
+                                .contentType(MediaType.APPLICATION_JSON)
+                                .content("{}"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("VALIDATION_ERROR"));
     }
 
     @Test
