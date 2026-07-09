@@ -122,7 +122,7 @@ export const PostulationCard = memo(function PostulationCard({
 			onPointerMove={handlePointerMove}
 			onPointerUp={resetDragClickState}
 			className={cn(
-				"flex w-full max-w-full max-h-fit cursor-pointer flex-col items-start justify-start gap-y-3 overflow-hidden rounded-lg border border-off-white bg-white p-4 shadow-md outline-none transition-[border-color,box-shadow,opacity,transform] duration-150 focus-visible:ring-3 focus-visible:ring-ring/30",
+				"flex min-h-full w-full max-w-full shrink-0 cursor-pointer flex-col items-start justify-start gap-y-3 overflow-hidden rounded-lg border border-off-white bg-white p-4 shadow-md outline-none transition-[border-color,box-shadow,opacity,transform] duration-150 focus-visible:ring-3 focus-visible:ring-ring/30",
 				"active:cursor-grabbing data-[dragging=true]:cursor-grabbing data-[drag-source=true]:cursor-grabbing",
 				isDropTarget &&
 					"border-primary/70 shadow-lg ring-2 ring-primary/25",

@@ -444,7 +444,7 @@ export function CreatePostulationDialog({
 					</FormField>
 
 					<div className="grid min-w-0 gap-4 sm:grid-cols-2">
-						<FormField name="applicationSource">
+						<FormField className="min-w-0" name="applicationSource">
 							<FormLabel>Source</FormLabel>
 							<FormControl asChild>
 								<Input
@@ -459,18 +459,20 @@ export function CreatePostulationDialog({
 							</FormControl>
 						</FormField>
 
-						<FormField className="min-w-0" name="applicationAppliedAt">
+						<FormField className="min-w-0 overflow-hidden" name="applicationAppliedAt">
 							<FormLabel>Applied date</FormLabel>
-							<FormControl asChild>
-								<Input
-									type="date"
-									className="max-w-full"
-									value={values.applicationAppliedAt}
-									onChange={(event) =>
-										updateValue("applicationAppliedAt", event.target.value)
-									}
-									disabled={isSubmitting}
-								/>
+							<FormControl>
+								<div className="w-full min-w-0 max-w-full overflow-hidden">
+									<Input
+										type="date"
+										className="box-border w-full min-w-0 max-w-full"
+										value={values.applicationAppliedAt}
+										onChange={(event) =>
+											updateValue("applicationAppliedAt", event.target.value)
+										}
+										disabled={isSubmitting}
+									/>
+								</div>
 							</FormControl>
 						</FormField>
 					</div>
