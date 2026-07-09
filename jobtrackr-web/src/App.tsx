@@ -11,7 +11,7 @@ function App() {
 
 	return (
 		<BoardProvider data={data}>
-			<section className="min-h-screen w-full overflow-hidden bg-bg">
+			<section className="flex h-dvh w-full flex-col overflow-hidden bg-bg md:min-h-screen">
 				<Navbar />
 				<main>
 					<KanbanBoard />
