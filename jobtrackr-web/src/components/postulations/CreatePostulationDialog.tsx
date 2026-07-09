@@ -246,7 +246,7 @@ export function CreatePostulationDialog({
 					</Button>
 				)}
 			</DialogTrigger>
-			<DialogContent>
+			<DialogContent className="h-[85dvh] max-h-[85dvh] min-w-0 overflow-y-auto">
 				<DialogHeader>
 					<DialogTitle>Create application</DialogTitle>
 					<DialogDescription>
@@ -254,7 +254,7 @@ export function CreatePostulationDialog({
 					</DialogDescription>
 				</DialogHeader>
 
-				<Form className="grid gap-4" onSubmit={handleSubmit}>
+				<Form className="grid min-w-0 gap-4" onSubmit={handleSubmit}>
 					<div className="grid gap-4 sm:grid-cols-2">
 						<FormField name="companyId">
 							<FormLabel>Company</FormLabel>
@@ -426,11 +426,12 @@ export function CreatePostulationDialog({
 						</FormField>
 					</div>
 
-					<FormField name="applicationJobUrl">
+					<FormField className="min-w-0" name="applicationJobUrl">
 						<FormLabel>Job URL</FormLabel>
 						<FormControl asChild>
 							<Input
 								type="url"
+								className="max-w-full"
 								value={values.applicationJobUrl}
 								onChange={(event) =>
 									updateValue("applicationJobUrl", event.target.value)

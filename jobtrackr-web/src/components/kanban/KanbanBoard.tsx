@@ -141,7 +141,7 @@ export function KanbanBoard() {
 			onDragOver={handleDragOver}
 			onDragEnd={handleDragEnd}
 		>
-			<div className="flex gap-x-4 overflow-x-scroll px-8 py-8">
+			<div className="flex h-full gap-x-4 overflow-x-scroll px-8 py-8">
 				{applicationStatusOptions.map((status) => (
 					<StatusColumn
 						key={status.value}
