@@ -8,16 +8,6 @@ export default defineConfig({
 	plugins: [react(), tailwindcss()],
 	server: {
 		allowedHosts: [".ngrok-free.app", ".ngrok.app"],
-		proxy: {
-			"/api": {
-				target: "http://localhost:8080",
-				changeOrigin: true,
-			},
-			"/auth": {
-				target: "http://localhost:8080",
-				changeOrigin: true,
-			},
-		},
 	},
 	resolve: {
 		alias: {
