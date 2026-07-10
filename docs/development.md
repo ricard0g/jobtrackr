@@ -83,3 +83,19 @@ agent@example.test / dev-password
 ```
 
 The committed seed file is `db/seed/dev.sql`. It contains fake users, user-scoped companies/tags, applications across every Kanban status, interviews, tasks, status history, saved views, and fake CV/job-description references.
+
+## Cloud Phone Testing
+
+To preview the full stack on a phone from a cloud agent through a single public URL:
+
+```bash
+./scripts/cloud-tunnel-up.sh
+```
+
+This starts Postgres, the API, Vite, nginx, and ngrok. See [`jobtrackr-web/docs/cloud-agent/ngrok-dev.md`](../jobtrackr-web/docs/cloud-agent/ngrok-dev.md) for manual tmux steps, mock-only mode (`--mock`), and troubleshooting.
+
+Stop with:
+
+```bash
+./scripts/cloud-tunnel-down.sh
+```
