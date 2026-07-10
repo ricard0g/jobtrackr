@@ -185,11 +185,13 @@ Before finishing a change, verify:
 
 ## ngrok Dev Tunnel (Phone Testing)
 
-When a user wants to preview the frontend on a phone through ngrok with the mock API, follow **`docs/cloud-agent/ngrok-dev.md`**.
+When a user wants to preview the app on a phone through ngrok, follow **`docs/cloud-agent/ngrok-dev.md`**.
 
 Summary:
 
-* `env VITE_API_MOCKING=true npm run dev` (no `--host 127.0.0.1`)
-* `ngrok http localhost:5173` (not `127.0.0.1:5173`)
-* Requires `server.allowedHosts: [".ngrok-free.app", ".ngrok.app"]` in `vite.config.ts` and same-origin API paths in mock mode (`src/lib/api-config.ts`)
+* nginx reverse-proxies Vite (`:5173`) and the API (`:8080`) on `localhost:9080`
+* `ngrok http localhost:9080` (single tunnel to nginx, not directly to Vite)
+* Full stack: `./scripts/cloud-tunnel-up.sh` — sets `VITE_API_MOCKING=false`, `VITE_API_ORIGIN=`, `JWT_REFRESH_COOKIE_SECURE=true`
+* Mock shortcut: `./scripts/cloud-tunnel-up.sh --mock`
+* Requires `server.allowedHosts: [".ngrok-free.app", ".ngrok.app"]` in `vite.config.ts` and same-origin API paths
 * User needs an ngrok authtoken; on phone they must tap **Visit Site** on the ngrok warning page first

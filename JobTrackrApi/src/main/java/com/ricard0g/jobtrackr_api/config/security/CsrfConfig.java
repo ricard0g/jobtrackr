@@ -19,7 +19,9 @@ public class CsrfConfig {
         repository.setHeaderName("X-XSRF-TOKEN");
         repository.setCookieName("XSRF-TOKEN");
         repository.setCookieCustomizer(
-                cookie -> cookie.sameSite(jwtProperties.getRefreshCookieSameSite()));
+                cookie -> cookie
+                        .sameSite(jwtProperties.getRefreshCookieSameSite())
+                        .secure(jwtProperties.isRefreshCookieSecure()));
         return repository;
     }
 }

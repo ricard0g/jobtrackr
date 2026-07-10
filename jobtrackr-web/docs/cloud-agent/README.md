@@ -2,4 +2,4 @@
 
 Operational guides for cloud agents working in this repository.
 
-- [ngrok Dev Tunnel](./ngrok-dev.md) — preview the frontend on a phone with mock API enabled
+- [ngrok Dev Tunnel](./ngrok-dev.md) — preview the full stack (or mock API) on a phone via nginx + a single ngrok tunnel
