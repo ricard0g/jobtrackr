@@ -1064,74 +1064,78 @@ export function ApplicationDetailRoute() {
 				)}
 
 				{mode === "tags" && (
-					<tagFetcher.Form
-						method="post"
-						className="flex min-h-0 flex-1 flex-col gap-4"
-					>
-						<input type="hidden" name="intent" value="updateTags" />
-						{Array.from(selectedTagIds).map((tagId) => (
-							<input
-								key={tagId}
-								type="hidden"
-								name="tagIds"
-								value={tagId}
-							/>
-						))}
-						<div className="flex h-[80%] flex-col gap-2 overflow-y-auto rounded-md border border-light-gray p-3">
-							{allTags.map((tag) => {
-								const checkboxId = `tag-${tag.tagId}`;
-								const tagColor = tag.tagColor ?? "#666666";
+					<div className="flex min-h-0 flex-1 basis-0 flex-col overflow-hidden">
+						<tagFetcher.Form
+							method="post"
+							className="flex h-full min-h-0 flex-col gap-4"
+						>
+							<input type="hidden" name="intent" value="updateTags" />
+							{Array.from(selectedTagIds).map((tagId) => (
+								<input
+									key={tagId}
+									type="hidden"
+									name="tagIds"
+									value={tagId}
+								/>
+							))}
+							<div className="flex min-h-0 flex-[4] basis-0 flex-col gap-2 overflow-y-auto rounded-md border border-light-gray p-3">
+								{allTags.map((tag) => {
+									const checkboxId = `tag-${tag.tagId}`;
+									const tagColor = tag.tagColor ?? "#666666";
 
-								return (
-									<label
-										key={tag.tagId}
-										htmlFor={checkboxId}
-										className="flex h-fit shrink-0 cursor-pointer items-center justify-between gap-3 rounded-md p-2 hover:bg-off-white"
-									>
-										<div className="flex min-w-0 items-center gap-2">
-											<Checkbox
-												id={checkboxId}
-												checked={selectedTagIds.has(tag.tagId)}
-												onCheckedChange={() => toggleSelectedTag(tag.tagId)}
-												disabled={isSubmittingTags}
+									return (
+										<label
+											key={tag.tagId}
+											htmlFor={checkboxId}
+											className="flex h-fit shrink-0 cursor-pointer items-center justify-between gap-3 rounded-md p-2 hover:bg-off-white"
+										>
+											<div className="flex min-w-0 items-center gap-2">
+												<Checkbox
+													id={checkboxId}
+													checked={selectedTagIds.has(tag.tagId)}
+													onCheckedChange={() => toggleSelectedTag(tag.tagId)}
+													disabled={isSubmittingTags}
+												/>
+												<Label htmlFor={checkboxId} className="truncate">
+													{tag.tagName}
+												</Label>
+											</div>
+											<span
+												className="h-4 w-4 shrink-0 rounded-full border"
+												style={{
+													borderColor: tagColor,
+													backgroundColor: tagColor,
+												}}
 											/>
-											<Label htmlFor={checkboxId} className="truncate">
-												{tag.tagName}
-											</Label>
-										</div>
-										<span
-											className="h-4 w-4 shrink-0 rounded-full border"
-											style={{
-												borderColor: tagColor,
-												backgroundColor: tagColor,
-											}}
-										/>
-									</label>
-								);
-							})}
-						</div>
+										</label>
+									);
+								})}
+							</div>
 
-						{tagError && (
-							<p className="shrink-0 rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive">
-								{tagError}
-							</p>
-						)}
+							<div className="flex shrink-0 flex-col gap-4">
+								{tagError && (
+									<p className="rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive">
+										{tagError}
+									</p>
+								)}
 
-						<div className="flex h-[20%] max-h-[20%] justify-end gap-2">
-							<Button
-								type="button"
-								variant="ghost"
-								onClick={() => setMode("view")}
-								disabled={isSubmittingTags}
-							>
-								Cancel
-							</Button>
-							<Button type="submit" disabled={isSubmittingTags}>
-								{isSubmittingTags && <Loader2 className="animate-spin" />}
-								Save tags
-							</Button>
-						</div>
-					</tagFetcher.Form>
+								<div className="flex items-center justify-end gap-2">
+									<Button
+										type="button"
+										variant="ghost"
+										onClick={() => setMode("view")}
+										disabled={isSubmittingTags}
+									>
+										Cancel
+									</Button>
+									<Button type="submit" disabled={isSubmittingTags}>
+										{isSubmittingTags && <Loader2 className="animate-spin" />}
+										Save tags
+									</Button>
+								</div>
+							</div>
+						</tagFetcher.Form>
+					</div>
 				)}
 			</DialogContent>
 		</Dialog>
