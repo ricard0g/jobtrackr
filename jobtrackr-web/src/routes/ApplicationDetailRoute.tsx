@@ -38,6 +38,7 @@ import {
 	SelectValue,
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
+import { cn } from "@/lib/utils";
 import {
 	applicationStatusOptions,
 	getApplicationStatusOption,
@@ -451,8 +452,13 @@ export function ApplicationDetailRoute() {
 				if (!open) navigate("/", { replace: true });
 			}}
 		>
-			<DialogContent className="h-[85dvh] max-h-[85dvh] min-w-0 max-w-3xl overflow-y-auto">
-				<div className="flex items-start justify-between gap-4">
+			<DialogContent
+				className={cn(
+					"flex h-[85dvh] max-h-[85dvh] min-w-0 max-w-3xl flex-col",
+					mode === "tags" ? "overflow-hidden" : "overflow-y-auto",
+				)}
+			>
+				<div className="flex shrink-0 items-start justify-between gap-4">
 					<div className="min-w-0">
 						<DialogTitle className="font-display text-2xl">
 							{currentApplication.applicationTitle}
@@ -1058,7 +1064,10 @@ export function ApplicationDetailRoute() {
 				)}
 
 				{mode === "tags" && (
-					<tagFetcher.Form method="post" className="grid gap-4">
+					<tagFetcher.Form
+						method="post"
+						className="grid min-h-0 flex-1 grid-rows-[minmax(0,1fr)_auto_auto] gap-4"
+					>
 						<input type="hidden" name="intent" value="updateTags" />
 						{Array.from(selectedTagIds).map((tagId) => (
 							<input
@@ -1068,7 +1077,7 @@ export function ApplicationDetailRoute() {
 								value={tagId}
 							/>
 						))}
-						<div className="grid max-h-80 gap-2 overflow-y-auto rounded-md border border-light-gray p-3">
+						<div className="grid min-h-0 gap-2 overflow-hidden rounded-md border border-light-gray p-3">
 							{allTags.map((tag) => {
 								const checkboxId = `tag-${tag.tagId}`;
 								const tagColor = tag.tagColor ?? "#666666";
