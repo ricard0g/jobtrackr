@@ -1077,7 +1077,7 @@ export function ApplicationDetailRoute() {
 								value={tagId}
 							/>
 						))}
-						<div className="grid min-h-0 flex-1 gap-2 overflow-scroll rounded-md border border-light-gray p-3">
+						<div className="flex min-h-0 flex-1 flex-col gap-2 overflow-scroll rounded-md border border-light-gray p-3">
 							{allTags.map((tag) => {
 								const checkboxId = `tag-${tag.tagId}`;
 								const tagColor = tag.tagColor ?? "#666666";
@@ -1086,7 +1086,7 @@ export function ApplicationDetailRoute() {
 									<label
 										key={tag.tagId}
 										htmlFor={checkboxId}
-										className="flex cursor-pointer items-center justify-between gap-3 rounded-md p-2 hover:bg-off-white"
+										className="flex h-fit cursor-pointer items-center justify-between gap-3 rounded-md p-2 hover:bg-off-white"
 									>
 										<div className="flex min-w-0 items-center gap-2">
 											<Checkbox
@@ -1112,12 +1112,12 @@ export function ApplicationDetailRoute() {
 						</div>
 
 						{tagError && (
-							<p className="rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive">
+							<p className="h-fit shrink-0 rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive">
 								{tagError}
 							</p>
 						)}
 
-						<div className="flex justify-end gap-2">
+						<div className="flex h-fit max-h-fit shrink-0 justify-end gap-2">
 							<Button
 								type="button"
 								variant="ghost"
