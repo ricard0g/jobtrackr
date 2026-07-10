@@ -58,11 +58,16 @@ const router = createBrowserRouter([
 ]);
 
 async function enableMocking() {
-	if (
-		!import.meta.env.DEV ||
-		import.meta.env.VITE_API_MOCKING !== "true" ||
-		typeof window === "undefined"
-	) {
+	if (!import.meta.env.DEV || typeof window === "undefined") {
+		return;
+	}
+
+	if (import.meta.env.VITE_API_MOCKING !== "true") {
+		// Drop a stale MSW worker left over from an earlier mock-mode tunnel session.
+		if ("serviceWorker" in navigator) {
+			const registrations = await navigator.serviceWorker.getRegistrations();
+			await Promise.all(registrations.map((registration) => registration.unregister()));
+		}
 		return;
 	}
 

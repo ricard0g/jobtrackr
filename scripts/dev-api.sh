@@ -9,8 +9,18 @@ if [ ! -f "$ROOT_DIR/.env" ]; then
 fi
 
 set -a
+PRESERVED_JWT_REFRESH_COOKIE_SECURE="${JWT_REFRESH_COOKIE_SECURE-}"
 . "$ROOT_DIR/.env"
 set +a
+
+if [ -n "$PRESERVED_JWT_REFRESH_COOKIE_SECURE" ]; then
+  export JWT_REFRESH_COOKIE_SECURE="$PRESERVED_JWT_REFRESH_COOKIE_SECURE"
+fi
+
+if [ -d /usr/lib/jvm/temurin-25-jdk-amd64 ]; then
+  export JAVA_HOME=/usr/lib/jvm/temurin-25-jdk-amd64
+  export PATH="$JAVA_HOME/bin:$PATH"
+fi
 
 cd "$ROOT_DIR/JobTrackrApi"
 ./mvnw spring-boot:run

@@ -230,6 +230,10 @@ async function apiRequest<T>(path: string, init: RequestInit = {}, retry = true)
 }
 
 export async function requireSession() {
+	if (accessToken) {
+		return;
+	}
+
 	try {
 		await refreshSession();
 	} catch {
