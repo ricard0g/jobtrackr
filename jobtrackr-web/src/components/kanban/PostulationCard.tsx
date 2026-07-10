@@ -3,11 +3,12 @@ import { Building2 } from "lucide-react";
 import {
 	memo,
 	type DragEvent,
+	type KeyboardEvent,
 	type MouseEvent,
 	type PointerEvent,
 	useRef,
 } from "react";
-import { Link } from "react-router";
+import { useNavigate } from "react-router";
 
 import { cn } from "@/lib/utils";
 import type { Application } from "@/types/application";
@@ -55,6 +56,8 @@ export const PostulationCard = memo(function PostulationCard({
 	status,
 	application,
 }: PostulationCardProps) {
+	const navigate = useNavigate();
+	const applicationPath = `/applications/${application.applicationId}`;
 	const { ref, isDragging, isDragSource, isDropTarget, isDropping } =
 		useSortable({
 			id: application.applicationId,
@@ -70,20 +73,38 @@ export const PostulationCard = memo(function PostulationCard({
 	const pointerStartRef = useRef<{ x: number; y: number } | null>(null);
 	const suppressClickRef = useRef(false);
 
-	const handleCardClick = (event: MouseEvent<HTMLAnchorElement>) => {
-		if (suppressClickRef.current) {
+	const shouldSuppressNavigation = () =>
+		suppressClickRef.current || isDragging || isDragSource;
+
+	const handleCardClick = (event: MouseEvent<HTMLDivElement>) => {
+		if (shouldSuppressNavigation()) {
 			event.preventDefault();
 			suppressClickRef.current = false;
 			return;
 		}
+
+		navigate(applicationPath);
 	};
 
-	const handlePointerDown = (event: PointerEvent<HTMLAnchorElement>) => {
+	const handleCardKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
+		if (event.key !== "Enter" && event.key !== " ") return;
+
+		event.preventDefault();
+
+		if (shouldSuppressNavigation()) {
+			suppressClickRef.current = false;
+			return;
+		}
+
+		navigate(applicationPath);
+	};
+
+	const handlePointerDown = (event: PointerEvent<HTMLDivElement>) => {
 		pointerStartRef.current = { x: event.clientX, y: event.clientY };
 		suppressClickRef.current = false;
 	};
 
-	const handlePointerMove = (event: PointerEvent<HTMLAnchorElement>) => {
+	const handlePointerMove = (event: PointerEvent<HTMLDivElement>) => {
 		const pointerStart = pointerStartRef.current;
 		if (!pointerStart) return;
 
@@ -102,27 +123,35 @@ export const PostulationCard = memo(function PostulationCard({
 		}, 100);
 	};
 
-	const preventNativeDrag = (event: DragEvent<HTMLAnchorElement>) => {
+	const preventNativeDrag = (event: DragEvent<HTMLDivElement>) => {
+		event.preventDefault();
+	};
+
+	const preventContextMenu = (event: MouseEvent<HTMLDivElement>) => {
 		event.preventDefault();
 	};
 
 	return (
-		<Link
+		<div
 			ref={ref}
-			to={`/applications/${application.applicationId}`}
+			role="link"
+			tabIndex={0}
+			aria-label={`${application.company.companyName}, ${application.applicationTitle}`}
 			draggable={false}
 			data-dragging={isDragging}
 			data-drag-source={isDragSource}
 			data-drop-target={isDropTarget}
 			data-dropping={isDropping}
 			onClick={handleCardClick}
+			onContextMenu={preventContextMenu}
 			onDragStart={preventNativeDrag}
+			onKeyDown={handleCardKeyDown}
 			onPointerCancel={resetDragClickState}
 			onPointerDown={handlePointerDown}
 			onPointerMove={handlePointerMove}
 			onPointerUp={resetDragClickState}
 			className={cn(
-				"flex h-fit min-h-fit w-full max-w-full shrink-0 cursor-pointer flex-col items-start justify-start gap-y-3 overflow-hidden rounded-lg border border-off-white bg-white p-4 shadow-md outline-none transition-[border-color,box-shadow,opacity,transform] duration-150 focus-visible:ring-3 focus-visible:ring-ring/30",
+				"flex h-fit min-h-fit w-full max-w-full shrink-0 cursor-pointer touch-none select-none flex-col items-start justify-start gap-y-3 overflow-hidden rounded-lg border border-off-white bg-white p-4 shadow-md outline-none transition-[border-color,box-shadow,opacity,transform] duration-150 [-webkit-touch-callout:none] focus-visible:ring-3 focus-visible:ring-ring/30",
 				"active:cursor-grabbing data-[dragging=true]:cursor-grabbing data-[drag-source=true]:cursor-grabbing",
 				isDropTarget &&
 					"border-primary/70 shadow-lg ring-2 ring-primary/25",
@@ -183,6 +212,6 @@ export const PostulationCard = memo(function PostulationCard({
 					{formatLocalDate(application.applicationAppliedAt)}
 				</p>
 			</div>
-		</Link>
+		</div>
 	);
 });
