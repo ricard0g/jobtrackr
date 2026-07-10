@@ -100,7 +100,7 @@ export function CompanyCombobox({
                     <ChevronDownIcon className="size-4 shrink-0 opacity-50" />
                 </Button>
             </PopoverTrigger>
-            <PopoverContent className="p-0" portalled={false}>
+            <PopoverContent className="p-0 z-50" portalled={false}>
                 <Command shouldFilter={false}>
                     <CommandInput
                         placeholder="Search companies..."
