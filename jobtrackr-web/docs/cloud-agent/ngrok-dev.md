@@ -245,6 +245,7 @@ The ngrok URL changes on each ngrok restart (free plan).
 | App loads locally but tunnel gets **403** | Vite host check blocks ngrok hostname | Add `server.allowedHosts: [".ngrok-free.app", ".ngrok.app"]` in `vite.config.ts` |
 | Login page loads, submit shows **Error 500** | API calls go to `http://localhost:8080` on the phone | Use `VITE_API_ORIGIN=` (empty) or `VITE_API_MOCKING=true`; route API through nginx |
 | Login shows **Invalid email or password** on full stack | Stale MSW service worker from an earlier `--mock` session | Hard-refresh; clear site data; full-stack mode auto-unregisters MSW on load |
+| Login shows **No se pudo completar la autenticacion** | Browser `Origin` is the ngrok URL but API CORS only allows `localhost` | Ensure `CorsConfig` allows `https://*.ngrok-free.app` / `https://*.ngrok.app` patterns |
 | Login succeeds but session drops | Refresh cookie not secure on HTTPS | Set `JWT_REFRESH_COOKIE_SECURE=true` (done by `cloud-tunnel-up.sh`) |
 | Blank page / MSW registration error (mock) | ngrok interstitial serves HTML instead of `mockServiceWorker.js` | User must tap **Visit Site** on ngrok warning, then reload |
 | HMR does not connect on phone | Vite advertises `localhost` for WebSocket | Restart Vite with `VITE_HMR_HOST=<ngrok-host>` or refresh manually |
