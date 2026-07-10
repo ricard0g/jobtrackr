@@ -1066,7 +1066,7 @@ export function ApplicationDetailRoute() {
 				{mode === "tags" && (
 					<tagFetcher.Form
 						method="post"
-						className="grid min-h-0 max-h-full flex-1 grid-rows-[minmax(0,1fr)_auto_auto] gap-4"
+						className="flex min-h-0 max-h-full flex-1 flex-col gap-4"
 					>
 						<input type="hidden" name="intent" value="updateTags" />
 						{Array.from(selectedTagIds).map((tagId) => (
@@ -1077,7 +1077,7 @@ export function ApplicationDetailRoute() {
 								value={tagId}
 							/>
 						))}
-						<div className="grid min-h-0 gap-2 overflow-scroll rounded-md border border-light-gray p-3">
+						<div className="grid min-h-0 flex-1 gap-2 overflow-scroll rounded-md border border-light-gray p-3">
 							{allTags.map((tag) => {
 								const checkboxId = `tag-${tag.tagId}`;
 								const tagColor = tag.tagColor ?? "#666666";
