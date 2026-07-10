@@ -38,6 +38,7 @@ import {
 	SelectValue,
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
+import { cn } from "@/lib/utils";
 import {
 	applicationStatusOptions,
 	getApplicationStatusOption,
@@ -451,8 +452,13 @@ export function ApplicationDetailRoute() {
 				if (!open) navigate("/", { replace: true });
 			}}
 		>
-			<DialogContent className="h-[85dvh] max-h-[85dvh] min-w-0 max-w-3xl overflow-y-auto">
-				<div className="flex items-start justify-between gap-4">
+			<DialogContent
+				className={cn(
+					"flex h-[95dvh] max-h-[95dvh] min-h-0 min-w-0 max-w-3xl flex-col",
+					mode === "tags" ? "overflow-hidden" : "overflow-y-auto",
+				)}
+			>
+				<div className="flex shrink-0 items-start justify-between gap-4">
 					<div className="min-w-0">
 						<DialogTitle className="font-display text-2xl">
 							{currentApplication.applicationTitle}
@@ -1058,7 +1064,10 @@ export function ApplicationDetailRoute() {
 				)}
 
 				{mode === "tags" && (
-					<tagFetcher.Form method="post" className="grid gap-4">
+					<tagFetcher.Form
+						method="post"
+						className="flex min-h-0 flex-1 flex-col items-center justify-center gap-4"
+					>
 						<input type="hidden" name="intent" value="updateTags" />
 						{Array.from(selectedTagIds).map((tagId) => (
 							<input
@@ -1068,7 +1077,7 @@ export function ApplicationDetailRoute() {
 								value={tagId}
 							/>
 						))}
-						<div className="grid max-h-80 gap-2 overflow-y-auto rounded-md border border-light-gray p-3">
+						<div className="flex h-[80dvh] max-h-[80dvh] w-full flex-col gap-2 overflow-y-auto rounded-md border border-light-gray p-3">
 							{allTags.map((tag) => {
 								const checkboxId = `tag-${tag.tagId}`;
 								const tagColor = tag.tagColor ?? "#666666";
@@ -1077,7 +1086,7 @@ export function ApplicationDetailRoute() {
 									<label
 										key={tag.tagId}
 										htmlFor={checkboxId}
-										className="flex cursor-pointer items-center justify-between gap-3 rounded-md p-2 hover:bg-off-white"
+										className="flex h-fit shrink-0 cursor-pointer items-center justify-between gap-3 rounded-md p-2 hover:bg-off-white"
 									>
 										<div className="flex min-w-0 items-center gap-2">
 											<Checkbox
@@ -1102,25 +1111,27 @@ export function ApplicationDetailRoute() {
 							})}
 						</div>
 
-						{tagError && (
-							<p className="rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive">
-								{tagError}
-							</p>
-						)}
+						<div className="flex h-[10dvh] max-h-[10dvh] w-full flex-col items-center justify-center gap-2">
+							{tagError && (
+								<p className="rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-center text-sm text-destructive">
+									{tagError}
+								</p>
+							)}
 
-						<div className="flex justify-end gap-2">
-							<Button
-								type="button"
-								variant="ghost"
-								onClick={() => setMode("view")}
-								disabled={isSubmittingTags}
-							>
-								Cancel
-							</Button>
-							<Button type="submit" disabled={isSubmittingTags}>
-								{isSubmittingTags && <Loader2 className="animate-spin" />}
-								Save tags
-							</Button>
+							<div className="flex items-center justify-center gap-2">
+								<Button
+									type="button"
+									variant="ghost"
+									onClick={() => setMode("view")}
+									disabled={isSubmittingTags}
+								>
+									Cancel
+								</Button>
+								<Button type="submit" disabled={isSubmittingTags}>
+									{isSubmittingTags && <Loader2 className="animate-spin" />}
+									Save tags
+								</Button>
+							</div>
 						</div>
 					</tagFetcher.Form>
 				)}
