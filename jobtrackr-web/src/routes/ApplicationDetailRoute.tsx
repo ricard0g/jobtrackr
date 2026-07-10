@@ -454,7 +454,7 @@ export function ApplicationDetailRoute() {
 		>
 			<DialogContent
 				className={cn(
-					"flex h-[85dvh] max-h-[85dvh] min-w-0 max-w-3xl flex-col",
+					"flex max-h-full min-w-0 max-w-3xl flex-col",
 					mode === "tags" ? "overflow-hidden" : "overflow-y-auto",
 				)}
 			>
@@ -1066,7 +1066,7 @@ export function ApplicationDetailRoute() {
 				{mode === "tags" && (
 					<tagFetcher.Form
 						method="post"
-						className="grid min-h-0 flex-1 grid-rows-[minmax(0,1fr)_auto_auto] gap-4"
+						className="grid min-h-0 max-h-full flex-1 grid-rows-[minmax(0,1fr)_auto_auto] gap-4"
 					>
 						<input type="hidden" name="intent" value="updateTags" />
 						{Array.from(selectedTagIds).map((tagId) => (
@@ -1077,7 +1077,7 @@ export function ApplicationDetailRoute() {
 								value={tagId}
 							/>
 						))}
-						<div className="grid min-h-0 gap-2 overflow-hidden rounded-md border border-light-gray p-3">
+						<div className="grid max-h-full min-h-0 gap-2 overflow-hidden rounded-md border border-light-gray p-3">
 							{allTags.map((tag) => {
 								const checkboxId = `tag-${tag.tagId}`;
 								const tagColor = tag.tagColor ?? "#666666";
