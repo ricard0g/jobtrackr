@@ -107,6 +107,13 @@ const outcomeStyles: Record<
 	},
 };
 
+const interviewOutcomeOptions = (
+	Object.keys(outcomeStyles) as InterviewOutcome[]
+).map((value) => ({
+	value,
+	label: outcomeStyles[value].label,
+}));
+
 const remoteTypeOptions: Array<{ value: RemoteType; label: string }> = [
 	{ value: "ON_SITE", label: "On-site" },
 	{ value: "HYBRID", label: "Hybrid" },
@@ -205,6 +212,7 @@ export function ApplicationDetailRoute() {
 	const interviewFetcher = useFetcher();
 	const deleteApplicationFetcher = useFetcher();
 	const deleteInterviewFetcher = useFetcher();
+	const patchInterviewFetcher = useFetcher();
 	const [currentApplication, setCurrentApplication] = useState(application);
 	const [mode, setMode] = useState<DrawerMode>("view");
 	const [isAddFormOpen, setIsAddFormOpen] = useState(false);
@@ -219,17 +227,22 @@ export function ApplicationDetailRoute() {
 	const [deletingInterviewId, setDeletingInterviewId] = useState<number | null>(
 		null,
 	);
+	const [patchingInterviewId, setPatchingInterviewId] = useState<number | null>(
+		null,
+	);
 
 	const applicationData = fetcherData(applicationFetcher.data);
 	const tagData = fetcherData(tagFetcher.data);
 	const interviewData = fetcherData(interviewFetcher.data);
 	const deleteApplicationData = fetcherData(deleteApplicationFetcher.data);
 	const deleteInterviewData = fetcherData(deleteInterviewFetcher.data);
+	const patchInterviewData = fetcherData(patchInterviewFetcher.data);
 	const isSubmittingApplication = applicationFetcher.state !== "idle";
 	const isSubmittingTags = tagFetcher.state !== "idle";
 	const isSubmittingInterview = interviewFetcher.state !== "idle";
 	const isDeletingApplication = deleteApplicationFetcher.state !== "idle";
 	const isDeletingInterview = deleteInterviewFetcher.state !== "idle";
+	const isPatchingInterview = patchInterviewFetcher.state !== "idle";
 	const applicationFieldErrors =
 		applicationData?.ok === false &&
 		applicationData.intent === "updateApplication"
@@ -250,7 +263,10 @@ export function ApplicationDetailRoute() {
 		deleteInterviewData?.ok === false &&
 		deleteInterviewData.intent === "deleteInterview"
 			? deleteInterviewData.formError
-			: undefined;
+			: patchInterviewData?.ok === false &&
+					patchInterviewData.intent === "patchInterviewOutcome"
+				? patchInterviewData.formError
+				: undefined;
 	const formError =
 		interviewData?.ok === false && interviewData.intent === "createInterview"
 			? interviewData.formError
@@ -279,6 +295,7 @@ export function ApplicationDetailRoute() {
 			setApplicationValues(initialApplicationValues(application));
 			setSelectedTagIds(new Set(application.tags.map((tag) => tag.tagId)));
 			setDeletingInterviewId(null);
+			setPatchingInterviewId(null);
 		});
 
 		return () => {
@@ -334,6 +351,17 @@ export function ApplicationDetailRoute() {
 			});
 		}
 	}, [deleteInterviewData]);
+
+	useEffect(() => {
+		if (
+			patchInterviewData?.ok &&
+			patchInterviewData.intent === "patchInterviewOutcome"
+		) {
+			queueMicrotask(() => {
+				setPatchingInterviewId(null);
+			});
+		}
+	}, [patchInterviewData]);
 
 	useEffect(() => {
 		if (
@@ -399,6 +427,21 @@ export function ApplicationDetailRoute() {
 		formData.set("interviewId", String(interviewId));
 		setDeletingInterviewId(interviewId);
 		void deleteInterviewFetcher.submit(formData, { method: "post" });
+	};
+
+	const handlePatchInterviewOutcome = (
+		interviewId: number,
+		currentOutcome: InterviewOutcome,
+		nextOutcome: InterviewOutcome,
+	) => {
+		if (nextOutcome === currentOutcome) return;
+
+		const formData = new FormData();
+		formData.set("intent", "patchInterviewOutcome");
+		formData.set("interviewId", String(interviewId));
+		formData.set("interviewOutcome", nextOutcome);
+		setPatchingInterviewId(interviewId);
+		void patchInterviewFetcher.submit(formData, { method: "post" });
 	};
 
 	return (
@@ -673,11 +716,36 @@ export function ApplicationDetailRoute() {
 												)}
 											</div>
 											<div className="flex shrink-0 items-center gap-2">
-												<span
-													className={`rounded-full border px-2 py-1 text-xs ${outcome.className}`}
+												<Select
+													value={interview.interviewOutcome}
+													onValueChange={(value) =>
+														handlePatchInterviewOutcome(
+															interview.interviewId,
+															interview.interviewOutcome,
+															value as InterviewOutcome,
+														)
+													}
+													disabled={
+														isPatchingInterview &&
+														patchingInterviewId === interview.interviewId
+													}
 												>
-													{outcome.label}
-												</span>
+													<SelectTrigger
+														className={`h-auto w-auto gap-1 rounded-full border px-2 py-1 text-xs shadow-none focus-visible:ring-2 ${outcome.className} [&_svg]:size-3 [&_svg]:opacity-60`}
+													>
+														<SelectValue />
+													</SelectTrigger>
+													<SelectContent>
+														{interviewOutcomeOptions.map((option) => (
+															<SelectItem
+																key={option.value}
+																value={option.value}
+															>
+																{option.label}
+															</SelectItem>
+														))}
+													</SelectContent>
+												</Select>
 												<Button
 													type="button"
 													variant="ghost"

@@ -5,10 +5,12 @@ import java.util.Optional;
 import java.util.UUID;
 
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
 import com.ricard0g.jobtrackr_api.model.Interview;
+import com.ricard0g.jobtrackr_api.model.enums.InterviewOutcome;
 
 public interface InterviewRepository extends JpaRepository<Interview, Long> {
 
@@ -33,4 +35,20 @@ public interface InterviewRepository extends JpaRepository<Interview, Long> {
             @Param("interviewId") Long interviewId,
             @Param("applicationId") Long applicationId,
             @Param("userId") UUID userId);
+
+    @Modifying(clearAutomatically = true, flushAutomatically = true)
+    @Query(
+            """
+            UPDATE Interview i
+            SET i.interviewOutcome = :outcome,
+                i.interviewUpdatedAt = CURRENT_TIMESTAMP
+            WHERE i.interviewId = :interviewId
+              AND i.application.applicationId = :applicationId
+              AND i.application.user.userId = :userId
+            """)
+    int updateInterviewOutcomeForApplicationAndUser(
+            @Param("interviewId") Long interviewId,
+            @Param("applicationId") Long applicationId,
+            @Param("userId") UUID userId,
+            @Param("outcome") InterviewOutcome outcome);
 }

@@ -14,6 +14,8 @@ import type { Company, CompanyPage, CompanySearchParams, CompanyWriteRequest } f
 import type {
 	Interview,
 	InterviewCreateRequest,
+	InterviewOutcome,
+	InterviewOutcomePatchRequest,
 	InterviewPutRequest,
 } from "@/types/interview";
 import { API_BASE_URL, AUTH_BASE_URL } from "@/lib/api-config";
@@ -349,8 +351,26 @@ export const api = {
 		apiRequest<void>(`/applications/${applicationId}/interviews/${interviewId}`, {
 			method: "DELETE",
 		}),
+	patchInterviewOutcome: (
+		applicationId: number,
+		interviewId: number,
+		request: InterviewOutcomePatchRequest,
+	) =>
+		apiRequest<Interview>(
+			`/applications/${applicationId}/interviews/${interviewId}/outcome`,
+			{
+				method: "PATCH",
+				headers: jsonHeaders,
+				body: JSON.stringify(request),
+			},
+		),
 	setApplicationStatus: (applicationId: number, applicationStatus: ApplicationStatus) =>
 		api.patchApplicationStatus(applicationId, { applicationStatus }),
+	setInterviewOutcome: (
+		applicationId: number,
+		interviewId: number,
+		interviewOutcome: InterviewOutcome,
+	) => api.patchInterviewOutcome(applicationId, interviewId, { interviewOutcome }),
 };
 
 export type AppLoaderData = {

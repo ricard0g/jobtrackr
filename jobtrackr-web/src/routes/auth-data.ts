@@ -33,7 +33,13 @@ export async function loginAction({ request }: ActionFunctionArgs) {
 			} satisfies AuthActionData;
 		}
 
-		throw error;
+		return {
+			formError:
+				error instanceof Error
+					? error.message
+					: "Could not reach the server. Check your connection and try again.",
+			values: { email },
+		} satisfies AuthActionData;
 	}
 }
 
@@ -72,6 +78,12 @@ export async function registerAction({ request }: ActionFunctionArgs) {
 			} satisfies AuthActionData;
 		}
 
-		throw error;
+		return {
+			formError:
+				error instanceof Error
+					? error.message
+					: "Could not reach the server. Check your connection and try again.",
+			values: { email, displayName },
+		} satisfies AuthActionData;
 	}
 }

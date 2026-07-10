@@ -9,6 +9,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
@@ -17,6 +18,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 import com.ricard0g.jobtrackr_api.dto.InterviewDto.InterviewCreateRequestDto;
+import com.ricard0g.jobtrackr_api.dto.InterviewDto.InterviewOutcomePatchRequestDto;
 import com.ricard0g.jobtrackr_api.dto.InterviewDto.InterviewPutRequestDto;
 import com.ricard0g.jobtrackr_api.dto.InterviewDto.InterviewResponseDto;
 import com.ricard0g.jobtrackr_api.service.InterviewService;
@@ -69,6 +71,17 @@ public class InterviewController {
         final UUID userId = AuthenticatedUserId.from(principal);
         return ResponseEntity.ok(
                 interviewService.replaceInterview(userId, applicationId, interviewId, request));
+    }
+
+    @PatchMapping("/{interviewId}/outcome")
+    public ResponseEntity<InterviewResponseDto> patchInterviewOutcome(
+            final Principal principal,
+            @PathVariable @Positive final Long applicationId,
+            @PathVariable @Positive final Long interviewId,
+            @Valid @RequestBody final InterviewOutcomePatchRequestDto request) {
+        final UUID userId = AuthenticatedUserId.from(principal);
+        return ResponseEntity.ok(
+                interviewService.patchInterviewOutcome(userId, applicationId, interviewId, request));
     }
 
     @DeleteMapping("/{interviewId}")

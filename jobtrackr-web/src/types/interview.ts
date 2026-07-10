@@ -30,3 +30,7 @@ export interface InterviewCreateRequest {
 export interface InterviewPutRequest extends InterviewCreateRequest {
 	interviewOutcome: InterviewOutcome;
 }
+
+export interface InterviewOutcomePatchRequest {
+	interviewOutcome: InterviewOutcome;
+}
