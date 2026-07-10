@@ -454,7 +454,7 @@ export function ApplicationDetailRoute() {
 		>
 			<DialogContent
 				className={cn(
-					"flex max-h-full min-w-0 max-w-3xl flex-col",
+					"flex h-[95dvh] max-h-[95dvh] min-w-0 max-w-3xl flex-col",
 					mode === "tags" ? "overflow-hidden" : "overflow-y-auto",
 				)}
 			>
@@ -1077,7 +1077,7 @@ export function ApplicationDetailRoute() {
 								value={tagId}
 							/>
 						))}
-						<div className="grid max-h-full min-h-0 gap-2 overflow-hidden rounded-md border border-light-gray p-3">
+						<div className="grid min-h-0 gap-2 overflow-scroll rounded-md border border-light-gray p-3">
 							{allTags.map((tag) => {
 								const checkboxId = `tag-${tag.tagId}`;
 								const tagColor = tag.tagColor ?? "#666666";
