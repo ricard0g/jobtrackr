@@ -188,7 +188,7 @@ export function TagMultiSelectCombobox({
 				)}
 			</PopoverTrigger>
 			<PopoverContent
-				className="z-50 flex max-h-[min(28rem,calc(100dvh-2rem))] w-[18.75rem] sm:w-[21rem] max-w-[calc(100vw-2rem)] flex-col p-0"
+				className="z-50 flex max-h-[26rem] sm:max-h-[24rem]  w-[18.75rem] sm:w-[21rem] max-w-[calc(100vw-2rem)] flex-col p-0"
 				portalled={false}
 				align="start"
 				avoidCollisions
