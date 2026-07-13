@@ -19,6 +19,7 @@ import type {
 	InterviewType,
 } from "@/types/interview";
 import type { BoardPlacement } from "@/components/kanban/board-state";
+import type { Tag, TagCategory } from "@/types/tag";
 
 export type ApplicationDetailLoaderData = {
 	application: Application;
@@ -50,10 +51,16 @@ export type ApplicationDetailActionData =
 			applicationId: number;
 	  }
 	| {
+			ok: true;
+			intent: "createTag";
+			tag: Tag;
+	  }
+	| {
 			ok: false;
 			intent:
 				| "updateApplication"
 				| "updateTags"
+				| "createTag"
 				| "createInterview"
 				| "deleteInterview"
 				| "patchInterviewOutcome"
@@ -95,6 +102,16 @@ const interviewOutcomeValues = [
 
 const isInterviewOutcome = (value: string): value is InterviewOutcome =>
 	interviewOutcomeValues.includes(value as InterviewOutcome);
+
+const tagCategoryValues = [
+	"TECH_STACK",
+	"COMPANY_TYPE",
+	"MODALITY",
+	"OTHER",
+] satisfies TagCategory[];
+
+const isTagCategory = (value: string): value is TagCategory =>
+	tagCategoryValues.includes(value as TagCategory);
 
 const parsePositiveApplicationId = (value: string | undefined) => {
 	const applicationId = Number(value);
@@ -170,6 +187,9 @@ export async function applicationDetailAction({
 	}
 	if (intent === "updateTags") {
 		return updateTags(applicationId, formData);
+	}
+	if (intent === "createTag") {
+		return createTag(formData);
 	}
 	if (intent === "createInterview") {
 		return createInterview(applicationId, formData);
@@ -338,6 +358,49 @@ async function updateTags(
 			ok: false,
 			intent: "updateTags",
 			formError: apiErrorMessage(error, "Could not update tags."),
+		};
+	}
+}
+
+async function createTag(formData: FormData): Promise<ApplicationDetailActionData> {
+	const tagCategoryValue = String(formData.get("tagCategory") ?? "");
+	const tagName = String(formData.get("tagName") ?? "").trim();
+	const tagColor = String(formData.get("tagColor") ?? "").trim();
+
+	if (!isTagCategory(tagCategoryValue)) {
+		return {
+			ok: false,
+			intent: "createTag",
+			formError: "Select a tag category.",
+		};
+	}
+	if (!tagName) {
+		return {
+			ok: false,
+			intent: "createTag",
+			formError: "Enter a tag name.",
+		};
+	}
+	if (!/^#[0-9A-Fa-f]{6}$/.test(tagColor)) {
+		return {
+			ok: false,
+			intent: "createTag",
+			formError: "Use a hex color in #RRGGBB format.",
+		};
+	}
+
+	try {
+		const tag = await api.createTag({
+			tagCategory: tagCategoryValue,
+			tagName,
+			tagColor,
+		});
+		return { ok: true, intent: "createTag", tag };
+	} catch (error) {
+		return {
+			ok: false,
+			intent: "createTag",
+			formError: apiErrorMessage(error, "Could not create the tag."),
 		};
 	}
 }

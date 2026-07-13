@@ -48,6 +48,7 @@ import type {
     InterviewOutcome,
     InterviewType,
 } from "@/types/interview";
+import type { TagWriteRequest } from "@/types/tag";
 import type {
     ApplicationDetailActionData,
     ApplicationDetailLoaderData,
@@ -208,6 +209,7 @@ export function ApplicationDetailRoute() {
     const navigate = useNavigate();
     const applicationFetcher = useFetcher();
     const tagFetcher = useFetcher();
+    const createTagFetcher = useFetcher();
     const interviewFetcher = useFetcher();
     const deleteApplicationFetcher = useFetcher();
     const deleteInterviewFetcher = useFetcher();
@@ -225,6 +227,8 @@ export function ApplicationDetailRoute() {
     );
     const [isTagPopoverOpen, setIsTagPopoverOpen] = useState(false);
     const [tagSubmissionError, setTagSubmissionError] = useState<string>();
+    const [createTagSubmissionError, setCreateTagSubmissionError] =
+        useState<string>();
     const [dialogContentElement, setDialogContentElement] =
         useState<HTMLDivElement | null>(null);
     const [deletingInterviewId, setDeletingInterviewId] = useState<number | null>(
@@ -236,12 +240,14 @@ export function ApplicationDetailRoute() {
 
     const applicationData = fetcherData(applicationFetcher.data);
     const tagData = fetcherData(tagFetcher.data);
+    const createTagData = fetcherData(createTagFetcher.data);
     const interviewData = fetcherData(interviewFetcher.data);
     const deleteApplicationData = fetcherData(deleteApplicationFetcher.data);
     const deleteInterviewData = fetcherData(deleteInterviewFetcher.data);
     const patchInterviewData = fetcherData(patchInterviewFetcher.data);
     const isSubmittingApplication = applicationFetcher.state !== "idle";
     const isSubmittingTags = tagFetcher.state !== "idle";
+    const isCreatingTag = createTagFetcher.state !== "idle";
     const isSubmittingInterview = interviewFetcher.state !== "idle";
     const isDeletingApplication = deleteApplicationFetcher.state !== "idle";
     const isDeletingInterview = deleteInterviewFetcher.state !== "idle";
@@ -295,6 +301,7 @@ export function ApplicationDetailRoute() {
             setSelectedTagIds(new Set(application.tags.map((tag) => tag.tagId)));
             setIsTagPopoverOpen(false);
             setTagSubmissionError(undefined);
+            setCreateTagSubmissionError(undefined);
             setDeletingInterviewId(null);
             setPatchingInterviewId(null);
         });
@@ -337,6 +344,26 @@ export function ApplicationDetailRoute() {
             });
         }
     }, [tagData, upsertApplication]);
+
+    useEffect(() => {
+        if (createTagData?.ok && createTagData.intent === "createTag") {
+            queueMicrotask(() => {
+                setSelectedTagIds((currentTagIds) => {
+                    const nextTagIds = new Set(currentTagIds);
+                    nextTagIds.add(createTagData.tag.tagId);
+                    return nextTagIds;
+                });
+                setCreateTagSubmissionError(undefined);
+            });
+        } else if (
+            createTagData?.ok === false &&
+            createTagData.intent === "createTag"
+        ) {
+            queueMicrotask(() => {
+                setCreateTagSubmissionError(createTagData.formError);
+            });
+        }
+    }, [createTagData]);
 
     useEffect(() => {
         if (interviewData?.ok && interviewData.intent === "createInterview") {
@@ -403,18 +430,20 @@ export function ApplicationDetailRoute() {
         new Set(currentApplication.tags.map((tag) => tag.tagId));
 
     const handleTagPopoverOpenChange = (nextOpen: boolean) => {
-        if (!nextOpen && isSubmittingTags) return;
+        if (!nextOpen && (isSubmittingTags || isCreatingTag)) return;
 
         setSelectedTagIds(committedTagIds());
         setTagSubmissionError(undefined);
+        setCreateTagSubmissionError(undefined);
         setIsTagPopoverOpen(nextOpen);
     };
 
     const handleCancelTags = () => {
-        if (isSubmittingTags) return;
+        if (isSubmittingTags || isCreatingTag) return;
 
         setSelectedTagIds(committedTagIds());
         setTagSubmissionError(undefined);
+        setCreateTagSubmissionError(undefined);
         setIsTagPopoverOpen(false);
     };
 
@@ -426,6 +455,16 @@ export function ApplicationDetailRoute() {
         });
         setTagSubmissionError(undefined);
         void tagFetcher.submit(formData, { method: "post" });
+    };
+
+    const handleCreateTag = (request: TagWriteRequest) => {
+        const formData = new FormData();
+        formData.set("intent", "createTag");
+        formData.set("tagCategory", request.tagCategory);
+        formData.set("tagName", request.tagName);
+        formData.set("tagColor", request.tagColor ?? "");
+        setCreateTagSubmissionError(undefined);
+        void createTagFetcher.submit(formData, { method: "post" });
     };
 
     const handleDeleteApplication = () => {
@@ -531,8 +570,17 @@ export function ApplicationDetailRoute() {
                                         onSelectedTagIdsChange={setSelectedTagIds}
                                         onApply={handleApplyTags}
                                         onCancel={handleCancelTags}
+                                        onCreateTag={handleCreateTag}
                                         isSubmitting={isSubmittingTags}
+                                        isCreatingTag={isCreatingTag}
                                         error={tagSubmissionError}
+                                        createTagError={createTagSubmissionError}
+                                        createdTag={
+                                            createTagData?.ok &&
+                                            createTagData.intent === "createTag"
+                                                ? createTagData.tag
+                                                : undefined
+                                        }
                                         collisionBoundary={dialogContentElement}
                                         trigger={(
                                             <Button
