@@ -28,11 +28,23 @@ export async function appAction({ request }: ActionFunctionArgs) {
 }
 
 export function appShouldRevalidate({
+	actionResult,
 	formAction,
 	currentUrl,
 	nextUrl,
 	defaultShouldRevalidate,
 }: ShouldRevalidateFunctionArgs) {
+	if (
+		actionResult &&
+		typeof actionResult === "object" &&
+		"intent" in actionResult &&
+		actionResult.intent === "createTag" &&
+		"ok" in actionResult &&
+		actionResult.ok === true
+	) {
+		return true;
+	}
+
 	if (formAction?.startsWith("/applications/")) {
 		return false;
 	}
