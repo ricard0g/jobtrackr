@@ -27,5 +27,6 @@ scripts/          Local development and database helper scripts
 
 - [Development Setup](docs/development.md): run the full stack, reset the DB, restore local snapshots, and seed cloud-agent-safe data.
 - [Docs Index](docs/README.md): root documentation entry point.
+- [Project Changelog](docs/changelog/): commit-based records for project changes not covered by the API changelog.
 
 Subproject-specific notes remain in `JobTrackrApi/docs/` and `jobtrackr-web/docs/`.
