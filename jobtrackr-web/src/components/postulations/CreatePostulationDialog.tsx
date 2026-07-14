@@ -246,7 +246,7 @@ export function CreatePostulationDialog({
 					</Button>
 				)}
 			</DialogTrigger>
-			<DialogContent className="h-[85dvh] max-h-[85dvh] min-w-0 overflow-y-auto">
+			<DialogContent className="h-[85dvh] sm:h-fit max-h-[85dvh] min-w-0 overflow-y-auto">
 				<DialogHeader>
 					<DialogTitle>Create application</DialogTitle>
 					<DialogDescription>
