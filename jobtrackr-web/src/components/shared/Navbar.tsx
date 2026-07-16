@@ -55,7 +55,7 @@ export function Navbar({ user }: NavbarProps) {
 
 				<RouterForm method="post" action="/">
 					<input type="hidden" name="intent" value="logout" />
-					<Button type="submit" size="icon-sm" variant="ghost" className="text-medium-gray hover:bg-lightest-accent hover:text-darkest-accent" aria-label="Log out"><LogOut /></Button>
+					<Button type="submit" size="icon-sm" variant="ghost" className="text-medium-gray hover:bg-light-accent hover:text-darkest-accent" aria-label="Log out"><LogOut /></Button>
 				</RouterForm>
 			</nav>
 		</header>
