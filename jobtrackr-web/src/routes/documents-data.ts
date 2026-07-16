@@ -6,8 +6,9 @@ import type { BaseCv } from "@/types/base-cv";
 export type DocumentsLoaderData = { baseCvs: BaseCv[] };
 export type DocumentsActionData = {
 	ok: boolean;
-	intent: "upload" | "delete";
+	intent: "upload" | "delete" | "download";
 	error?: string;
+	uri?: string;
 };
 
 const errorMessages: Record<string, string> = {
@@ -19,6 +20,21 @@ const errorMessages: Record<string, string> = {
 	BASE_CV_LIMIT_REACHED: "You have reached the limit of 20 Base CVs. Delete one before uploading another.",
 	BASE_CV_NOT_FOUND: "This Base CV is no longer available.",
 	BASE_CV_STORAGE_UNAVAILABLE: "Document storage is temporarily unavailable. Please try again.",
+};
+
+const actionError = (intent: DocumentsActionData["intent"], error: unknown): DocumentsActionData => {
+	if (error instanceof ApiError) {
+		return {
+			ok: false,
+			intent,
+			error: (error.code && errorMessages[error.code]) || error.message,
+		};
+	}
+	return {
+		ok: false,
+		intent,
+		error: error instanceof Error ? error.message : "The operation could not be completed.",
+	};
 };
 
 export async function documentsLoader(): Promise<DocumentsLoaderData> {
@@ -50,19 +66,19 @@ export async function documentsAction({ request }: ActionFunctionArgs): Promise<
 			return { ok: true, intent: "delete" };
 		}
 
+		if (intent === "download") {
+			const baseCvId = Number(formData.get("baseCvId"));
+			if (!Number.isInteger(baseCvId) || baseCvId <= 0) {
+				return { ok: false, intent: "download", error: "Invalid Base CV." };
+			}
+			const download = await api.getBaseCvDownload(baseCvId);
+			return { ok: true, intent: "download", uri: download.uri };
+		}
+
 		throw new Response("Unsupported action", { status: 400 });
 	} catch (error) {
-		if (error instanceof ApiError) {
-			return {
-				ok: false,
-				intent: intent === "delete" ? "delete" : "upload",
-				error: (error.code && errorMessages[error.code]) || error.message,
-			};
-		}
-		return {
-			ok: false,
-			intent: intent === "delete" ? "delete" : "upload",
-			error: error instanceof Error ? error.message : "The operation could not be completed.",
-		};
+		const fallbackIntent =
+			intent === "delete" ? "delete" : intent === "download" ? "download" : "upload";
+		return actionError(fallbackIntent, error);
 	}
 }

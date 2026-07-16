@@ -50,18 +50,17 @@ public class BaseCvService {
     @Transactional
     public BaseCvResponseDto upload(final UUID userId, final MultipartFile file) {
         requireUser(userId);
-        ensureQuotaAvailable(userId);
         final ValidatedBaseCv validated = baseCvValidator.validate(file);
+
+        final User lockedUser = userRepository.findByIdForUpdate(userId)
+                .orElseThrow(() -> new UserNotFoundException(userId));
+        ensureQuotaAvailable(userId);
         ensureNotDuplicate(userId, validated.sha256());
 
         final String objectKey = objectKey(userId, validated);
         baseCvStorage.upload(objectKey, validated.bytes(), validated.contentType());
 
         try {
-            final User lockedUser = userRepository.findByIdForUpdate(userId)
-                    .orElseThrow(() -> new UserNotFoundException(userId));
-            ensureQuotaAvailable(userId);
-            ensureNotDuplicate(userId, validated.sha256());
             final BaseCv baseCv = BaseCv.create(
                     lockedUser,
                     objectKey,

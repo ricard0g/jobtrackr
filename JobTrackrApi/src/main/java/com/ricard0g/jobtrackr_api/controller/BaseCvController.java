@@ -4,7 +4,6 @@ import java.security.Principal;
 import java.util.List;
 import java.util.UUID;
 
-import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
@@ -57,14 +56,11 @@ public class BaseCvController {
     }
 
     @GetMapping("/{baseCvId}/download")
-    public ResponseEntity<Void> download(
+    public ResponseEntity<BaseCvDownloadDto> download(
             final Principal principal,
             @PathVariable @Positive final Long baseCvId) {
         final UUID userId = AuthenticatedUserId.from(principal);
-        final BaseCvDownloadDto download = baseCvService.createDownload(userId, baseCvId);
-        return ResponseEntity.status(HttpStatus.FOUND)
-                .header(HttpHeaders.LOCATION, download.uri().toASCIIString())
-                .build();
+        return ResponseEntity.ok(baseCvService.createDownload(userId, baseCvId));
     }
 
     @DeleteMapping("/{baseCvId}")

@@ -7,7 +7,6 @@ import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.multipart;
-import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -23,7 +22,6 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.boot.webmvc.test.autoconfigure.WebMvcTest;
 import org.springframework.context.annotation.Import;
-import org.springframework.http.HttpHeaders;
 import org.springframework.mock.web.MockMultipartFile;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
@@ -108,15 +106,15 @@ class BaseCvControllerTest {
     }
 
     @Test
-    void download_returnsTemporaryRedirect() throws Exception {
+    void download_returnsSignedUri() throws Exception {
         // given
         final URI signedUri = URI.create("https://signed.example/object?expires=60");
         when(baseCvService.createDownload(USER_ID, BASE_CV_ID)).thenReturn(new BaseCvDownloadDto(signedUri));
 
         // when / then
         mockMvc.perform(get(BASE_PATH + "/{baseCvId}/download", BASE_CV_ID).principal(principal()))
-                .andExpect(status().isFound())
-                .andExpect(header().string(HttpHeaders.LOCATION, signedUri.toASCIIString()));
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.uri").value(signedUri.toASCIIString()));
     }
 
     @Test

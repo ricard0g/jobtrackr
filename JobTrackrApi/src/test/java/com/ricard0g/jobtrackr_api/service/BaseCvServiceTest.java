@@ -74,21 +74,24 @@ class BaseCvServiceTest {
         service.upload(USER_ID, file);
 
         // then
-        final InOrder order = inOrder(baseCvStorage, userRepository, baseCvRepository);
+        final InOrder order = inOrder(userRepository, baseCvStorage, baseCvRepository);
+        order.verify(userRepository).findByIdForUpdate(USER_ID);
         order.verify(baseCvStorage).upload(startsWith("users/" + USER_ID + "/base-cvs/"), any(byte[].class),
                 any(String.class));
-        order.verify(userRepository).findByIdForUpdate(USER_ID);
         order.verify(baseCvRepository).saveAndFlush(any(BaseCv.class));
     }
 
     @Test
     void upload_whenQuotaReached_doesNotContactStorage() {
         // given
+        final MultipartFile file = mock(MultipartFile.class);
         when(userRepository.findById(USER_ID)).thenReturn(Optional.of(mock(User.class)));
+        when(userRepository.findByIdForUpdate(USER_ID)).thenReturn(Optional.of(mock(User.class)));
+        when(baseCvValidator.validate(file)).thenReturn(validated());
         when(baseCvRepository.countByUser_UserId(USER_ID)).thenReturn(20L);
 
         // when / then
-        assertThatThrownBy(() -> service.upload(USER_ID, mock(MultipartFile.class)))
+        assertThatThrownBy(() -> service.upload(USER_ID, file))
                 .isInstanceOfSatisfying(BaseCvException.class,
                         exception -> assertThat(exception.getCode()).isEqualTo("BASE_CV_LIMIT_REACHED"));
         verify(baseCvStorage, never()).upload(any(), any(), any());

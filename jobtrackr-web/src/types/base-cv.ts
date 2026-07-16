@@ -8,3 +8,7 @@ export type BaseCv = {
 	byteSize: number;
 	createdAt: string;
 };
+
+export type BaseCvDownload = {
+	uri: string;
+};

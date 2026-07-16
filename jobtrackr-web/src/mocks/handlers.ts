@@ -470,11 +470,13 @@ export const handlers = [
 		const auth = requireAuth(request, state);
 		if (auth instanceof Response) return auth;
 		const baseCvId = getPositiveId(params, "baseCvId");
-		const baseCv = state.baseCvs.find((candidate) => candidate.baseCvId === baseCvId && candidate.userId === auth.user.userId);
+		const baseCv = state.baseCvs.find(
+			(candidate) => candidate.baseCvId === baseCvId && candidate.userId === auth.user.userId,
+		);
 		if (!baseCv) return errorJson(404, "BASE_CV_NOT_FOUND", "Base CV not found");
-		return new HttpResponse(`Mock download for ${baseCv.originalFilename}`, {
-			headers: { "Content-Type": baseCv.contentType, "Content-Disposition": `attachment; filename="${baseCv.originalFilename.replaceAll('"', "")}"` },
-		});
+		const body = `Mock download for ${baseCv.originalFilename}`;
+		const uri = `data:${baseCv.contentType};charset=utf-8,${encodeURIComponent(body)}`;
+		return HttpResponse.json({ uri });
 	}),
 
 	http.delete(`${API_BASE_URL}/base-cvs/:baseCvId`, ({ request, params }) => {
