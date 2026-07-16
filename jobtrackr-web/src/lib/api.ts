@@ -21,6 +21,7 @@ import type {
 import { API_BASE_URL, AUTH_BASE_URL } from "@/lib/api-config";
 import type { Tag, TagWriteRequest } from "@/types/tag";
 import type { User } from "@/types/user";
+import type { BaseCv, BaseCvDownload } from "@/types/base-cv";
 
 let accessToken: string | null = null;
 let csrfToken: string | null = null;
@@ -243,6 +244,16 @@ export async function requireSession() {
 
 export const api = {
 	getCurrentUser: () => apiRequest<User>("/user"),
+	getBaseCvs: () => apiRequest<BaseCv[]>("/base-cvs"),
+	uploadBaseCv: (file: File) => {
+		const formData = new FormData();
+		formData.set("file", file);
+		return apiRequest<BaseCv>("/base-cvs", { method: "POST", body: formData });
+	},
+	deleteBaseCv: (baseCvId: number) =>
+		apiRequest<void>(`/base-cvs/${baseCvId}`, { method: "DELETE" }),
+	getBaseCvDownload: (baseCvId: number) =>
+		apiRequest<BaseCvDownload>(`/base-cvs/${baseCvId}/download`),
 	getApplications: () => apiRequest<Application[]>("/applications"),
 	getApplicationById: (applicationId: number) =>
 		apiRequest<Application>(`/applications/${applicationId}`),
@@ -379,6 +390,15 @@ export const api = {
 
 export type AppLoaderData = {
 	user: User;
+	applications: Application[];
+	tags: Tag[];
+};
+
+export type AccountLoaderData = {
+	user: User;
+};
+
+export type KanbanLoaderData = {
 	applications: Application[];
 	tags: Tag[];
 };

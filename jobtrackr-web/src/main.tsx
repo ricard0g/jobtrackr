@@ -6,7 +6,7 @@ import "./index.css";
 import App from "./App.tsx";
 import RootErrorBoundary from "@/routes/RootErrorBoundary";
 import RouteHydrateFallback from "@/routes/RouteHydrateFallback";
-import { appAction, appLoader, appShouldRevalidate } from "@/routes/app-data";
+import { appAction, appLoader, appShouldRevalidate, kanbanLoader, protectedRouteLoader } from "@/routes/app-data";
 import {
 	ApplicationDetailErrorBoundary,
 	ApplicationDetailRoute,
@@ -18,6 +18,10 @@ import {
 } from "@/routes/application-detail-data";
 import { loginAction, publicAuthLoader, registerAction } from "@/routes/auth-data";
 import { LoginPage, RegisterPage } from "@/routes/auth";
+import { KanbanRoute } from "@/routes/KanbanRoute";
+import { DocumentsRoute } from "@/routes/DocumentsRoute";
+import { documentsAction, documentsLoader } from "@/routes/documents-data";
+import { GenerateRoute } from "@/routes/GenerateRoute";
 
 const router = createBrowserRouter([
 	{
@@ -37,6 +41,7 @@ const router = createBrowserRouter([
 		HydrateFallback: RouteHydrateFallback,
 	},
 	{
+		id: "app",
 		path: "/",
 		Component: App,
 		loader: appLoader,
@@ -46,12 +51,33 @@ const router = createBrowserRouter([
 		HydrateFallback: RouteHydrateFallback,
 		children: [
 			{
-				path: "applications/:applicationId",
-				Component: ApplicationDetailRoute,
-				loader: applicationDetailLoader,
-				action: applicationDetailAction,
-				shouldRevalidate: applicationDetailShouldRevalidate,
-				ErrorBoundary: ApplicationDetailErrorBoundary,
+				id: "kanban",
+				Component: KanbanRoute,
+				loader: kanbanLoader,
+				children: [
+					{ index: true },
+					{
+						path: "applications/:applicationId",
+						Component: ApplicationDetailRoute,
+						loader: applicationDetailLoader,
+						action: applicationDetailAction,
+						shouldRevalidate: applicationDetailShouldRevalidate,
+						ErrorBoundary: ApplicationDetailErrorBoundary,
+					},
+				],
+			},
+			{
+				path: "documents",
+				Component: DocumentsRoute,
+				loader: documentsLoader,
+				action: documentsAction,
+				ErrorBoundary: RootErrorBoundary,
+			},
+			{
+				path: "generate",
+				Component: GenerateRoute,
+				loader: protectedRouteLoader,
+				ErrorBoundary: RootErrorBoundary,
 			},
 		],
 	},
