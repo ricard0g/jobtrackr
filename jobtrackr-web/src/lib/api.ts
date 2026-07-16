@@ -21,6 +21,7 @@ import type {
 import { API_BASE_URL, AUTH_BASE_URL } from "@/lib/api-config";
 import type { Tag, TagWriteRequest } from "@/types/tag";
 import type { User } from "@/types/user";
+import type { BaseCv } from "@/types/base-cv";
 
 let accessToken: string | null = null;
 let csrfToken: string | null = null;
@@ -229,6 +230,21 @@ async function apiRequest<T>(path: string, init: RequestInit = {}, retry = true)
 	return readJson<T>(response);
 }
 
+async function apiResponse(path: string, init: RequestInit = {}, retry = true): Promise<Response> {
+	const headers = new Headers(init.headers);
+	if (accessToken) headers.set("Authorization", `Bearer ${accessToken}`);
+
+	const response = await fetch(`${API_BASE_URL}${path}`, { ...init, headers });
+	if (response.status === 401 && retry) {
+		await refreshSession();
+		return apiResponse(path, init, false);
+	}
+	if (!response.ok) {
+		throw await parseApiError(response, "Could not complete the request.");
+	}
+	return response;
+}
+
 export async function requireSession() {
 	if (accessToken) {
 		return;
@@ -243,6 +259,24 @@ export async function requireSession() {
 
 export const api = {
 	getCurrentUser: () => apiRequest<User>("/user"),
+	getBaseCvs: () => apiRequest<BaseCv[]>("/base-cvs"),
+	uploadBaseCv: (file: File) => {
+		const formData = new FormData();
+		formData.set("file", file);
+		return apiRequest<BaseCv>("/base-cvs", { method: "POST", body: formData });
+	},
+	deleteBaseCv: (baseCvId: number) =>
+		apiRequest<void>(`/base-cvs/${baseCvId}`, { method: "DELETE" }),
+	downloadBaseCv: async (baseCv: BaseCv) => {
+		const response = await apiResponse(`/base-cvs/${baseCv.baseCvId}/download`);
+		const blob = await response.blob();
+		const objectUrl = URL.createObjectURL(blob);
+		const link = document.createElement("a");
+		link.href = objectUrl;
+		link.download = baseCv.originalFilename;
+		link.click();
+		URL.revokeObjectURL(objectUrl);
+	},
 	getApplications: () => apiRequest<Application[]>("/applications"),
 	getApplicationById: (applicationId: number) =>
 		apiRequest<Application>(`/applications/${applicationId}`),
@@ -379,6 +413,15 @@ export const api = {
 
 export type AppLoaderData = {
 	user: User;
+	applications: Application[];
+	tags: Tag[];
+};
+
+export type AccountLoaderData = {
+	user: User;
+};
+
+export type KanbanLoaderData = {
 	applications: Application[];
 	tags: Tag[];
 };

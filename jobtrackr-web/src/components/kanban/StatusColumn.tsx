@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import type { Application, ApplicationStatus } from "@/types/application";
 import { PostulationCard } from "./PostulationCard";
+import { useBoard } from "./useBoard";
 
 interface StatusColumnProps {
 	status: {
@@ -24,6 +25,7 @@ export const StatusColumn = memo(function StatusColumn({
 	applications,
 	allApplications,
 }: StatusColumnProps) {
+	const { upsertApplication } = useBoard();
 	const { ref, isDropTarget } = useDroppable({
 		id: status.value,
 		type: "column",
@@ -52,6 +54,7 @@ export const StatusColumn = memo(function StatusColumn({
 				<CreatePostulationDialog
 					applications={allApplications}
 					defaultStatus={status.value}
+					onApplicationCreated={(application) => upsertApplication(application, "append-to-status")}
 					trigger={
 						<Button
 							type="button"

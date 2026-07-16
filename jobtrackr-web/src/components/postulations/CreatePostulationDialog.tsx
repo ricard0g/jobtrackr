@@ -1,7 +1,7 @@
 import { CirclePlus, Loader2 } from "lucide-react";
 import { type FormEvent, type ReactNode, useMemo, useState } from "react";
+import { useRevalidator } from "react-router";
 
-import { useBoard } from "@/components/kanban/useBoard";
 import { CompanyCombobox } from "@/components/postulations/CompanyCombobox";
 import { Button } from "@/components/ui/button";
 import {
@@ -58,6 +58,7 @@ interface CreatePostulationDialogProps {
 	applications: Application[];
 	defaultStatus?: ApplicationStatus;
 	trigger?: ReactNode;
+	onApplicationCreated?: (application: Application) => void;
 }
 
 const remoteTypeOptions: Array<{ value: RemoteType; label: string }> = [
@@ -101,8 +102,9 @@ export function CreatePostulationDialog({
 	applications,
 	defaultStatus = "APPLIED",
 	trigger,
+	onApplicationCreated,
 }: CreatePostulationDialogProps) {
-	const { upsertApplication } = useBoard();
+	const revalidator = useRevalidator();
 	const [open, setOpen] = useState(false);
 	const [selectedCompany, setSelectedCompany] = useState<Company | null>(null);
 	const [values, setValues] = useState<CreateApplicationFormValues>(() =>
@@ -217,7 +219,11 @@ export function CreatePostulationDialog({
 
 		try {
 			const createdApplication = await api.createApplication(payload);
-			upsertApplication(createdApplication, "append-to-status");
+			if (onApplicationCreated) {
+				onApplicationCreated(createdApplication);
+			} else {
+				await revalidator.revalidate();
+			}
 			resetForm();
 			setOpen(false);
 		} catch (error) {

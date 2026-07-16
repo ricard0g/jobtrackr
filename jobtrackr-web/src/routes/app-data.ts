@@ -1,18 +1,25 @@
 import type { ActionFunctionArgs, ShouldRevalidateFunctionArgs } from "react-router";
 import { redirect } from "react-router";
 
-import { api, logout, requireSession, type AppLoaderData } from "@/lib/api";
+import { api, logout, requireSession, type AccountLoaderData, type KanbanLoaderData } from "@/lib/api";
 
-export async function appLoader(): Promise<AppLoaderData> {
+export async function appLoader(): Promise<AccountLoaderData> {
 	await requireSession();
+	return { user: await api.getCurrentUser() };
+}
 
-	const [user, applications, tags] = await Promise.all([
-		api.getCurrentUser(),
+export async function kanbanLoader(): Promise<KanbanLoaderData> {
+	await requireSession();
+	const [applications, tags] = await Promise.all([
 		api.getApplications(),
 		api.getTags(),
 	]);
+	return { applications, tags };
+}
 
-	return { user, applications, tags };
+export async function protectedRouteLoader() {
+	await requireSession();
+	return null;
 }
 
 export async function appAction({ request }: ActionFunctionArgs) {

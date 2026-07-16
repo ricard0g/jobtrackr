@@ -44,6 +44,7 @@ import type { CompanyWriteRequest } from "@/types/company";
 import type { InterviewCreateRequest, InterviewOutcomePatchRequest, InterviewPutRequest } from "@/types/interview";
 import type { TagWriteRequest } from "@/types/tag";
 import type { User } from "@/types/user";
+import type { BaseCv, BaseCvFormat } from "@/types/base-cv";
 
 const applicationStatuses: ApplicationStatus[] = [
 	"APPLIED",
@@ -148,6 +149,65 @@ const validateSalaryRange = (
 				`Application salary max must be greater than or equal to salary min: min=${salaryMin}, max=${salaryMax}`,
 			)
 		: null;
+};
+
+const MAX_BASE_CV_BYTES = 10 * 1024 * 1024;
+const baseCvContentTypes: Record<BaseCvFormat, string[]> = {
+	PDF: ["application/pdf"],
+	DOCX: ["application/vnd.openxmlformats-officedocument.wordprocessingml.document"],
+	MARKDOWN: ["text/markdown", "text/plain"],
+};
+
+const baseCvFormat = (filename: string): BaseCvFormat | null => {
+	const extension = filename.slice(filename.lastIndexOf(".") + 1).toLowerCase();
+	if (extension === "pdf") return "PDF";
+	if (extension === "docx") return "DOCX";
+	if (extension === "md") return "MARKDOWN";
+	return null;
+};
+
+const toPublicBaseCv = (baseCv: MockState["baseCvs"][number]): BaseCv => ({
+	baseCvId: baseCv.baseCvId,
+	originalFilename: baseCv.originalFilename,
+	format: baseCv.format,
+	contentType: baseCv.contentType,
+	byteSize: baseCv.byteSize,
+	createdAt: baseCv.createdAt,
+});
+
+const sha256 = async (bytes: ArrayBuffer) => {
+	const hash = await crypto.subtle.digest("SHA-256", bytes);
+	return Array.from(new Uint8Array(hash), (value) => value.toString(16).padStart(2, "0")).join("");
+};
+
+const validateMockBaseCv = (file: File, bytes: Uint8Array, format: BaseCvFormat) => {
+	const contentType = file.type.split(";", 1)[0].toLowerCase();
+	if (!baseCvContentTypes[format].includes(contentType)) {
+		return errorJson(400, "INVALID_BASE_CV_FORMAT", "File extension and content type must match");
+	}
+	if (format === "PDF") {
+		const prefix = new TextDecoder().decode(bytes.slice(0, 5));
+		const body = new TextDecoder("latin1").decode(bytes);
+		if (!prefix.startsWith("%PDF")) return errorJson(400, "MALFORMED_BASE_CV", "Malformed PDF");
+		if (body.includes("/Encrypt")) return errorJson(400, "PROTECTED_BASE_CV", "Protected PDF");
+	}
+	if (format === "DOCX") {
+		const isOle = bytes[0] === 0xd0 && bytes[1] === 0xcf;
+		if (isOle) return errorJson(400, "PROTECTED_BASE_CV", "Protected DOCX");
+		const isZip = bytes[0] === 0x50 && bytes[1] === 0x4b;
+		if (!isZip) return errorJson(400, "MALFORMED_BASE_CV", "Malformed DOCX");
+	}
+	if (format === "MARKDOWN") {
+		if (bytes.includes(0)) return errorJson(400, "MALFORMED_BASE_CV", "Malformed Markdown");
+		try {
+			const text = new TextDecoder("utf-8", { fatal: true }).decode(bytes);
+			const meaningful = Array.from(text).filter((character) => /[\p{L}\p{N}]/u.test(character)).length;
+			if (meaningful < 10) return errorJson(400, "MALFORMED_BASE_CV", "Markdown has no meaningful text");
+		} catch {
+			return errorJson(400, "MALFORMED_BASE_CV", "Markdown is not valid UTF-8");
+		}
+	}
+	return null;
 };
 
 const requireAccessibleCompany = (
@@ -353,6 +413,80 @@ export const handlers = [
 		const auth = requireAuth(request, state);
 		if (auth instanceof Response) return auth;
 		return HttpResponse.json(auth.user);
+	}),
+
+	http.get(`${API_BASE_URL}/base-cvs`, ({ request }) => {
+		const state = loadState();
+		const auth = requireAuth(request, state);
+		if (auth instanceof Response) return auth;
+		return HttpResponse.json(
+			state.baseCvs
+				.filter((baseCv) => baseCv.userId === auth.user.userId)
+				.toSorted((left, right) => right.createdAt.localeCompare(left.createdAt))
+				.map(toPublicBaseCv),
+		);
+	}),
+
+	http.post(`${API_BASE_URL}/base-cvs`, async ({ request }) => {
+		const state = loadState();
+		const auth = requireAuth(request, state);
+		if (auth instanceof Response) return auth;
+		const owned = state.baseCvs.filter((baseCv) => baseCv.userId === auth.user.userId);
+		if (owned.length >= 20) return errorJson(409, "BASE_CV_LIMIT_REACHED", "Base CV limit reached");
+		const formData = await request.formData();
+		const file = formData.get("file");
+		if (!(file instanceof File) || file.size === 0) {
+			return errorJson(400, "MALFORMED_BASE_CV", "Choose one non-empty file");
+		}
+		if (file.size > MAX_BASE_CV_BYTES) return errorJson(413, "BASE_CV_TOO_LARGE", "Base CV exceeds 10 MB");
+		const format = baseCvFormat(file.name);
+		if (!format) return errorJson(400, "INVALID_BASE_CV_FORMAT", "Unsupported Base CV format");
+		const buffer = await file.arrayBuffer();
+		const bytes = new Uint8Array(buffer);
+		const validationResponse = validateMockBaseCv(file, bytes, format);
+		if (validationResponse) return validationResponse;
+		const checksum = await sha256(buffer);
+		if (owned.some((baseCv) => baseCv.sha256 === checksum)) {
+			return errorJson(409, "DUPLICATE_BASE_CV", "This Base CV already exists");
+		}
+		const originalFilename = file.name.replaceAll(/[\p{Cc}]/gu, "").replaceAll("\\", "/").split("/").at(-1)?.slice(0, 255) || "base-cv";
+		const baseCv = {
+			baseCvId: nextId(state, "baseCvId"),
+			userId: auth.user.userId,
+			sha256: checksum,
+			originalFilename,
+			format,
+			contentType: file.type,
+			byteSize: file.size,
+			createdAt: nowIso(),
+		};
+		state.baseCvs.push(baseCv);
+		saveState(state);
+		return HttpResponse.json(toPublicBaseCv(baseCv), { status: 201 });
+	}),
+
+	http.get(`${API_BASE_URL}/base-cvs/:baseCvId/download`, ({ request, params }) => {
+		const state = loadState();
+		const auth = requireAuth(request, state);
+		if (auth instanceof Response) return auth;
+		const baseCvId = getPositiveId(params, "baseCvId");
+		const baseCv = state.baseCvs.find((candidate) => candidate.baseCvId === baseCvId && candidate.userId === auth.user.userId);
+		if (!baseCv) return errorJson(404, "BASE_CV_NOT_FOUND", "Base CV not found");
+		return new HttpResponse(`Mock download for ${baseCv.originalFilename}`, {
+			headers: { "Content-Type": baseCv.contentType, "Content-Disposition": `attachment; filename="${baseCv.originalFilename.replaceAll('"', "")}"` },
+		});
+	}),
+
+	http.delete(`${API_BASE_URL}/base-cvs/:baseCvId`, ({ request, params }) => {
+		const state = loadState();
+		const auth = requireAuth(request, state);
+		if (auth instanceof Response) return auth;
+		const baseCvId = getPositiveId(params, "baseCvId");
+		const index = state.baseCvs.findIndex((candidate) => candidate.baseCvId === baseCvId && candidate.userId === auth.user.userId);
+		if (index < 0) return errorJson(404, "BASE_CV_NOT_FOUND", "Base CV not found");
+		state.baseCvs.splice(index, 1);
+		saveState(state);
+		return new HttpResponse(null, { status: 204 });
 	}),
 
 	http.get(`${API_BASE_URL}/companies`, ({ request }) => {

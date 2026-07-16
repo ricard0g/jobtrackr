@@ -284,11 +284,13 @@ export const createSeedState = (): MockState => ({
 			statusHistoryCreatedAt: "2026-06-30T13:20:00.000Z",
 		},
 	],
+	baseCvs: [],
 	counters: {
 		applicationId: 4,
 		companyId: 7 + extraGlobalCompanyNames.length,
 		interviewId: 3,
 		statusHistoryId: 2,
 		tagId: 5,
+		baseCvId: 1,
 	},
 });

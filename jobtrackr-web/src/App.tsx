@@ -1,24 +1,19 @@
 import "./App.css";
 import { Outlet, useLoaderData } from "react-router";
 
-import { BoardProvider } from "@/components/kanban/BoardProvider";
-import type { AppLoaderData } from "@/lib/api";
-import { KanbanBoard } from "./components/kanban/KanbanBoard";
-import { Navbar } from "./components/shared/Navbar";
+import { Navbar } from "@/components/shared/Navbar";
+import type { AccountLoaderData } from "@/lib/api";
 
 function App() {
-	const data = useLoaderData() as AppLoaderData;
+	const { user } = useLoaderData() as AccountLoaderData;
 
 	return (
-		<BoardProvider data={data}>
-			<section className="flex h-dvh w-full flex-col overflow-hidden bg-bg md:min-h-screen">
-				<Navbar />
-				<main className="min-h-0 flex-1 overflow-hidden">
-					<KanbanBoard />
-					<Outlet />
-				</main>
-			</section>
-		</BoardProvider>
+		<section className="flex h-dvh w-full flex-col overflow-hidden bg-bg md:min-h-screen">
+			<Navbar user={user} />
+			<main className="min-h-0 flex-1 overflow-hidden">
+				<Outlet />
+			</main>
+		</section>
 	);
 }
 

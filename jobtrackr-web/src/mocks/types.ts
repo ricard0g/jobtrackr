@@ -6,6 +6,7 @@ import type { Company } from "@/types/company";
 import type { Interview } from "@/types/interview";
 import type { Tag } from "@/types/tag";
 import type { User } from "@/types/user";
+import type { BaseCv } from "@/types/base-cv";
 
 export type MockApplicationRecord = Omit<Application, "company" | "tags"> & {
 	companyId: number;
@@ -24,12 +25,18 @@ export type MockSession = {
 	refreshToken: string;
 };
 
+export type MockBaseCvRecord = BaseCv & {
+	userId: string;
+	sha256: string;
+};
+
 export type MockCounters = {
 	applicationId: number;
 	companyId: number;
 	interviewId: number;
 	statusHistoryId: number;
 	tagId: number;
+	baseCvId: number;
 };
 
 export type MockState = {
@@ -44,6 +51,7 @@ export type MockState = {
 	applications: MockApplicationRecord[];
 	interviews: Interview[];
 	statusHistories: StatusHistory[];
+	baseCvs: MockBaseCvRecord[];
 	counters: MockCounters;
 };
 

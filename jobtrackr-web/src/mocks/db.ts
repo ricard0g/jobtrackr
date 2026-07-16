@@ -28,7 +28,11 @@ export const loadState = (): MockState => {
 
 	try {
 		const parsedValue: unknown = JSON.parse(rawValue);
-		if (isMockState(parsedValue)) return parsedValue;
+		if (isMockState(parsedValue)) {
+			parsedValue.baseCvs ??= [];
+			parsedValue.counters.baseCvId ??= 1;
+			return parsedValue;
+		}
 	} catch {
 		// Fall through to reseed corrupt local data.
 	}
