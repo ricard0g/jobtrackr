@@ -60,6 +60,12 @@ public class User {
     @Column(name = "user_last_login_at", columnDefinition = "TIMESTAMPTZ")
     private OffsetDateTime userLastLoginAt;
 
+    @Column(name = "user_ai_consent_version", length = 32)
+    private String userAiConsentVersion;
+
+    @Column(name = "user_ai_consent_at", columnDefinition = "TIMESTAMPTZ")
+    private OffsetDateTime userAiConsentAt;
+
     @CreationTimestamp
     @Column(name = "user_created_at", nullable = false, updatable = false, columnDefinition = "TIMESTAMPTZ DEFAULT NOW()")
     private OffsetDateTime userCreatedAt;

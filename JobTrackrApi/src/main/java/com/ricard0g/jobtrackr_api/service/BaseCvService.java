@@ -11,10 +11,14 @@ import org.springframework.web.multipart.MultipartFile;
 import com.ricard0g.jobtrackr_api.dto.BaseCvDto.BaseCvDownloadDto;
 import com.ricard0g.jobtrackr_api.dto.BaseCvDto.BaseCvResponseDto;
 import com.ricard0g.jobtrackr_api.exception.BaseCvException;
+import com.ricard0g.jobtrackr_api.exception.CvGenerationException;
+import com.ricard0g.jobtrackr_api.exception.StorageUnavailableException;
 import com.ricard0g.jobtrackr_api.exception.UserNotFoundException;
 import com.ricard0g.jobtrackr_api.model.BaseCv;
 import com.ricard0g.jobtrackr_api.model.User;
+import com.ricard0g.jobtrackr_api.model.enums.CvGenerationStatus;
 import com.ricard0g.jobtrackr_api.repository.BaseCvRepository;
+import com.ricard0g.jobtrackr_api.repository.CvGenerationRepository;
 import com.ricard0g.jobtrackr_api.repository.UserRepository;
 import com.ricard0g.jobtrackr_api.storage.BaseCvStorage;
 import com.ricard0g.jobtrackr_api.validation.BaseCvValidator;
@@ -32,6 +36,7 @@ public class BaseCvService {
 
     private final UserRepository userRepository;
     private final BaseCvRepository baseCvRepository;
+    private final CvGenerationRepository cvGenerationRepository;
     private final BaseCvValidator baseCvValidator;
     private final BaseCvStorage baseCvStorage;
 
@@ -58,7 +63,11 @@ public class BaseCvService {
         ensureNotDuplicate(userId, validated.sha256());
 
         final String objectKey = objectKey(userId, validated);
-        baseCvStorage.upload(objectKey, validated.bytes(), validated.contentType());
+        try {
+            baseCvStorage.upload(objectKey, validated.bytes(), validated.contentType());
+        } catch (final StorageUnavailableException exception) {
+            throw BaseCvException.storageUnavailable();
+        }
 
         try {
             final BaseCv baseCv = BaseCv.create(
@@ -84,14 +93,26 @@ public class BaseCvService {
     @Transactional(readOnly = true)
     public BaseCvDownloadDto createDownload(final UUID userId, final Long baseCvId) {
         final BaseCv baseCv = requireOwnedBaseCv(userId, baseCvId);
-        return new BaseCvDownloadDto(
-                baseCvStorage.createDownloadUri(baseCv.getObjectKey(), baseCv.getOriginalFilename()));
+        try {
+            return new BaseCvDownloadDto(
+                    baseCvStorage.createDownloadUri(baseCv.getObjectKey(), baseCv.getOriginalFilename()));
+        } catch (final StorageUnavailableException exception) {
+            throw BaseCvException.storageUnavailable();
+        }
     }
 
     @Transactional
     public void delete(final UUID userId, final Long baseCvId) {
         final BaseCv baseCv = requireOwnedBaseCv(userId, baseCvId);
-        baseCvStorage.delete(baseCv.getObjectKey());
+        if (cvGenerationRepository.existsByBaseCv_BaseCvIdAndStatusIn(
+                baseCvId, List.of(CvGenerationStatus.PENDING, CvGenerationStatus.PROCESSING))) {
+            throw CvGenerationException.baseCvInUse();
+        }
+        try {
+            baseCvStorage.delete(baseCv.getObjectKey());
+        } catch (final StorageUnavailableException exception) {
+            throw BaseCvException.storageUnavailable();
+        }
         baseCvRepository.delete(baseCv);
         baseCvRepository.flush();
         log.info("[BaseCvService] - DELETE: baseCvId: {}, userId: {}", baseCvId, userId);

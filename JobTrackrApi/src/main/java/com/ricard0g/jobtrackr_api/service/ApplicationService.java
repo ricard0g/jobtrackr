@@ -27,11 +27,14 @@ import com.ricard0g.jobtrackr_api.exception.TagNotFoundException;
 import com.ricard0g.jobtrackr_api.exception.UserNotFoundException;
 import com.ricard0g.jobtrackr_api.model.Application;
 import com.ricard0g.jobtrackr_api.model.Company;
+import com.ricard0g.jobtrackr_api.model.CvGeneration;
 import com.ricard0g.jobtrackr_api.model.Tag;
 import com.ricard0g.jobtrackr_api.model.User;
 import com.ricard0g.jobtrackr_api.model.enums.ApplicationStatus;
+import com.ricard0g.jobtrackr_api.model.enums.CvGenerationStatus;
 import com.ricard0g.jobtrackr_api.repository.ApplicationRepository;
 import com.ricard0g.jobtrackr_api.repository.CompanyRepository;
+import com.ricard0g.jobtrackr_api.repository.CvGenerationRepository;
 import com.ricard0g.jobtrackr_api.repository.TagRepository;
 import com.ricard0g.jobtrackr_api.repository.UserRepository;
 
@@ -50,6 +53,8 @@ public class ApplicationService {
     private final ApplicationRepository applicationRepository;
     private final TagRepository tagRepository;
     private final StatusHistoryService statusHistoryService;
+    private final ApplicationCvService applicationCvService;
+    private final CvGenerationRepository cvGenerationRepository;
 
     @Transactional(readOnly = true)
     public List<ApplicationResponseDto> getAllApplications(final UUID userId) {
@@ -225,6 +230,24 @@ public class ApplicationService {
     @Transactional
     public void deleteApplication(final UUID userId, final Long applicationId) {
         final Application application = requireApplicationForUser(userId, applicationId);
+        applicationCvService.scheduleCleanupForApplication(applicationId);
+        final List<CvGeneration> active = cvGenerationRepository.findAllByApplication_ApplicationIdAndStatusIn(
+                applicationId, List.of(CvGenerationStatus.PENDING, CvGenerationStatus.PROCESSING));
+        for (final CvGeneration generation : active) {
+            if (generation.getStatus() == CvGenerationStatus.PENDING) {
+                generation.setStatus(CvGenerationStatus.CANCELLED);
+                generation.setCompletedAt(java.time.OffsetDateTime.now());
+                generation.setErrorCode("CANCELLED");
+                generation.setErrorMessage("Application deleted");
+            } else {
+                generation.setStatus(CvGenerationStatus.CANCELLED);
+                generation.setCompletedAt(java.time.OffsetDateTime.now());
+                generation.setErrorCode("CANCELLED");
+                generation.setErrorMessage("Application deleted during processing");
+                generation.setLeaseOwner(null);
+                generation.setLeaseExpiresAt(null);
+            }
+        }
         applicationRepository.delete(application);
         log.info(
                 "[ApplicationService] - DELETE_APPLICATION: applicationId: {}, userId: {}",

@@ -5,20 +5,23 @@ This guide covers the root monorepo workflow for local development and cloud-age
 ## Layout
 
 ```text
-JobTrackrApi/     Spring Boot API and Flyway migrations
-jobtrackr-web/    Vite/React frontend
-db/               Local seed/dump helpers
-scripts/          Monorepo development scripts
+JobTrackrApi/              Spring Boot API and Flyway migrations
+jobtrackr-web/             Vite/React frontend
+cv-generation-service/     FastAPI LangGraph CV generation (stateless)
+db/                        Local seed/dump helpers
+scripts/                   Monorepo development scripts
 ```
 
 ## Local Setup
 
-Create local environment variables and start Postgres:
+Create local environment variables and start Postgres plus the CV generation service:
 
 ```bash
 cp .env.example .env
 ./scripts/dev-up.sh
 ```
+
+`dev-up.sh` starts Compose services for PostgreSQL and `cv-generation` (FastAPI on port `8081` by default). Spring and Vite continue to run on the host.
 
 Start the API:
 
@@ -34,6 +37,21 @@ Start the web app from another shell:
 
 The API runs on `http://localhost:8080`.
 The web app runs on `http://localhost:5173`.
+The CV generation service runs on `http://localhost:8081`.
+
+### CV generation service
+
+- Default provider is `fake` (`CV_GENERATION_PROVIDER=fake`) so local/CI work does not call Gemini.
+- For live Gemini evaluation set `CV_GENERATION_PROVIDER=gemini` and provide `GOOGLE_AI_API_KEY` (or `GEMINI_API_KEY`).
+- Spring authenticates to FastAPI with `CV_GENERATION_SERVICE_TOKEN` (Bearer). The browser never talks to FastAPI.
+- Health: `GET http://localhost:8081/health/live` and `GET http://localhost:8081/health/ready`
+- WeasyPrint system libraries are installed in the service Dockerfile for PDF rendering.
+
+Required Spring env vars (see `.env.example`):
+
+- `CV_GENERATION_SERVICE_BASE_URL`
+- `CV_GENERATION_SERVICE_TOKEN`
+- `CV_GENERATION_WORKER_CONCURRENCY` (default `1`)
 
 Flyway migrations live in `JobTrackrApi/src/main/resources/db/migration`.
 The database schema is recreated from those migrations whenever the API starts against a fresh database.
@@ -82,7 +100,7 @@ Seed login:
 agent@example.test / dev-password
 ```
 
-The committed seed file is `db/seed/dev.sql`. It contains fake users, user-scoped companies/tags, applications across every Kanban status, interviews, tasks, status history, saved views, and fake CV/job-description references.
+The committed seed file is `db/seed/dev.sql`. It contains fake users, user-scoped companies/tags, applications across every Kanban status, interviews, tasks, status history, saved views, a seed Base CV metadata row, and Job Description text for Generate.
 
 ## Cloud Phone Testing
 

@@ -52,6 +52,12 @@ class ApplicationServiceTest {
     @Mock
     private StatusHistoryService statusHistoryService;
 
+    @Mock
+    private ApplicationCvService applicationCvService;
+
+    @Mock
+    private com.ricard0g.jobtrackr_api.repository.CvGenerationRepository cvGenerationRepository;
+
     @InjectMocks
     private ApplicationService applicationService;
 

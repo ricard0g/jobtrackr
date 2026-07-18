@@ -29,6 +29,7 @@ import {
 import type {
 	AuthContext,
 	MockApplicationRecord,
+	MockCvGenerationRecord,
 	MockState,
 	PathParams,
 } from "@/mocks/types";
@@ -45,6 +46,12 @@ import type { InterviewCreateRequest, InterviewOutcomePatchRequest, InterviewPut
 import type { TagWriteRequest } from "@/types/tag";
 import type { User } from "@/types/user";
 import type { BaseCv, BaseCvFormat } from "@/types/base-cv";
+import type {
+	CreateCvGenerationRequest,
+	CvGeneration,
+	GeneratedCvFormat,
+} from "@/types/cv-generation";
+import { MOCK_AI_CONSENT_VERSION } from "@/mocks/seed";
 
 const applicationStatuses: ApplicationStatus[] = [
 	"APPLIED",
@@ -152,6 +159,79 @@ const validateSalaryRange = (
 };
 
 const MAX_BASE_CV_BYTES = 10 * 1024 * 1024;
+const MAX_APPLICATION_CVS = 20;
+const MAX_JOB_DESCRIPTION_CHARS = 50_000;
+const MAX_ADDITIONAL_INFO_CHARS = 5_000;
+const generatedFormats: GeneratedCvFormat[] = ["PDF", "DOCX", "MARKDOWN"];
+
+const isGeneratedFormat = (value: unknown): value is GeneratedCvFormat =>
+	typeof value === "string" && generatedFormats.includes(value as GeneratedCvFormat);
+
+const toPublicCvGeneration = (generation: MockCvGenerationRecord): CvGeneration => ({
+	cvGenerationId: generation.cvGenerationId,
+	applicationId: generation.applicationId,
+	baseCvId: generation.baseCvId,
+	requestedFormat: generation.requestedFormat,
+	status: generation.status,
+	idempotencyKey: generation.idempotencyKey,
+	correlationId: generation.correlationId,
+	errorCode: generation.errorCode,
+	errorMessage: generation.errorMessage,
+	applicationCvId: generation.applicationCvId,
+	modelId: generation.modelId,
+	workflowVersion: generation.workflowVersion,
+	createdAt: generation.createdAt,
+	updatedAt: generation.updatedAt,
+	startedAt: generation.startedAt,
+	completedAt: generation.completedAt,
+	statusUrl: generation.statusUrl,
+});
+
+const getAiConsentForUser = (state: MockState, userId: string) => {
+	const record = state.aiConsents.find((consent) => consent.userId === userId);
+	if (!record) {
+		return { consentVersion: null, consentedAt: null, current: false };
+	}
+	const current =
+		record.consentVersion === MOCK_AI_CONSENT_VERSION && record.consentedAt !== null;
+	return {
+		consentVersion: record.consentVersion,
+		consentedAt: record.consentedAt,
+		current,
+	};
+};
+
+const ensureAiConsent = (
+	state: MockState,
+	userId: string,
+	consentAccepted: boolean,
+) => {
+	const current = getAiConsentForUser(state, userId);
+	if (current.current) return null;
+	if (!consentAccepted) {
+		return errorJson(
+			403,
+			"AI_CONSENT_REQUIRED",
+			"Explicit consent is required before sending CV data to Google Gemini",
+		);
+	}
+	const existing = state.aiConsents.find((consent) => consent.userId === userId);
+	const timestamp = nowIso();
+	if (existing) {
+		existing.consentVersion = MOCK_AI_CONSENT_VERSION;
+		existing.consentedAt = timestamp;
+		existing.current = true;
+	} else {
+		state.aiConsents.push({
+			userId,
+			consentVersion: MOCK_AI_CONSENT_VERSION,
+			consentedAt: timestamp,
+			current: true,
+		});
+	}
+	return null;
+};
+
 const baseCvContentTypes: Record<BaseCvFormat, string[]> = {
 	PDF: ["application/pdf"],
 	DOCX: ["application/vnd.openxmlformats-officedocument.wordprocessingml.document"],
@@ -486,6 +566,19 @@ export const handlers = [
 		const baseCvId = getPositiveId(params, "baseCvId");
 		const index = state.baseCvs.findIndex((candidate) => candidate.baseCvId === baseCvId && candidate.userId === auth.user.userId);
 		if (index < 0) return errorJson(404, "BASE_CV_NOT_FOUND", "Base CV not found");
+		const inUse = state.cvGenerations.some(
+			(generation) =>
+				generation.baseCvId === baseCvId &&
+				generation.userId === auth.user.userId &&
+				(generation.status === "PENDING" || generation.status === "PROCESSING"),
+		);
+		if (inUse) {
+			return errorJson(
+				409,
+				"BASE_CV_IN_USE",
+				"This Base CV is in use by an active generation and cannot be deleted",
+			);
+		}
 		state.baseCvs.splice(index, 1);
 		saveState(state);
 		return new HttpResponse(null, { status: 204 });
@@ -1046,6 +1139,19 @@ export const handlers = [
 			applicationId,
 		);
 		if (!application) return errorJson(404, "APPLICATION_NOT_FOUND", "Application not found");
+		const timestamp = nowIso();
+		state.cvGenerations.forEach((generation) => {
+			if (
+				generation.applicationId === application.applicationId &&
+				(generation.status === "PENDING" || generation.status === "PROCESSING")
+			) {
+				generation.status = "CANCELLED";
+				generation.completedAt = timestamp;
+				generation.updatedAt = timestamp;
+				generation.errorCode = "CANCELLED";
+				generation.errorMessage = "Generation cancelled because the application was deleted";
+			}
+		});
 		state.applications = state.applications.filter(
 			(candidate) => candidate.applicationId !== application.applicationId,
 		);
@@ -1054,6 +1160,12 @@ export const handlers = [
 		);
 		state.statusHistories = state.statusHistories.filter(
 			(history) => history.applicationId !== application.applicationId,
+		);
+		state.jobDescriptions = state.jobDescriptions.filter(
+			(jobDescription) => jobDescription.applicationId !== application.applicationId,
+		);
+		state.applicationCvs = state.applicationCvs.filter(
+			(applicationCv) => applicationCv.applicationId !== application.applicationId,
 		);
 		saveState(state);
 		return new HttpResponse(null, { status: 204 });
@@ -1247,4 +1359,324 @@ export const handlers = [
 			return new HttpResponse(null, { status: 204 });
 		},
 	),
+
+	http.get(`${API_BASE_URL}/cv-generations`, ({ request }) => {
+		const state = loadState();
+		const auth = requireAuth(request, state);
+		if (auth instanceof Response) return auth;
+		const url = new URL(request.url);
+		const applicationIdParam = url.searchParams.get("applicationId");
+		const applicationId = applicationIdParam ? Number(applicationIdParam) : null;
+		if (applicationIdParam !== null) {
+			if (!Number.isInteger(applicationId) || !applicationId || applicationId <= 0) {
+				return validationError([toValidationField("applicationId", "must be positive")]);
+			}
+			const application = requireApplicationForUser(state, auth.user.userId, applicationId);
+			if (!application) {
+				return errorJson(404, "APPLICATION_NOT_FOUND", "Application not found");
+			}
+		}
+		const generations = state.cvGenerations
+			.filter((generation) => {
+				if (generation.userId !== auth.user.userId) return false;
+				if (applicationId) return generation.applicationId === applicationId;
+				return true;
+			})
+			.toSorted((left, right) => right.createdAt.localeCompare(left.createdAt))
+			.map(toPublicCvGeneration);
+		return HttpResponse.json(generations);
+	}),
+
+	http.get(`${API_BASE_URL}/cv-generations/:cvGenerationId`, ({ request, params }) => {
+		const state = loadState();
+		const auth = requireAuth(request, state);
+		if (auth instanceof Response) return auth;
+		const cvGenerationId = getPositiveId(params, "cvGenerationId");
+		const generation = state.cvGenerations.find(
+			(candidate) =>
+				candidate.cvGenerationId === cvGenerationId && candidate.userId === auth.user.userId,
+		);
+		if (!generation) {
+			return errorJson(404, "CV_GENERATION_NOT_FOUND", "CV generation not found");
+		}
+		return HttpResponse.json(toPublicCvGeneration(generation));
+	}),
+
+	http.post(`${API_BASE_URL}/cv-generations`, async ({ request }) => {
+		const state = loadState();
+		const auth = requireAuth(request, state);
+		if (auth instanceof Response) return auth;
+		const idempotencyKey = request.headers.get("Idempotency-Key")?.trim() ?? "";
+		if (!idempotencyKey || idempotencyKey.length > 128) {
+			return errorJson(400, "MISSING_IDEMPOTENCY_KEY", "Idempotency-Key header is required");
+		}
+		const existing = state.cvGenerations.find(
+			(generation) =>
+				generation.userId === auth.user.userId && generation.idempotencyKey === idempotencyKey,
+		);
+		if (existing) {
+			return HttpResponse.json(toPublicCvGeneration(existing), { status: 202 });
+		}
+
+		const body = await readJson<CreateCvGenerationRequest>(request);
+		const consentResponse = ensureAiConsent(state, auth.user.userId, body.consentAccepted === true);
+		if (consentResponse) return consentResponse;
+
+		if (!body.jobDescription?.trim()) {
+			return errorJson(400, "MISSING_JOB_DESCRIPTION", "A Job Description is required to generate a CV");
+		}
+		if (body.jobDescription.length > MAX_JOB_DESCRIPTION_CHARS) {
+			return errorJson(
+				400,
+				"JOB_DESCRIPTION_TOO_LONG",
+				"Job Description must not exceed 50000 characters",
+			);
+		}
+		if (
+			body.additionalInformation &&
+			body.additionalInformation.length > MAX_ADDITIONAL_INFO_CHARS
+		) {
+			return errorJson(
+				400,
+				"ADDITIONAL_INFORMATION_TOO_LONG",
+				"Additional information must not exceed 5000 characters",
+			);
+		}
+		if (!isGeneratedFormat(body.format)) {
+			return errorJson(
+				400,
+				"INVALID_GENERATION_FORMAT",
+				"Generated CV format must be PDF, DOCX, or MARKDOWN",
+			);
+		}
+
+		const application = requireApplicationForUser(state, auth.user.userId, body.applicationId);
+		if (!application) {
+			return errorJson(404, "APPLICATION_NOT_FOUND", "Application not found");
+		}
+		const baseCv = state.baseCvs.find(
+			(candidate) =>
+				candidate.baseCvId === body.baseCvId && candidate.userId === auth.user.userId,
+		);
+		if (!baseCv) {
+			return errorJson(
+				400,
+				"BASE_CV_UNAVAILABLE",
+				"Selected Base CV is unavailable or not owned by you",
+			);
+		}
+		const ownedCvs = state.applicationCvs.filter(
+			(applicationCv) => applicationCv.applicationId === application.applicationId,
+		);
+		if (ownedCvs.length >= MAX_APPLICATION_CVS) {
+			return errorJson(
+				409,
+				"GENERATION_LIMIT_REACHED",
+				"The limit of 20 generated CVs for this Application has been reached",
+			);
+		}
+
+		const jobDescriptionText = body.jobDescription.trim();
+		const existingJobDescription = state.jobDescriptions.find(
+			(jobDescription) =>
+				jobDescription.applicationId === application.applicationId &&
+				jobDescription.userId === auth.user.userId,
+		);
+		if (existingJobDescription) {
+			existingJobDescription.jobDescriptionText = jobDescriptionText;
+		} else {
+			state.jobDescriptions.push({
+				applicationId: application.applicationId,
+				userId: auth.user.userId,
+				jobDescriptionText,
+			});
+		}
+
+		const timestamp = nowIso();
+		const cvGenerationId = nextId(state, "cvGenerationId");
+		const generation: MockCvGenerationRecord = {
+			cvGenerationId,
+			userId: auth.user.userId,
+			applicationId: application.applicationId,
+			baseCvId: baseCv.baseCvId,
+			requestedFormat: body.format,
+			status: "PENDING",
+			idempotencyKey,
+			correlationId: crypto.randomUUID(),
+			errorCode: null,
+			errorMessage: null,
+			applicationCvId: null,
+			modelId: null,
+			workflowVersion: null,
+			createdAt: timestamp,
+			updatedAt: timestamp,
+			startedAt: null,
+			completedAt: null,
+			statusUrl: `/api/v1/cv-generations/${cvGenerationId}`,
+			jobDescriptionSnapshot: jobDescriptionText,
+			additionalInformation: body.additionalInformation?.trim() || null,
+			consentVersion: MOCK_AI_CONSENT_VERSION,
+			attemptCount: 0,
+			maxAttempts: 3,
+		};
+		state.cvGenerations.push(generation);
+		saveState(state);
+		return HttpResponse.json(toPublicCvGeneration(generation), { status: 202 });
+	}),
+
+	http.post(`${API_BASE_URL}/cv-generations/:cvGenerationId/cancel`, ({ request, params }) => {
+		const state = loadState();
+		const auth = requireAuth(request, state);
+		if (auth instanceof Response) return auth;
+		const cvGenerationId = getPositiveId(params, "cvGenerationId");
+		const generation = state.cvGenerations.find(
+			(candidate) =>
+				candidate.cvGenerationId === cvGenerationId && candidate.userId === auth.user.userId,
+		);
+		if (!generation) {
+			return errorJson(404, "CV_GENERATION_NOT_FOUND", "CV generation not found");
+		}
+		if (generation.status !== "PENDING") {
+			return errorJson(
+				409,
+				"INVALID_STATUS_TRANSITION",
+				"This generation cannot be cancelled in its current status",
+			);
+		}
+		const timestamp = nowIso();
+		generation.status = "CANCELLED";
+		generation.completedAt = timestamp;
+		generation.updatedAt = timestamp;
+		generation.errorCode = "CANCELLED";
+		generation.errorMessage = "Generation cancelled by user";
+		saveState(state);
+		return HttpResponse.json(toPublicCvGeneration(generation));
+	}),
+
+	http.get(`${API_BASE_URL}/ai-consent`, ({ request }) => {
+		const state = loadState();
+		const auth = requireAuth(request, state);
+		if (auth instanceof Response) return auth;
+		return HttpResponse.json(getAiConsentForUser(state, auth.user.userId));
+	}),
+
+	http.post(`${API_BASE_URL}/ai-consent`, async ({ request }) => {
+		const state = loadState();
+		const auth = requireAuth(request, state);
+		if (auth instanceof Response) return auth;
+		const body = await readJson<{ accepted?: boolean }>(request);
+		if (body.accepted !== true) {
+			return errorJson(
+				403,
+				"AI_CONSENT_REQUIRED",
+				"Explicit consent is required before sending CV data to Google Gemini",
+			);
+		}
+		const consentResponse = ensureAiConsent(state, auth.user.userId, true);
+		if (consentResponse) return consentResponse;
+		saveState(state);
+		return HttpResponse.json(getAiConsentForUser(state, auth.user.userId));
+	}),
+
+	http.get(`${API_BASE_URL}/applications/:applicationId/job-description`, ({ request, params }) => {
+		const state = loadState();
+		const auth = requireAuth(request, state);
+		if (auth instanceof Response) return auth;
+		const applicationId = getPositiveId(params, "applicationId");
+		const application = requireApplicationForUser(state, auth.user.userId, applicationId);
+		if (!application) {
+			return errorJson(404, "APPLICATION_NOT_FOUND", "Application not found");
+		}
+		const jobDescription = state.jobDescriptions.find(
+			(candidate) =>
+				candidate.applicationId === application.applicationId &&
+				candidate.userId === auth.user.userId,
+		);
+		return HttpResponse.json({
+			applicationId: application.applicationId,
+			jobDescriptionText: jobDescription?.jobDescriptionText ?? "",
+		});
+	}),
+
+	http.get(`${API_BASE_URL}/applications/:applicationId/application-cvs`, ({ request, params }) => {
+		const state = loadState();
+		const auth = requireAuth(request, state);
+		if (auth instanceof Response) return auth;
+		const applicationId = getPositiveId(params, "applicationId");
+		const application = requireApplicationForUser(state, auth.user.userId, applicationId);
+		if (!application) {
+			return errorJson(404, "APPLICATION_NOT_FOUND", "Application not found");
+		}
+		return HttpResponse.json(
+			state.applicationCvs
+				.filter(
+					(applicationCv) =>
+						applicationCv.applicationId === application.applicationId &&
+						applicationCv.userId === auth.user.userId,
+				)
+				.toSorted((left, right) => right.version - left.version)
+				.map(
+					({
+						applicationCvId,
+						applicationId: ownedApplicationId,
+						version,
+						originalFilename,
+						format,
+						contentType,
+						byteSize,
+						generationId,
+						createdAt,
+					}) => ({
+						applicationCvId,
+						applicationId: ownedApplicationId,
+						version,
+						originalFilename,
+						format,
+						contentType,
+						byteSize,
+						generationId,
+						createdAt,
+					}),
+				),
+		);
+	}),
+
+	http.get(`${API_BASE_URL}/application-cvs/:applicationCvId/download`, ({ request, params }) => {
+		const state = loadState();
+		const auth = requireAuth(request, state);
+		if (auth instanceof Response) return auth;
+		const applicationCvId = getPositiveId(params, "applicationCvId");
+		const applicationCv = state.applicationCvs.find(
+			(candidate) =>
+				candidate.applicationCvId === applicationCvId && candidate.userId === auth.user.userId,
+		);
+		if (!applicationCv) {
+			return errorJson(404, "APPLICATION_CV_NOT_FOUND", "Generated Application CV not found");
+		}
+		const body = `Mock download for ${applicationCv.originalFilename}`;
+		const uri = `data:${applicationCv.contentType};charset=utf-8,${encodeURIComponent(body)}`;
+		return HttpResponse.json({ uri });
+	}),
+
+	http.delete(`${API_BASE_URL}/application-cvs/:applicationCvId`, ({ request, params }) => {
+		const state = loadState();
+		const auth = requireAuth(request, state);
+		if (auth instanceof Response) return auth;
+		const applicationCvId = getPositiveId(params, "applicationCvId");
+		const index = state.applicationCvs.findIndex(
+			(candidate) =>
+				candidate.applicationCvId === applicationCvId && candidate.userId === auth.user.userId,
+		);
+		if (index < 0) {
+			return errorJson(404, "APPLICATION_CV_NOT_FOUND", "Generated Application CV not found");
+		}
+		const [removed] = state.applicationCvs.splice(index, 1);
+		state.cvGenerations.forEach((generation) => {
+			if (generation.applicationCvId === removed.applicationCvId) {
+				generation.applicationCvId = null;
+			}
+		});
+		saveState(state);
+		return new HttpResponse(null, { status: 204 });
+	}),
 ];

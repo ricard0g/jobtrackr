@@ -17,6 +17,18 @@ import jakarta.validation.ConstraintViolationException;
 @RestControllerAdvice
 public class GlobalExceptionHandler {
 
+    @ExceptionHandler(CvGenerationException.class)
+    public ResponseEntity<ErrorResponse> handleCvGeneration(final CvGenerationException exception) {
+        return ResponseEntity.status(exception.getStatus())
+                .body(ErrorResponse.of(exception.getCode(), exception.getMessage()));
+    }
+
+    @ExceptionHandler(StorageUnavailableException.class)
+    public ResponseEntity<ErrorResponse> handleStorageUnavailable(final StorageUnavailableException exception) {
+        return ResponseEntity.status(exception.getStatus())
+                .body(ErrorResponse.of(exception.getCode(), exception.getMessage()));
+    }
+
     @ExceptionHandler(BaseCvException.class)
     public ResponseEntity<ErrorResponse> handleBaseCv(final BaseCvException exception) {
         return ResponseEntity.status(exception.getStatus())

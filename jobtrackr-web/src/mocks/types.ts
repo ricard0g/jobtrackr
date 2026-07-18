@@ -2,11 +2,13 @@ import type {
 	Application,
 	StatusHistory,
 } from "@/types/application";
+import type { ApplicationCv } from "@/types/application-cv";
 import type { Company } from "@/types/company";
 import type { Interview } from "@/types/interview";
 import type { Tag } from "@/types/tag";
 import type { User } from "@/types/user";
 import type { BaseCv } from "@/types/base-cv";
+import type { AiConsent, CvGeneration, JobDescriptionResponse } from "@/types/cv-generation";
 
 export type MockApplicationRecord = Omit<Application, "company" | "tags"> & {
 	companyId: number;
@@ -30,6 +32,27 @@ export type MockBaseCvRecord = BaseCv & {
 	sha256: string;
 };
 
+export type MockCvGenerationRecord = CvGeneration & {
+	userId: string;
+	jobDescriptionSnapshot: string;
+	additionalInformation: string | null;
+	consentVersion: string;
+	attemptCount: number;
+	maxAttempts: number;
+};
+
+export type MockApplicationCvRecord = ApplicationCv & {
+	userId: string;
+};
+
+export type MockJobDescriptionRecord = JobDescriptionResponse & {
+	userId: string;
+};
+
+export type MockAiConsentRecord = AiConsent & {
+	userId: string;
+};
+
 export type MockCounters = {
 	applicationId: number;
 	companyId: number;
@@ -37,6 +60,8 @@ export type MockCounters = {
 	statusHistoryId: number;
 	tagId: number;
 	baseCvId: number;
+	cvGenerationId: number;
+	applicationCvId: number;
 };
 
 export type MockState = {
@@ -52,6 +77,10 @@ export type MockState = {
 	interviews: Interview[];
 	statusHistories: StatusHistory[];
 	baseCvs: MockBaseCvRecord[];
+	cvGenerations: MockCvGenerationRecord[];
+	applicationCvs: MockApplicationCvRecord[];
+	jobDescriptions: MockJobDescriptionRecord[];
+	aiConsents: MockAiConsentRecord[];
 	counters: MockCounters;
 };
 

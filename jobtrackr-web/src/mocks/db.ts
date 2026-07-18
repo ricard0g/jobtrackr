@@ -30,7 +30,13 @@ export const loadState = (): MockState => {
 		const parsedValue: unknown = JSON.parse(rawValue);
 		if (isMockState(parsedValue)) {
 			parsedValue.baseCvs ??= [];
+			parsedValue.cvGenerations ??= [];
+			parsedValue.applicationCvs ??= [];
+			parsedValue.jobDescriptions ??= [];
+			parsedValue.aiConsents ??= [];
 			parsedValue.counters.baseCvId ??= 1;
+			parsedValue.counters.cvGenerationId ??= 1;
+			parsedValue.counters.applicationCvId ??= 1;
 			return parsedValue;
 		}
 	} catch {

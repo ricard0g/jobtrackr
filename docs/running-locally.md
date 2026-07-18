@@ -48,6 +48,8 @@ Start Postgres:
 ./scripts/dev-up.sh
 ```
 
+This also starts the FastAPI CV generation service on `http://localhost:8081` (fake Gemini provider by default).
+
 Start the API:
 
 ```bash
@@ -64,6 +66,7 @@ Health check:
 
 ```bash
 curl http://localhost:8080/actuator/health
+curl http://localhost:8081/health/live
 ```
 
 Flyway runs automatically when the API starts against a fresh database.
