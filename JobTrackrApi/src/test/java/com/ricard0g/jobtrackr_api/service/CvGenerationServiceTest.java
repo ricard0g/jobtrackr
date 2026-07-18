@@ -143,4 +143,15 @@ class CvGenerationServiceTest {
                 .extracting("code")
                 .isEqualTo("INVALID_STATUS_TRANSITION");
     }
+
+    @Test
+    void create_rejectsOversizedIdempotencyKey() {
+        assertThatThrownBy(() -> service.create(
+                        USER_ID,
+                        "x".repeat(129),
+                        new CvGenerationDtos.CreateRequest(3L, 7L, GeneratedCvFormat.PDF, "JD", null, true)))
+                .isInstanceOf(CvGenerationException.class)
+                .extracting("code")
+                .isEqualTo("INVALID_IDEMPOTENCY_KEY");
+    }
 }

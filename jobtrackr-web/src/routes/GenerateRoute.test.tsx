@@ -194,6 +194,7 @@ describe("GenerateRoute", () => {
 						applicationId: 4,
 						status: "FAILED",
 						errorMessage: "Model timeout",
+						correlationId: "corr-failed-4",
 					}),
 					generation({ cvGenerationId: 5, applicationId: 5, status: "CANCELLED" }),
 				],
@@ -210,6 +211,7 @@ describe("GenerateRoute", () => {
 		expect(screen.getByText("Cancelled")).toBeTruthy();
 		expect(screen.queryByText(/%/)).toBeNull();
 		expect(screen.getByText("Model timeout")).toBeTruthy();
+		expect(screen.getByText("Reference: corr-failed-4")).toBeTruthy();
 		expect(screen.getByText("Updating generation status…")).toBeTruthy();
 	});
 

@@ -8,6 +8,9 @@ import re
 from cv_generation.models.errors import ErrorCode, ServiceError
 from cv_generation.models.specification import OutputFormat
 
+_MAX_PDF_PAGES = 2
+_MAX_NON_PDF_CHARS = 12_000
+
 
 def verify_rendered(
     data: bytes,
@@ -44,12 +47,33 @@ def verify_rendered(
             "Rendered document missing email",
         )
 
-    # Soft page budget for PDF: warn via failure only if absurdly large
-    if output_format == OutputFormat.PDF and len(data) > 5 * 1024 * 1024:
+    if output_format == OutputFormat.PDF:
+        page_count = _pdf_page_count(data)
+        if page_count is None:
+            raise ServiceError(
+                ErrorCode.GENERATION_VALIDATION_FAILED,
+                "Rendered PDF could not be verified",
+            )
+        if page_count > _MAX_PDF_PAGES:
+            raise ServiceError(
+                ErrorCode.DOCUMENT_TOO_LONG,
+                f"Rendered PDF exceeds {_MAX_PDF_PAGES} pages",
+            )
+    elif len(text) > _MAX_NON_PDF_CHARS:
         raise ServiceError(
             ErrorCode.DOCUMENT_TOO_LONG,
-            "Rendered PDF exceeds size budget",
+            "Rendered document exceeds length budget",
         )
+
+
+def _pdf_page_count(data: bytes) -> int | None:
+    try:
+        from pypdf import PdfReader
+
+        reader = PdfReader(io.BytesIO(data))
+        return len(reader.pages)
+    except Exception:  # noqa: BLE001
+        return None
 
 
 def _extract_text(data: bytes, output_format: OutputFormat) -> str:

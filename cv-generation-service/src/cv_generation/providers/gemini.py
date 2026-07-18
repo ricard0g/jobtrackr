@@ -115,7 +115,7 @@ class GeminiProvider(DraftingProvider):
             logger.exception("Gemini call failed")
             raise ServiceError(
                 ErrorCode.PROVIDER_UNAVAILABLE,
-                f"Gemini unavailable: {exc}",
+                "Gemini unavailable",
             ) from exc
 
         text = getattr(response, "text", None) or ""
@@ -131,5 +131,5 @@ class GeminiProvider(DraftingProvider):
         except Exception as exc:  # noqa: BLE001
             raise ServiceError(
                 ErrorCode.GENERATION_VALIDATION_FAILED,
-                f"Gemini output failed schema validation: {exc}",
+                "Gemini output failed schema validation",
             ) from exc

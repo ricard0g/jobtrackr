@@ -49,8 +49,8 @@ public class CvGenerationService {
             throw CvGenerationException.missingIdempotencyKey();
         }
         final String normalizedKey = idempotencyKey.trim();
-        if (normalizedKey.length() > 128) {
-            throw CvGenerationException.missingIdempotencyKey();
+        if (normalizedKey.isEmpty() || normalizedKey.length() > 128) {
+            throw CvGenerationException.invalidIdempotencyKey();
         }
 
         final var existing = cvGenerationRepository.findByUser_UserIdAndIdempotencyKey(userId, normalizedKey);

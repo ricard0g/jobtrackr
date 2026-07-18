@@ -9,7 +9,7 @@ from cv_generation.providers.fake import FakeProvider
 
 def build_provider(settings: Settings) -> DraftingProvider:
     if settings.is_fake:
-        return FakeProvider(model_id=settings.cv_generation_model_id or "fake-cv-v1")
+        return FakeProvider(model_id="fake-cv-v1")
 
     from cv_generation.providers.gemini import GeminiProvider
 

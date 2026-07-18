@@ -108,9 +108,24 @@ def node_merge_user_evidence(state: GraphState) -> dict[str, Any]:
     evidence["skills"] = merged_skills
 
     if override.get("experience"):
-        evidence["experience"] = list(override["experience"]) + list(evidence.get("experience") or [])
+        add_exp = [e for e in override["experience"] if isinstance(e, dict)]
+        add_companies = {str(e.get("company") or "").lower() for e in add_exp}
+        base_exp = [
+            e
+            for e in (evidence.get("experience") or [])
+            if isinstance(e, dict) and str(e.get("company") or "").lower() not in add_companies
+        ]
+        evidence["experience"] = add_exp + base_exp
     if override.get("education"):
-        evidence["education"] = list(override["education"]) + list(evidence.get("education") or [])
+        add_edu = [e for e in override["education"] if isinstance(e, dict)]
+        add_institutions = {str(e.get("institution") or "").lower() for e in add_edu}
+        base_edu = [
+            e
+            for e in (evidence.get("education") or [])
+            if isinstance(e, dict)
+            and str(e.get("institution") or "").lower() not in add_institutions
+        ]
+        evidence["education"] = add_edu + base_edu
     if override.get("professional_summary"):
         evidence["professional_summary"] = override["professional_summary"]
     if override.get("certifications"):

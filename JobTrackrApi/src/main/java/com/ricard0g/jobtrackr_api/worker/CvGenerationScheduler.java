@@ -1,5 +1,12 @@
 package com.ricard0g.jobtrackr_api.worker;
 
+import java.util.ArrayList;
+import java.util.List;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
+
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.support.TransactionTemplate;
@@ -24,25 +31,52 @@ public class CvGenerationScheduler {
     @Scheduled(fixedDelayString = "${jobtrackr.cv-generation.worker-poll-ms:2000}")
     public void pollGenerations() {
         final int concurrency = properties.workerConcurrency();
+        final List<Long> claimed = new ArrayList<>(concurrency);
         for (int i = 0; i < concurrency; i++) {
             final Long generationId = transactionTemplate.execute(status -> {
-                final Long claimed = workerService.claimNext();
-                if (claimed != null) {
-                    workerService.markProcessing(claimed);
+                final Long next = workerService.claimNext();
+                if (next != null) {
+                    workerService.markProcessing(next);
                 }
-                return claimed;
+                return next;
             });
             if (generationId == null) {
                 break;
             }
-            try {
-                workerService.processClaimed(generationId);
-            } catch (final RuntimeException exception) {
-                log.error(
-                        "[CvGenerationScheduler] - PROCESS: unexpectedFailure: true, cvGenerationId: {}",
-                        generationId);
-                workerService.retryOrFail(generationId, "INTERNAL_ERROR", "Unexpected worker failure", true);
+            claimed.add(generationId);
+        }
+        if (claimed.isEmpty()) {
+            return;
+        }
+        if (claimed.size() == 1) {
+            processOne(claimed.get(0));
+            return;
+        }
+        final ExecutorService executor = Executors.newFixedThreadPool(claimed.size());
+        try {
+            final List<? extends Future<?>> futures = claimed.stream()
+                    .map(id -> executor.submit(() -> processOne(id)))
+                    .toList();
+            for (final Future<?> future : futures) {
+                try {
+                    future.get(properties.requestTimeout().toMillis() + 60_000L, TimeUnit.MILLISECONDS);
+                } catch (final Exception exception) {
+                    log.error("[CvGenerationScheduler] - PROCESS: batchWaitFailure: true");
+                }
             }
+        } finally {
+            executor.shutdownNow();
+        }
+    }
+
+    private void processOne(final Long generationId) {
+        try {
+            workerService.processClaimed(generationId);
+        } catch (final RuntimeException exception) {
+            log.error(
+                    "[CvGenerationScheduler] - PROCESS: unexpectedFailure: true, cvGenerationId: {}",
+                    generationId);
+            workerService.retryOrFail(generationId, "INTERNAL_ERROR", "Unexpected worker failure", true);
         }
     }
 

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import threading
 from typing import Any
 
 from langgraph.graph import END, StateGraph
@@ -42,18 +43,29 @@ def _route_after_validate(state: GraphState) -> str:
     return "render"
 
 
+def _guard(node_fn):
+    """Wrap a node so cooperative cancellation stops work between stages."""
+
+    def _wrapped(state: GraphState, *args, **kwargs):
+        if state.get("cancel_requested"):
+            raise ServiceError(ErrorCode.GENERATION_TIMEOUT, "Generation exceeded request timeout")
+        return node_fn(state, *args, **kwargs)
+
+    return _wrapped
+
+
 def build_graph(provider: DraftingProvider):
     graph = StateGraph(GraphState)
 
-    graph.add_node("extract", nodes.node_extract)
-    graph.add_node("normalize", nodes.node_normalize_evidence)
-    graph.add_node("merge", nodes.node_merge_user_evidence)
-    graph.add_node("analyze_jd", nodes.node_analyze_jd)
-    graph.add_node("draft", lambda s: nodes.node_draft(s, provider))
-    graph.add_node("validate", nodes.node_validate)
-    graph.add_node("revise", lambda s: nodes.node_revise(s, provider))
-    graph.add_node("render", nodes.node_render)
-    graph.add_node("verify", nodes.node_verify)
+    graph.add_node("extract", _guard(nodes.node_extract))
+    graph.add_node("normalize", _guard(nodes.node_normalize_evidence))
+    graph.add_node("merge", _guard(nodes.node_merge_user_evidence))
+    graph.add_node("analyze_jd", _guard(nodes.node_analyze_jd))
+    graph.add_node("draft", _guard(lambda s: nodes.node_draft(s, provider)))
+    graph.add_node("validate", _guard(nodes.node_validate))
+    graph.add_node("revise", _guard(lambda s: nodes.node_revise(s, provider)))
+    graph.add_node("render", _guard(nodes.node_render))
+    graph.add_node("verify", _guard(nodes.node_verify))
 
     graph.set_entry_point("extract")
     graph.add_edge("extract", "normalize")
@@ -86,6 +98,7 @@ def run_generation(
     workflow_version: str,
     max_extracted_chars: int = 100_000,
     max_revisions: int = 2,
+    cancel_event: threading.Event | None = None,
 ) -> GenerationResult:
     compiled = build_graph(provider)
     initial: GraphState = {
@@ -101,17 +114,32 @@ def run_generation(
         "revision_count": 0,
         "validation_issues": [],
         "needs_revision": False,
+        "cancel_requested": bool(cancel_event and cancel_event.is_set()),
     }
 
     try:
-        final: dict[str, Any] = compiled.invoke(initial)
+        # Poll cancel_event between nodes via a thin wrapper on invoke steps:
+        # LangGraph doesn't expose mid-node hooks, so we re-check via a custom loop
+        # using stream when a cancel event is provided.
+        if cancel_event is None:
+            final: dict[str, Any] = compiled.invoke(initial)
+        else:
+            final = dict(initial)
+            for event in compiled.stream(initial, stream_mode="values"):
+                if cancel_event.is_set():
+                    raise ServiceError(
+                        ErrorCode.GENERATION_TIMEOUT,
+                        "Generation exceeded request timeout",
+                    )
+                final = event
+                final["cancel_requested"] = cancel_event.is_set()
     except ServiceError:
         raise
     except Exception as exc:  # noqa: BLE001
         logger.exception("Workflow failed correlation_id=%s", correlation_id)
         raise ServiceError(
             ErrorCode.INTERNAL_ERROR,
-            f"Generation workflow failed: {exc}",
+            "Generation workflow failed",
         ) from exc
 
     content = final.get("rendered_bytes")

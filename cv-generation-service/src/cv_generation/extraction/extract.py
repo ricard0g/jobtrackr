@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import io
 import re
+import zipfile
 from dataclasses import dataclass
 from enum import StrEnum
 
@@ -33,9 +34,45 @@ _URL_RE = re.compile(r"https?://[^\s)>\]]+|www\.[^\s)>\]]+", re.IGNORECASE)
 # Heuristic: scanned PDFs yield almost no text relative to page count
 _MIN_CHARS_PER_PAGE = 40
 _MIN_ABSOLUTE_CHARS = 30
+_MAX_INPUT_PDF_PAGES = 50
+_MAX_DOCX_ENTRIES = 200
+_MAX_DOCX_UNCOMPRESSED_BYTES = 50 * 1024 * 1024
+_MAX_DOCX_COMPRESSION_RATIO = 100.0
 
 
 def detect_format(filename: str | None, content_type: str | None, data: bytes) -> SourceFormat:
+    magic = _detect_magic(data)
+    declared = _detect_declared(filename, content_type)
+
+    if magic != SourceFormat.UNKNOWN and declared != SourceFormat.UNKNOWN and magic != declared:
+        raise ServiceError(
+            ErrorCode.MALFORMED_BASE_CV,
+            "Declared Base CV format does not match file signature",
+        )
+    if magic != SourceFormat.UNKNOWN:
+        return magic
+    if declared != SourceFormat.UNKNOWN:
+        return declared
+    return SourceFormat.UNKNOWN
+
+
+def _detect_magic(data: bytes) -> SourceFormat:
+    if data[:4] == b"%PDF":
+        return SourceFormat.PDF
+    if data[:2] == b"PK":
+        return SourceFormat.DOCX
+    sample = data[:2000]
+    try:
+        sample.decode("utf-8")
+        # Reject binary-looking payloads that happen to be mostly decodable
+        if b"\x00" in sample:
+            return SourceFormat.UNKNOWN
+        return SourceFormat.MARKDOWN
+    except UnicodeDecodeError:
+        return SourceFormat.UNKNOWN
+
+
+def _detect_declared(filename: str | None, content_type: str | None) -> SourceFormat:
     name = (filename or "").lower()
     ctype = (content_type or "").lower()
 
@@ -45,19 +82,7 @@ def detect_format(filename: str | None, content_type: str | None, data: bytes) -
         return SourceFormat.DOCX
     if name.endswith(".pdf") or ctype == "application/pdf":
         return SourceFormat.PDF
-
-    # Magic bytes
-    if data[:4] == b"%PDF":
-        return SourceFormat.PDF
-    if data[:2] == b"PK":  # zip-based (docx)
-        return SourceFormat.DOCX
-    # Prefer markdown/text if mostly printable
-    sample = data[:2000]
-    try:
-        sample.decode("utf-8")
-        return SourceFormat.MARKDOWN
-    except UnicodeDecodeError:
-        return SourceFormat.UNKNOWN
+    return SourceFormat.UNKNOWN
 
 
 def extract_base_cv(
@@ -92,7 +117,7 @@ def extract_base_cv(
     except Exception as exc:  # noqa: BLE001 — boundary
         raise ServiceError(
             ErrorCode.MALFORMED_BASE_CV,
-            f"Failed to parse Base CV: {exc}",
+            "Failed to parse Base CV",
         ) from exc
 
     text = result.text.strip()
@@ -119,7 +144,43 @@ def _extract_markdown(data: bytes) -> ExtractionResult:
     return ExtractionResult(text=text, source_format=SourceFormat.MARKDOWN)
 
 
+def _assert_safe_docx_zip(data: bytes) -> None:
+    try:
+        with zipfile.ZipFile(io.BytesIO(data)) as archive:
+            infos = archive.infolist()
+            if len(infos) > _MAX_DOCX_ENTRIES:
+                raise ServiceError(
+                    ErrorCode.MALFORMED_BASE_CV,
+                    "DOCX archive has too many entries",
+                )
+            total_uncompressed = 0
+            for info in infos:
+                if info.file_size < 0 or info.compress_size < 0:
+                    raise ServiceError(ErrorCode.MALFORMED_BASE_CV, "DOCX archive entry is invalid")
+                if info.file_size > _MAX_DOCX_UNCOMPRESSED_BYTES:
+                    raise ServiceError(
+                        ErrorCode.MALFORMED_BASE_CV,
+                        "DOCX archive entry exceeds size limit",
+                    )
+                if info.compress_size > 0:
+                    ratio = info.file_size / max(info.compress_size, 1)
+                    if ratio > _MAX_DOCX_COMPRESSION_RATIO and info.file_size > 1024 * 1024:
+                        raise ServiceError(
+                            ErrorCode.MALFORMED_BASE_CV,
+                            "DOCX archive compression ratio is unsafe",
+                        )
+                total_uncompressed += info.file_size
+                if total_uncompressed > _MAX_DOCX_UNCOMPRESSED_BYTES:
+                    raise ServiceError(
+                        ErrorCode.MALFORMED_BASE_CV,
+                        "DOCX archive uncompressed size exceeds limit",
+                    )
+    except zipfile.BadZipFile as exc:
+        raise ServiceError(ErrorCode.MALFORMED_BASE_CV, "DOCX archive is malformed") from exc
+
+
 def _extract_docx(data: bytes) -> ExtractionResult:
+    _assert_safe_docx_zip(data)
     from docx import Document
 
     document = Document(io.BytesIO(data))
@@ -145,19 +206,31 @@ def _extract_pdf(data: bytes) -> ExtractionResult:
 
         with pdfplumber.open(io.BytesIO(data)) as pdf:
             page_count = len(pdf.pages)
+            if page_count > _MAX_INPUT_PDF_PAGES:
+                raise ServiceError(
+                    ErrorCode.DOCUMENT_TOO_LONG,
+                    f"Base CV PDF exceeds {_MAX_INPUT_PDF_PAGES} pages",
+                )
             chunks: list[str] = []
-            for page in pdf.pages:
+            for page in pdf.pages[:_MAX_INPUT_PDF_PAGES]:
                 page_text = page.extract_text() or ""
                 if page_text.strip():
                     chunks.append(page_text)
             text = "\n".join(chunks)
+    except ServiceError:
+        raise
     except Exception:  # noqa: BLE001
         from pypdf import PdfReader
 
         reader = PdfReader(io.BytesIO(data))
         page_count = len(reader.pages)
+        if page_count > _MAX_INPUT_PDF_PAGES:
+            raise ServiceError(
+                ErrorCode.DOCUMENT_TOO_LONG,
+                f"Base CV PDF exceeds {_MAX_INPUT_PDF_PAGES} pages",
+            )
         chunks = []
-        for page in reader.pages:
+        for page in reader.pages[:_MAX_INPUT_PDF_PAGES]:
             page_text = page.extract_text() or ""
             if page_text.strip():
                 chunks.append(page_text)

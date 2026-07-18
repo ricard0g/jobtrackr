@@ -12,6 +12,7 @@ from cv_generation.models.canonical_cv import (
     ExperienceItem,
     ProjectItem,
 )
+from cv_generation.models.errors import ErrorCode, ServiceError
 from cv_generation.providers.base import DraftingProvider
 
 
@@ -56,8 +57,18 @@ class FakeProvider(DraftingProvider):
         jd_analysis: dict[str, Any],
         output_language: str,
     ) -> CanonicalCV:
-        name = str(evidence.get("full_name") or "Unknown Candidate").strip()
+        name = str(evidence.get("full_name") or "").strip()
+        if not name:
+            raise ServiceError(
+                ErrorCode.GENERATION_VALIDATION_FAILED,
+                "Candidate name is required",
+            )
         contact_raw = evidence.get("contact") or {}
+        if not (contact_raw.get("email") or contact_raw.get("phone")):
+            raise ServiceError(
+                ErrorCode.GENERATION_VALIDATION_FAILED,
+                "At least one of email or phone is required",
+            )
         contact = ContactInfo(
             email=contact_raw.get("email"),
             phone=contact_raw.get("phone"),
@@ -77,20 +88,20 @@ class FakeProvider(DraftingProvider):
 
         experience = [
             ExperienceItem(
-                company=str(item.get("company") or "Unknown"),
-                title=str(item.get("title") or "Role"),
+                company=str(item.get("company") or "").strip(),
+                title=str(item.get("title") or "").strip() or "Role",
                 start_date=item.get("start_date"),
                 end_date=item.get("end_date"),
                 location=item.get("location"),
                 bullets=list(item.get("bullets") or []),
             )
             for item in (evidence.get("experience") or [])
-            if isinstance(item, dict)
+            if isinstance(item, dict) and str(item.get("company") or "").strip()
         ]
 
         education = [
             EducationItem(
-                institution=str(item.get("institution") or "Unknown"),
+                institution=str(item.get("institution") or "").strip(),
                 degree=item.get("degree"),
                 field=item.get("field"),
                 start_date=item.get("start_date"),
@@ -98,7 +109,7 @@ class FakeProvider(DraftingProvider):
                 details=list(item.get("details") or []),
             )
             for item in (evidence.get("education") or [])
-            if isinstance(item, dict)
+            if isinstance(item, dict) and str(item.get("institution") or "").strip()
         ]
 
         corpus = str(evidence.get("raw_text") or "").lower()

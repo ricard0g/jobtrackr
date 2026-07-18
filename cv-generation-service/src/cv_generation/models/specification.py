@@ -5,7 +5,7 @@ from __future__ import annotations
 from enum import StrEnum
 from uuid import UUID
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 
 class OutputFormat(StrEnum):
@@ -16,6 +16,8 @@ class OutputFormat(StrEnum):
 
 class GenerationSpecification(BaseModel):
     """Parsed from the multipart `specification` JSON string."""
+
+    model_config = ConfigDict(extra="forbid")
 
     output_format: OutputFormat
     job_description: str = Field(min_length=1)

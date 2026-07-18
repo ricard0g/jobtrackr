@@ -9,7 +9,9 @@ import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.util.HexFormat;
+import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import java.util.UUID;
 
 import org.springframework.stereotype.Component;
@@ -26,6 +28,38 @@ import lombok.extern.slf4j.Slf4j;
 @RequiredArgsConstructor
 @Slf4j
 public class CvGenerationServiceClient {
+
+    private static final Set<String> KNOWN_ERROR_CODES = Set.of(
+            "INVALID_REQUEST",
+            "UNAUTHORIZED",
+            "BASE_CV_TOO_LARGE",
+            "MALFORMED_BASE_CV",
+            "BASE_CV_NOT_EXTRACTABLE",
+            "INVALID_GENERATION_FORMAT",
+            "DOCUMENT_TOO_LONG",
+            "OUTPUT_LANGUAGE_REQUIRED",
+            "GENERATION_VALIDATION_FAILED",
+            "GENERATION_TIMEOUT",
+            "PROVIDER_RATE_LIMITED",
+            "PROVIDER_UNAVAILABLE",
+            "INTERNAL_ERROR",
+            "STORAGE_UNAVAILABLE");
+
+    private static final Map<String, String> SAFE_ERROR_MESSAGES = Map.ofEntries(
+            Map.entry("INVALID_REQUEST", "CV generation request was invalid"),
+            Map.entry("UNAUTHORIZED", "CV generation service rejected the request"),
+            Map.entry("BASE_CV_TOO_LARGE", "Base CV exceeds the allowed size"),
+            Map.entry("MALFORMED_BASE_CV", "Base CV could not be parsed"),
+            Map.entry("BASE_CV_NOT_EXTRACTABLE", "Base CV could not be read"),
+            Map.entry("INVALID_GENERATION_FORMAT", "Requested CV format is invalid"),
+            Map.entry("DOCUMENT_TOO_LONG", "Generated document exceeded length limits"),
+            Map.entry("OUTPUT_LANGUAGE_REQUIRED", "Output language could not be determined safely"),
+            Map.entry("GENERATION_VALIDATION_FAILED", "Generated CV failed validation"),
+            Map.entry("GENERATION_TIMEOUT", "CV generation timed out"),
+            Map.entry("PROVIDER_RATE_LIMITED", "AI provider rate limit reached"),
+            Map.entry("PROVIDER_UNAVAILABLE", "AI provider is temporarily unavailable"),
+            Map.entry("STORAGE_UNAVAILABLE", "Document storage is temporarily unavailable"),
+            Map.entry("INTERNAL_ERROR", "CV generation failed"));
 
     private final HttpClient cvGenerationHttpClient;
     private final CvGenerationProperties properties;
@@ -72,6 +106,13 @@ public class CvGenerationServiceClient {
                     response.body() == null ? 0 : response.body().length);
 
             if (response.statusCode() >= 200 && response.statusCode() < 300) {
+                if (response.body() == null || response.body().length == 0) {
+                    return GenerationResult.failure(
+                            response.statusCode(),
+                            "GENERATION_VALIDATION_FAILED",
+                            SAFE_ERROR_MESSAGES.get("GENERATION_VALIDATION_FAILED"),
+                            false);
+                }
                 final String modelId = Optional.ofNullable(response.headers().firstValue("X-Model-Id").orElse(null))
                         .orElse("unknown");
                 final String workflowVersion = Optional.ofNullable(
@@ -88,19 +129,25 @@ public class CvGenerationServiceClient {
                         sha256(response.body()));
             }
 
+            final String mappedCode = mapErrorCode(parseErrorCode(response.body()));
             return GenerationResult.failure(
                     response.statusCode(),
-                    parseErrorCode(response.body()),
-                    parseErrorMessage(response.body()),
-                    isRetryable(response.statusCode(), parseErrorCode(response.body())));
+                    mappedCode,
+                    SAFE_ERROR_MESSAGES.getOrDefault(mappedCode, SAFE_ERROR_MESSAGES.get("INTERNAL_ERROR")),
+                    isRetryable(response.statusCode(), mappedCode));
         } catch (final IOException exception) {
             log.error(
                     "[CvGenerationServiceClient] - GENERATE: networkFailure: true, correlationId: {}",
                     correlationId);
-            return GenerationResult.failure(0, "PROVIDER_UNAVAILABLE", "CV generation service is unreachable", true);
+            return GenerationResult.failure(
+                    0,
+                    "PROVIDER_UNAVAILABLE",
+                    SAFE_ERROR_MESSAGES.get("PROVIDER_UNAVAILABLE"),
+                    true);
         } catch (final InterruptedException exception) {
             Thread.currentThread().interrupt();
-            return GenerationResult.failure(0, "GENERATION_TIMEOUT", "CV generation was interrupted", true);
+            return GenerationResult.failure(
+                    0, "GENERATION_TIMEOUT", SAFE_ERROR_MESSAGES.get("GENERATION_TIMEOUT"), true);
         }
     }
 
@@ -157,12 +204,11 @@ public class CvGenerationServiceClient {
         return "INTERNAL_ERROR";
     }
 
-    private String parseErrorMessage(final byte[] body) {
-        final JsonNode node = readJson(body);
-        if (node != null && node.hasNonNull("message")) {
-            return node.get("message").asText();
+    private String mapErrorCode(final String code) {
+        if (code != null && KNOWN_ERROR_CODES.contains(code)) {
+            return code;
         }
-        return "CV generation failed";
+        return "INTERNAL_ERROR";
     }
 
     private JsonNode readJson(final byte[] body) {

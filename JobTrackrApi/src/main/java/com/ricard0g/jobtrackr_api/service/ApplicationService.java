@@ -229,24 +229,20 @@ public class ApplicationService {
 
     @Transactional
     public void deleteApplication(final UUID userId, final Long applicationId) {
-        final Application application = requireApplicationForUser(userId, applicationId);
+        final Application application = applicationRepository
+                .findForUserWithLock(applicationId, userId)
+                .orElseThrow(() -> new ApplicationNotFoundException(userId, applicationId));
+        // Collect R2 keys under the application lock before cascade delete.
         applicationCvService.scheduleCleanupForApplication(applicationId);
-        final List<CvGeneration> active = cvGenerationRepository.findAllByApplication_ApplicationIdAndStatusIn(
-                applicationId, List.of(CvGenerationStatus.PENDING, CvGenerationStatus.PROCESSING));
-        for (final CvGeneration generation : active) {
-            if (generation.getStatus() == CvGenerationStatus.PENDING) {
-                generation.setStatus(CvGenerationStatus.CANCELLED);
-                generation.setCompletedAt(java.time.OffsetDateTime.now());
-                generation.setErrorCode("CANCELLED");
-                generation.setErrorMessage("Application deleted");
-            } else {
-                generation.setStatus(CvGenerationStatus.CANCELLED);
-                generation.setCompletedAt(java.time.OffsetDateTime.now());
-                generation.setErrorCode("CANCELLED");
-                generation.setErrorMessage("Application deleted during processing");
-                generation.setLeaseOwner(null);
-                generation.setLeaseExpiresAt(null);
-            }
+        // Only PENDING may transition to CANCELLED. PROCESSING rows are cascade-deleted;
+        // the worker re-checks lease/status and compensates any orphan upload.
+        final List<CvGeneration> pending = cvGenerationRepository.findAllByApplication_ApplicationIdAndStatusIn(
+                applicationId, List.of(CvGenerationStatus.PENDING));
+        for (final CvGeneration generation : pending) {
+            generation.setStatus(CvGenerationStatus.CANCELLED);
+            generation.setCompletedAt(java.time.OffsetDateTime.now());
+            generation.setErrorCode("CANCELLED");
+            generation.setErrorMessage("Application deleted");
         }
         applicationRepository.delete(application);
         log.info(

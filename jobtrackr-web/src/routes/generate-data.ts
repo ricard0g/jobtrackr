@@ -112,15 +112,30 @@ export async function generateLoader(): Promise<GenerateLoaderData> {
 	const applicationIds = [
 		...new Set(
 			generations
-				.filter((generation) => generation.status === "COMPLETED" || generation.applicationCvId)
+				.filter((generation) => {
+					const knownApplication = applications.some(
+						(application) => application.applicationId === generation.applicationId,
+					);
+					return (
+						knownApplication &&
+						(generation.status === "COMPLETED" || generation.applicationCvId != null)
+					);
+				})
 				.map((generation) => generation.applicationId),
 		),
 	];
 
 	const applicationCvsEntries = await Promise.all(
 		applicationIds.map(async (applicationId) => {
-			const applicationCvs = await api.getApplicationCvs(applicationId);
-			return [applicationId, applicationCvs] as const;
+			try {
+				const applicationCvs = await api.getApplicationCvs(applicationId);
+				return [applicationId, applicationCvs] as const;
+			} catch (error) {
+				if (error instanceof ApiError && error.status === 404) {
+					return [applicationId, []] as const;
+				}
+				throw error;
+			}
 		}),
 	);
 

@@ -43,12 +43,13 @@ class Settings(BaseSettings):
         alias="CV_GENERATION_WORKFLOW_VERSION",
     )
 
-    # Soft request timeout (seconds) — soft handling around the graph
+    # Hard request deadline (seconds). Cancel event stops work between graph stages.
     cv_generation_request_timeout_seconds: float = Field(
-        default=120.0,
+        default=300.0,
         alias="CV_GENERATION_REQUEST_TIMEOUT_SECONDS",
         ge=5.0,
         le=600.0,
+        description="Five-minute default hard deadline per generation attempt.",
     )
 
     # Documented limits

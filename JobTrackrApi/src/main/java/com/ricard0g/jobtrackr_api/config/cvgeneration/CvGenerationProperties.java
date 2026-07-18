@@ -13,6 +13,7 @@ public record CvGenerationProperties(
         long workerPollMs,
         Duration leaseDuration,
         int maxAttempts,
+        int maxCleanupAttempts,
         int maxApplicationCvs,
         int maxJobDescriptionChars,
         int maxAdditionalInfoChars,
@@ -23,8 +24,8 @@ public record CvGenerationProperties(
         if (serviceBaseUrl == null || serviceBaseUrl.isBlank()) {
             serviceBaseUrl = "http://localhost:8081";
         }
-        if (serviceToken == null || serviceToken.isBlank()) {
-            serviceToken = "dev-service-token";
+        if (serviceToken == null) {
+            serviceToken = "";
         }
         if (requestTimeout == null) {
             requestTimeout = Duration.ofMinutes(5);
@@ -35,11 +36,15 @@ public record CvGenerationProperties(
         if (workerPollMs <= 0) {
             workerPollMs = 2000L;
         }
+        // Must exceed requestTimeout plus download/finalize slack so leases are not reclaimed mid-call.
         if (leaseDuration == null) {
-            leaseDuration = Duration.ofMinutes(6);
+            leaseDuration = Duration.ofMinutes(15);
         }
         if (maxAttempts <= 0) {
             maxAttempts = 3;
+        }
+        if (maxCleanupAttempts <= 0) {
+            maxCleanupAttempts = 10;
         }
         if (maxApplicationCvs <= 0) {
             maxApplicationCvs = 20;

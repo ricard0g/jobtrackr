@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+import threading
 from typing import Annotated
 from urllib.parse import quote
 
@@ -55,7 +56,7 @@ async def generate(
     except json.JSONDecodeError as exc:
         raise ServiceError(
             ErrorCode.INVALID_REQUEST,
-            f"specification must be valid JSON: {exc}",
+            "specification must be valid JSON",
         ) from exc
 
     try:
@@ -65,11 +66,16 @@ async def generate(
         if "output_format" in message.lower():
             raise ServiceError(
                 ErrorCode.INVALID_GENERATION_FORMAT,
-                f"Invalid output_format: {exc}",
+                "Invalid output_format",
+            ) from exc
+        if "extra" in message.lower() and "forbid" in message.lower():
+            raise ServiceError(
+                ErrorCode.INVALID_REQUEST,
+                "specification contains unexpected fields",
             ) from exc
         raise ServiceError(
             ErrorCode.INVALID_REQUEST,
-            f"Invalid specification: {exc}",
+            "Invalid specification",
         ) from exc
 
     if len(spec.job_description) > settings.max_job_description_chars:
@@ -86,7 +92,14 @@ async def generate(
             f"additional_information exceeds {settings.max_additional_info_chars} characters",
         )
 
-    raw = await file.read()
+    # Bound memory before reading the full body when Content-Length is present.
+    if file.size is not None and file.size > settings.max_base_cv_bytes:
+        raise ServiceError(
+            ErrorCode.BASE_CV_TOO_LARGE,
+            f"Base CV exceeds {settings.max_base_cv_bytes} bytes",
+        )
+
+    raw = await file.read(settings.max_base_cv_bytes + 1)
     if len(raw) > settings.max_base_cv_bytes:
         raise ServiceError(
             ErrorCode.BASE_CV_TOO_LARGE,
@@ -96,6 +109,7 @@ async def generate(
         raise ServiceError(ErrorCode.MALFORMED_BASE_CV, "Base CV file is empty")
 
     provider = build_provider(settings)
+    cancel_event = threading.Event()
 
     async def _run():
         return await asyncio.to_thread(
@@ -111,6 +125,7 @@ async def generate(
             workflow_version=settings.cv_generation_workflow_version,
             max_extracted_chars=settings.max_extracted_text_chars,
             max_revisions=settings.max_ai_revisions,
+            cancel_event=cancel_event,
         )
 
     try:
@@ -119,6 +134,11 @@ async def generate(
             timeout=settings.cv_generation_request_timeout_seconds,
         )
     except TimeoutError as exc:
+        cancel_event.set()
+        logger.warning(
+            "Generation timed out correlation_id=%s",
+            spec.correlation_id,
+        )
         raise ServiceError(
             ErrorCode.GENERATION_TIMEOUT,
             "Generation exceeded request timeout",

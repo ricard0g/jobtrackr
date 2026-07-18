@@ -19,6 +19,7 @@ class GraphState(TypedDict, total=False):
     correlation_id: str
     max_extracted_chars: int
     max_revisions: int
+    cancel_requested: bool
 
     # Intermediate
     extracted_text: str

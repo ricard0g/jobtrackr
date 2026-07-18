@@ -93,6 +93,13 @@ public class CvGenerationException extends RuntimeException {
                 "Idempotency-Key header is required");
     }
 
+    public static CvGenerationException invalidIdempotencyKey() {
+        return new CvGenerationException(
+                "INVALID_IDEMPOTENCY_KEY",
+                HttpStatus.BAD_REQUEST,
+                "Idempotency-Key must be between 1 and 128 characters");
+    }
+
     public static CvGenerationException applicationCvNotFound() {
         return new CvGenerationException(
                 "APPLICATION_CV_NOT_FOUND",

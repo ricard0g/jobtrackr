@@ -1167,6 +1167,9 @@ export const handlers = [
 		state.applicationCvs = state.applicationCvs.filter(
 			(applicationCv) => applicationCv.applicationId !== application.applicationId,
 		);
+		state.cvGenerations = state.cvGenerations.filter(
+			(generation) => generation.applicationId !== application.applicationId,
+		);
 		saveState(state);
 		return new HttpResponse(null, { status: 204 });
 	}),

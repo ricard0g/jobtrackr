@@ -475,8 +475,15 @@ function ApplicationGenerateRow({
 								<span className="font-semibold">Latest status: </span>
 								{cvGenerationStatusLabels[latest.status]}
 							</p>
-							{latest.status === "FAILED" && latest.errorMessage ? (
-								<p className="mt-1 text-sm text-red-700">{latest.errorMessage}</p>
+							{latest.status === "FAILED" ? (
+								<div className="mt-1 space-y-1 text-sm text-red-700">
+									{latest.errorMessage ? <p>{latest.errorMessage}</p> : null}
+									{latest.correlationId ? (
+										<p className="font-mono text-xs text-red-600">
+											Reference: {latest.correlationId}
+										</p>
+									) : null}
+								</div>
 							) : null}
 							{latest.status === "PENDING" ? (
 								<cancelFetcher.Form method="post" action="/generate" className="mt-2">

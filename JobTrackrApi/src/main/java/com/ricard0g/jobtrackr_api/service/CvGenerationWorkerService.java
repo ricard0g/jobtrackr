@@ -73,6 +73,7 @@ public class CvGenerationWorkerService {
     }
 
     public void processClaimed(final Long generationId) {
+        renewLease(generationId);
         final WorkItem workItem = transactionTemplate.execute(status -> loadWorkItem(generationId));
         if (workItem == null) {
             return;
@@ -89,6 +90,8 @@ public class CvGenerationWorkerService {
             retryOrFail(generationId, "STORAGE_UNAVAILABLE", "Unable to download Base CV", true);
             return;
         }
+
+        renewLease(generationId);
 
         final GenerationResult result = client.generate(
                 baseCvBytes,
@@ -107,12 +110,27 @@ public class CvGenerationWorkerService {
             }
             return;
         }
-        retryOrFail(generationId, result.errorCode(), safeMessage(result.errorMessage()), result.retryable());
+        retryOrFail(generationId, result.errorCode(), result.errorMessage(), result.retryable());
+    }
+
+    private void renewLease(final Long generationId) {
+        transactionTemplate.executeWithoutResult(status -> {
+            final CvGeneration generation = cvGenerationRepository.findById(generationId).orElse(null);
+            if (generation == null
+                    || generation.getStatus() != CvGenerationStatus.PROCESSING
+                    || !workerId.equals(generation.getLeaseOwner())) {
+                return;
+            }
+            generation.setLeaseExpiresAt(OffsetDateTime.now().plus(properties.leaseDuration()));
+            cvGenerationRepository.save(generation);
+        });
     }
 
     private WorkItem loadWorkItem(final Long generationId) {
         final CvGeneration generation = cvGenerationRepository.findById(generationId).orElse(null);
-        if (generation == null || generation.getStatus() != CvGenerationStatus.PROCESSING) {
+        if (generation == null
+                || generation.getStatus() != CvGenerationStatus.PROCESSING
+                || !workerId.equals(generation.getLeaseOwner())) {
             return null;
         }
         final BaseCv baseCv = generation.getBaseCv();
@@ -137,130 +155,186 @@ public class CvGenerationWorkerService {
     }
 
     public void finalizeSuccess(final Long generationId, final GenerationResult result) {
-        final String[] uploadedObjectKey = {null};
+        final FinalizePlan plan = transactionTemplate.execute(status -> prepareFinalize(generationId, result));
+        if (plan == null) {
+            return;
+        }
+
         try {
-            transactionTemplate.executeWithoutResult(status -> {
-                final CvGeneration generation = cvGenerationRepository.findById(generationId).orElse(null);
-                if (generation == null || generation.getStatus() != CvGenerationStatus.PROCESSING) {
-                    return;
-                }
+            objectStorage.upload(plan.objectKey(), result.bytes(), result.contentType());
+        } catch (final RuntimeException exception) {
+            throw new RetrySignal("STORAGE_UNAVAILABLE", "Unable to store generated CV", true);
+        }
 
-                final Application application = generation.getApplication();
-                userRepository.findByIdForUpdate(application.getUser().getUserId()).orElseThrow();
-                entityManager
-                        .createNativeQuery(
-                                "SELECT application_id FROM applications WHERE application_id = :id FOR UPDATE")
-                        .setParameter("id", application.getApplicationId())
-                        .getSingleResult();
-
-                if (applicationCvRepository.countByApplication_ApplicationId(application.getApplicationId())
-                        >= properties.maxApplicationCvs()) {
-                    markFailed(generation, "GENERATION_LIMIT_REACHED", "Application CV limit reached");
-                    return;
-                }
-
-                final int nextVersion = applicationCvRepository.findMaxVersion(application.getApplicationId()) + 1;
-                final String objectKey = "users/"
-                        + application.getUser().getUserId()
-                        + "/applications/"
-                        + application.getApplicationId()
-                        + "/cvs/"
-                        + UUID.randomUUID()
-                        + "."
-                        + generation.getRequestedFormat().extension();
-                final String filename = "application-"
-                        + application.getApplicationId()
-                        + "-cv-v"
-                        + nextVersion
-                        + "."
-                        + generation.getRequestedFormat().extension();
-
-                try {
-                    objectStorage.upload(objectKey, result.bytes(), result.contentType());
-                    uploadedObjectKey[0] = objectKey;
-                } catch (final RuntimeException exception) {
-                    throw new RetrySignal("STORAGE_UNAVAILABLE", "Unable to store generated CV", true);
-                }
-
-                try {
-                    final ApplicationCv applicationCv = ApplicationCv.create(
-                            application,
-                            nextVersion,
-                            objectKey,
-                            filename,
-                            generation.getRequestedFormat(),
-                            result.contentType(),
-                            result.byteSize(),
-                            result.sha256(),
-                            generation);
-                    final ApplicationCv savedCv = applicationCvRepository.saveAndFlush(applicationCv);
-                    generation.setApplicationCv(savedCv);
-                    generation.setStatus(CvGenerationStatus.COMPLETED);
-                    generation.setModelId(result.modelId());
-                    generation.setWorkflowVersion(result.workflowVersion());
-                    generation.setErrorCode(null);
-                    generation.setErrorMessage(null);
-                    generation.setLeaseOwner(null);
-                    generation.setLeaseExpiresAt(null);
-                    generation.setCompletedAt(OffsetDateTime.now());
-                    cvGenerationRepository.save(generation);
-                    log.info(
-                            "[CvGenerationWorker] - COMPLETED: cvGenerationId: {}, applicationCvId: {}, version: {}, correlationId: {}",
-                            generationId,
-                            savedCv.getApplicationCvId(),
-                            nextVersion,
-                            generation.getCorrelationId());
-                } catch (final RuntimeException exception) {
-                    status.setRollbackOnly();
-                    throw new RetrySignal("STORAGE_UNAVAILABLE", "Unable to finalize generated CV", true);
-                }
-            });
-        } catch (final RetrySignal signal) {
-            if (uploadedObjectKey[0] != null) {
-                applicationCvService.scheduleCleanup(uploadedObjectKey[0]);
+        try {
+            final boolean persisted = Boolean.TRUE.equals(
+                    transactionTemplate.execute(status -> persistFinalize(generationId, plan, result)));
+            if (!persisted) {
+                applicationCvService.scheduleCleanup(plan.objectKey());
             }
+        } catch (final RetrySignal signal) {
+            applicationCvService.scheduleCleanup(plan.objectKey());
             throw signal;
+        } catch (final RuntimeException exception) {
+            applicationCvService.scheduleCleanup(plan.objectKey());
+            throw new RetrySignal("STORAGE_UNAVAILABLE", "Unable to finalize generated CV", true);
+        }
+    }
+
+    private FinalizePlan prepareFinalize(final Long generationId, final GenerationResult result) {
+        final CvGeneration generation = cvGenerationRepository.findById(generationId).orElse(null);
+        if (generation == null
+                || generation.getStatus() != CvGenerationStatus.PROCESSING
+                || !workerId.equals(generation.getLeaseOwner())) {
+            return null;
+        }
+
+        final Application application = generation.getApplication();
+        userRepository.findByIdForUpdate(application.getUser().getUserId()).orElseThrow();
+        entityManager
+                .createNativeQuery("SELECT application_id FROM applications WHERE application_id = :id FOR UPDATE")
+                .setParameter("id", application.getApplicationId())
+                .getSingleResult();
+
+        entityManager.refresh(generation);
+        if (generation.getStatus() != CvGenerationStatus.PROCESSING
+                || !workerId.equals(generation.getLeaseOwner())) {
+            return null;
+        }
+
+        if (applicationCvRepository.countByApplication_ApplicationId(application.getApplicationId())
+                >= properties.maxApplicationCvs()) {
+            markFailed(generation, "GENERATION_LIMIT_REACHED", "Application CV limit reached");
+            return null;
+        }
+
+        final int nextVersion = applicationCvRepository.findMaxVersion(application.getApplicationId()) + 1;
+        final String objectKey = "users/"
+                + application.getUser().getUserId()
+                + "/applications/"
+                + application.getApplicationId()
+                + "/cvs/"
+                + UUID.randomUUID()
+                + "."
+                + generation.getRequestedFormat().extension();
+        final String filename = "application-"
+                + application.getApplicationId()
+                + "-cv-v"
+                + nextVersion
+                + "."
+                + generation.getRequestedFormat().extension();
+
+        generation.setLeaseExpiresAt(OffsetDateTime.now().plus(properties.leaseDuration()));
+        cvGenerationRepository.save(generation);
+
+        return new FinalizePlan(
+                application.getApplicationId(),
+                application.getUser().getUserId(),
+                nextVersion,
+                objectKey,
+                filename,
+                generation.getRequestedFormat(),
+                generation.getCorrelationId());
+    }
+
+    private boolean persistFinalize(
+            final Long generationId, final FinalizePlan plan, final GenerationResult result) {
+        final CvGeneration generation = cvGenerationRepository.findById(generationId).orElse(null);
+        if (generation == null) {
+            return false;
+        }
+
+        final Application application = generation.getApplication();
+        userRepository.findByIdForUpdate(plan.userId()).orElseThrow();
+        entityManager
+                .createNativeQuery("SELECT application_id FROM applications WHERE application_id = :id FOR UPDATE")
+                .setParameter("id", plan.applicationId())
+                .getSingleResult();
+
+        entityManager.refresh(generation);
+        if (generation.getStatus() != CvGenerationStatus.PROCESSING
+                || !workerId.equals(generation.getLeaseOwner())) {
+            return false;
+        }
+
+        if (applicationCvRepository.countByApplication_ApplicationId(plan.applicationId())
+                >= properties.maxApplicationCvs()) {
+            markFailed(generation, "GENERATION_LIMIT_REACHED", "Application CV limit reached");
+            return false;
+        }
+
+        try {
+            final ApplicationCv applicationCv = ApplicationCv.create(
+                    application,
+                    plan.nextVersion(),
+                    plan.objectKey(),
+                    plan.filename(),
+                    plan.format(),
+                    result.contentType(),
+                    result.byteSize(),
+                    result.sha256(),
+                    generation);
+            final ApplicationCv savedCv = applicationCvRepository.saveAndFlush(applicationCv);
+            generation.setApplicationCv(savedCv);
+            generation.setStatus(CvGenerationStatus.COMPLETED);
+            generation.setModelId(result.modelId());
+            generation.setWorkflowVersion(result.workflowVersion());
+            generation.setErrorCode(null);
+            generation.setErrorMessage(null);
+            generation.setLeaseOwner(null);
+            generation.setLeaseExpiresAt(null);
+            generation.setCompletedAt(OffsetDateTime.now());
+            cvGenerationRepository.save(generation);
+            log.info(
+                    "[CvGenerationWorker] - COMPLETED: cvGenerationId: {}, applicationCvId: {}, version: {}, correlationId: {}",
+                    generationId,
+                    savedCv.getApplicationCvId(),
+                    plan.nextVersion(),
+                    plan.correlationId());
+            return true;
+        } catch (final RuntimeException exception) {
+            throw new RetrySignal("STORAGE_UNAVAILABLE", "Unable to finalize generated CV", true);
         }
     }
 
     public void retryOrFail(
             final Long generationId, final String errorCode, final String errorMessage, final boolean retryable) {
-        try {
-            transactionTemplate.executeWithoutResult(status -> {
-                final CvGeneration generation = cvGenerationRepository.findById(generationId).orElse(null);
-                if (generation == null || generation.getStatus() != CvGenerationStatus.PROCESSING) {
-                    return;
-                }
-                final boolean canRetry = retryable && generation.getAttemptCount() < generation.getMaxAttempts();
-                if (canRetry) {
-                    final long backoffSeconds =
-                            (long) Math.pow(2, Math.max(0, generation.getAttemptCount() - 1)) * 5L;
-                    generation.setStatus(CvGenerationStatus.PENDING);
-                    generation.setNextAttemptAt(OffsetDateTime.now().plusSeconds(backoffSeconds));
-                    generation.setLeaseOwner(null);
-                    generation.setLeaseExpiresAt(null);
-                    generation.setErrorCode(errorCode);
-                    generation.setErrorMessage(truncate(errorMessage));
-                    cvGenerationRepository.save(generation);
-                    log.warn(
-                            "[CvGenerationWorker] - RETRY: cvGenerationId: {}, attempt: {}, errorCode: {}, correlationId: {}",
-                            generationId,
-                            generation.getAttemptCount(),
-                            errorCode,
-                            generation.getCorrelationId());
-                    return;
-                }
-                markFailed(generation, errorCode, errorMessage);
-            });
-        } catch (final RetrySignal signal) {
-            retryOrFail(generationId, signal.errorCode(), signal.errorMessage(), signal.retryable());
-        }
+        transactionTemplate.executeWithoutResult(status -> {
+            final CvGeneration generation = cvGenerationRepository.findById(generationId).orElse(null);
+            if (generation == null
+                    || generation.getStatus() != CvGenerationStatus.PROCESSING
+                    || !workerId.equals(generation.getLeaseOwner())) {
+                return;
+            }
+            final boolean canRetry = retryable && generation.getAttemptCount() < generation.getMaxAttempts();
+            if (canRetry) {
+                final long backoffSeconds =
+                        (long) Math.pow(2, Math.max(0, generation.getAttemptCount() - 1)) * 5L;
+                generation.setStatus(CvGenerationStatus.PENDING);
+                generation.setNextAttemptAt(OffsetDateTime.now().plusSeconds(backoffSeconds));
+                generation.setLeaseOwner(null);
+                generation.setLeaseExpiresAt(null);
+                generation.setErrorCode(errorCode);
+                generation.setErrorMessage(truncate(errorMessage));
+                cvGenerationRepository.save(generation);
+                log.warn(
+                        "[CvGenerationWorker] - RETRY: cvGenerationId: {}, attempt: {}, errorCode: {}, correlationId: {}",
+                        generationId,
+                        generation.getAttemptCount(),
+                        errorCode,
+                        generation.getCorrelationId());
+                return;
+            }
+            markFailed(generation, errorCode, errorMessage);
+        });
     }
 
     public void failTerminal(final Long generationId, final String errorCode, final String errorMessage) {
         transactionTemplate.executeWithoutResult(status -> {
             final CvGeneration generation = cvGenerationRepository.findById(generationId).orElse(null);
-            if (generation == null || generation.getStatus().isTerminal()) {
+            if (generation == null
+                    || generation.getStatus().isTerminal()
+                    || (generation.getLeaseOwner() != null && !workerId.equals(generation.getLeaseOwner()))) {
                 return;
             }
             markFailed(generation, errorCode, errorMessage);
@@ -293,13 +367,6 @@ public class CvGenerationWorkerService {
                 generation.getCorrelationId());
     }
 
-    private static String safeMessage(final String message) {
-        if (message == null || message.isBlank()) {
-            return "CV generation failed";
-        }
-        return truncate(message);
-    }
-
     private static String truncate(final String message) {
         if (message == null) {
             return null;
@@ -314,6 +381,15 @@ public class CvGenerationWorkerService {
             GeneratedCvFormat format,
             String jobDescription,
             String additionalInfo,
+            UUID correlationId) {}
+
+    private record FinalizePlan(
+            Long applicationId,
+            UUID userId,
+            int nextVersion,
+            String objectKey,
+            String filename,
+            GeneratedCvFormat format,
             UUID correlationId) {}
 
     private static final class RetrySignal extends RuntimeException {

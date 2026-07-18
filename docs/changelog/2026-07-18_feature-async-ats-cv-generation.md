@@ -1,7 +1,7 @@
 ## `2026-07-18` — Asynchronous ATS-ready CV generation
 
 **Type:** `feature`
-**Branch:** `cursor/async-ats-cv-generation-4f9d`
+**Branch:** `cursor/fix-cv-generation-review-182c`
 **Status:** `🔄 In Progress`
 
 ***
@@ -19,6 +19,7 @@ Spring now owns an async `CvGeneration` workflow with PostgreSQL-backed claiming
 - Added Flyway V8 for `cv_generations`, remodeled `application_cvs`, AI consent, and R2 cleanup outbox
 - Added Spring APIs, durable worker, FastAPI client, and generalized R2 `ObjectStorage`
 - Shipped FastAPI CV service in Compose and a full Generate experience with MSW + tests
+- Review hardening: application-delete locking (PENDING-only cancel), upload-outside-lock finalize with compensate, lease renewal/owner checks, parallel worker concurrency, stable provider error mapping, cleanup attempt caps (V9 unique pending key), DOCX zip limits, PDF page max 2, cooperative 5m timeout, spec `extra=forbid`, stronger evidence grounding, Generate loader/MSW cascade fixes, correlation ID on failures
 
 ### Impact
 
