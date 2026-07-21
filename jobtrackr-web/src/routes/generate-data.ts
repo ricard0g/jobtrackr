@@ -19,15 +19,11 @@ export type GenerateLoaderData = {
 	baseCvs: BaseCv[];
 	generations: CvGeneration[];
 	applicationCvsByApplicationId: Record<number, ApplicationCv[]>;
+	jobDescriptionsByApplicationId: Record<number, string>;
 	consent: AiConsent;
 };
 
-export type GenerateActionIntent =
-	| "create"
-	| "cancel"
-	| "delete-cv"
-	| "download-cv"
-	| "job-description";
+export type GenerateActionIntent = "create" | "cancel" | "delete-cv" | "download-cv";
 
 export type GenerateActionData = {
 	ok: boolean;
@@ -37,8 +33,6 @@ export type GenerateActionData = {
 		Record<"baseCvId" | "format" | "jobDescription" | "additionalInformation" | "consentAccepted", string>
 	>;
 	uri?: string;
-	jobDescriptionText?: string;
-	applicationId?: number;
 };
 
 const generatedFormats: GeneratedCvFormat[] = ["PDF", "DOCX", "MARKDOWN"];
@@ -125,25 +119,41 @@ export async function generateLoader(): Promise<GenerateLoaderData> {
 		),
 	];
 
-	const applicationCvsEntries = await Promise.all(
-		applicationIds.map(async (applicationId) => {
-			try {
-				const applicationCvs = await api.getApplicationCvs(applicationId);
-				return [applicationId, applicationCvs] as const;
-			} catch (error) {
-				if (error instanceof ApiError && error.status === 404) {
-					return [applicationId, []] as const;
+	const [applicationCvsEntries, jobDescriptionEntries] = await Promise.all([
+		Promise.all(
+			applicationIds.map(async (applicationId) => {
+				try {
+					const applicationCvs = await api.getApplicationCvs(applicationId);
+					return [applicationId, applicationCvs] as const;
+				} catch (error) {
+					if (error instanceof ApiError && error.status === 404) {
+						return [applicationId, []] as const;
+					}
+					throw error;
 				}
-				throw error;
-			}
-		}),
-	);
+			}),
+		),
+		Promise.all(
+			applications.map(async (application) => {
+				try {
+					const response = await api.getJobDescription(application.applicationId);
+					return [application.applicationId, response.jobDescriptionText ?? ""] as const;
+				} catch (error) {
+					if (error instanceof ApiError && error.status === 404) {
+						return [application.applicationId, ""] as const;
+					}
+					throw error;
+				}
+			}),
+		),
+	]);
 
 	return {
 		applications,
 		baseCvs,
 		generations,
 		applicationCvsByApplicationId: Object.fromEntries(applicationCvsEntries),
+		jobDescriptionsByApplicationId: Object.fromEntries(jobDescriptionEntries),
 		consent,
 	};
 }
@@ -154,20 +164,6 @@ export async function generateAction({ request }: ActionFunctionArgs): Promise<G
 	const intent = String(formData.get("intent") ?? "") as GenerateActionIntent | "";
 
 	try {
-		if (intent === "job-description") {
-			const applicationId = Number(formData.get("applicationId"));
-			if (!Number.isInteger(applicationId) || applicationId <= 0) {
-				return { ok: false, intent, error: "Invalid application." };
-			}
-			const response = await api.getJobDescription(applicationId);
-			return {
-				ok: true,
-				intent,
-				applicationId,
-				jobDescriptionText: response.jobDescriptionText,
-			};
-		}
-
 		if (intent === "create") {
 			const applicationId = Number(formData.get("applicationId"));
 			const baseCvId = Number(formData.get("baseCvId"));
@@ -242,11 +238,7 @@ export async function generateAction({ request }: ActionFunctionArgs): Promise<G
 		throw new Response("Unsupported action", { status: 400 });
 	} catch (error) {
 		const fallbackIntent: GenerateActionIntent =
-			intent === "cancel" ||
-			intent === "delete-cv" ||
-			intent === "download-cv" ||
-			intent === "job-description" ||
-			intent === "create"
+			intent === "cancel" || intent === "delete-cv" || intent === "download-cv" || intent === "create"
 				? intent
 				: "create";
 		return actionError(fallbackIntent, error);

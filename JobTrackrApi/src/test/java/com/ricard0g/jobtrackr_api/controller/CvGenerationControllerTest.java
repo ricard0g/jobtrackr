@@ -24,12 +24,11 @@ import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 
 import com.ricard0g.jobtrackr_api.dto.CvGenerationDto.CvGenerationDtos;
+import com.ricard0g.jobtrackr_api.dto.CvGenerationDto.JobDescriptionResponseDto;
 import com.ricard0g.jobtrackr_api.exception.CvGenerationException;
 import com.ricard0g.jobtrackr_api.exception.GlobalExceptionHandler;
 import com.ricard0g.jobtrackr_api.model.enums.CvGenerationStatus;
 import com.ricard0g.jobtrackr_api.model.enums.GeneratedCvFormat;
-import com.ricard0g.jobtrackr_api.repository.ApplicationRepository;
-import com.ricard0g.jobtrackr_api.repository.JobDescriptionRepository;
 import com.ricard0g.jobtrackr_api.service.CvGenerationService;
 
 @WebMvcTest(controllers = CvGenerationController.class)
@@ -47,16 +46,12 @@ class CvGenerationControllerTest {
     @MockitoBean
     private CvGenerationService cvGenerationService;
 
-    @MockitoBean
-    private JobDescriptionRepository jobDescriptionRepository;
-
-    @MockitoBean
-    private ApplicationRepository applicationRepository;
-
     @Test
     void create_returnsAcceptedWithoutSensitiveSnapshots() throws Exception {
+        // given
         when(cvGenerationService.create(eq(USER_ID), eq("idem-1"), any())).thenReturn(sampleResponse());
 
+        // when / then
         mockMvc.perform(post("/api/v1/cv-generations")
                         .principal(principal())
                         .header("Idempotency-Key", "idem-1")
@@ -81,9 +76,11 @@ class CvGenerationControllerTest {
 
     @Test
     void create_whenConsentMissing_returnsStableCode() throws Exception {
+        // given
         when(cvGenerationService.create(eq(USER_ID), eq("idem-2"), any()))
                 .thenThrow(CvGenerationException.consentRequired());
 
+        // when / then
         mockMvc.perform(post("/api/v1/cv-generations")
                         .principal(principal())
                         .header("Idempotency-Key", "idem-2")
@@ -104,9 +101,11 @@ class CvGenerationControllerTest {
 
     @Test
     void cancel_returnsUpdatedStatus() throws Exception {
+        // given
         when(cvGenerationService.cancel(USER_ID, 11L))
                 .thenReturn(sampleResponse(CvGenerationStatus.CANCELLED));
 
+        // when / then
         mockMvc.perform(post("/api/v1/cv-generations/11/cancel").principal(principal()))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.status").value("CANCELLED"));
@@ -115,11 +114,27 @@ class CvGenerationControllerTest {
 
     @Test
     void list_returnsUserGenerations() throws Exception {
+        // given
         when(cvGenerationService.listForUser(USER_ID)).thenReturn(List.of(sampleResponse()));
 
+        // when / then
         mockMvc.perform(get("/api/v1/cv-generations").principal(principal()))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$[0].cvGenerationId").value(11));
+    }
+
+    @Test
+    void getJobDescription_delegatesToService() throws Exception {
+        // given
+        when(cvGenerationService.getJobDescription(USER_ID, 3L))
+                .thenReturn(new JobDescriptionResponseDto(3L, "Build APIs"));
+
+        // when / then
+        mockMvc.perform(get("/api/v1/applications/3/job-description").principal(principal()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.applicationId").value(3))
+                .andExpect(jsonPath("$.jobDescriptionText").value("Build APIs"));
+        verify(cvGenerationService).getJobDescription(USER_ID, 3L);
     }
 
     private CvGenerationDtos.Response sampleResponse() {

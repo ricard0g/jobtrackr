@@ -18,10 +18,6 @@ import org.springframework.web.bind.annotation.RestController;
 
 import com.ricard0g.jobtrackr_api.dto.CvGenerationDto.CvGenerationDtos;
 import com.ricard0g.jobtrackr_api.dto.CvGenerationDto.JobDescriptionResponseDto;
-import com.ricard0g.jobtrackr_api.exception.ApplicationNotFoundException;
-import com.ricard0g.jobtrackr_api.model.JobDescription;
-import com.ricard0g.jobtrackr_api.repository.ApplicationRepository;
-import com.ricard0g.jobtrackr_api.repository.JobDescriptionRepository;
 import com.ricard0g.jobtrackr_api.service.CvGenerationService;
 
 import jakarta.validation.Valid;
@@ -35,8 +31,6 @@ import lombok.RequiredArgsConstructor;
 public class CvGenerationController {
 
     private final CvGenerationService cvGenerationService;
-    private final JobDescriptionRepository jobDescriptionRepository;
-    private final ApplicationRepository applicationRepository;
 
     @PostMapping("/cv-generations")
     public ResponseEntity<CvGenerationDtos.Response> create(
@@ -90,13 +84,6 @@ public class CvGenerationController {
     public ResponseEntity<JobDescriptionResponseDto> getJobDescription(
             final Principal principal, @PathVariable @Positive final Long applicationId) {
         final UUID userId = AuthenticatedUserId.from(principal);
-        applicationRepository
-                .findForUser(applicationId, userId)
-                .orElseThrow(() -> new ApplicationNotFoundException(userId, applicationId));
-        final String text = jobDescriptionRepository
-                .findByApplication_ApplicationId(applicationId)
-                .map(JobDescription::getJobDescriptionText)
-                .orElse("");
-        return ResponseEntity.ok(new JobDescriptionResponseDto(applicationId, text));
+        return ResponseEntity.ok(cvGenerationService.getJobDescription(userId, applicationId));
     }
 }

@@ -149,6 +149,7 @@ function GenerateDialog({
 	onOpenChange,
 	atLimit,
 	session,
+	initialJobDescription,
 }: {
 	application: Application;
 	baseCvs: BaseCv[];
@@ -157,6 +158,7 @@ function GenerateDialog({
 	onOpenChange: (open: boolean) => void;
 	atLimit: boolean;
 	session: number;
+	initialJobDescription: string;
 }) {
 	return (
 		<Dialog open={open} onOpenChange={onOpenChange}>
@@ -168,6 +170,7 @@ function GenerateDialog({
 					consent={consent}
 					atLimit={atLimit}
 					onOpenChange={onOpenChange}
+					initialJobDescription={initialJobDescription}
 				/>
 			) : null}
 		</Dialog>
@@ -180,48 +183,31 @@ function GenerateDialogForm({
 	consent,
 	atLimit,
 	onOpenChange,
+	initialJobDescription,
 }: {
 	application: Application;
 	baseCvs: BaseCv[];
 	consent: AiConsent;
 	atLimit: boolean;
 	onOpenChange: (open: boolean) => void;
+	initialJobDescription: string;
 }) {
 	const createFetcher = useFetcher<GenerateActionData>();
-	const jobDescFetcher = useFetcher<GenerateActionData>();
 	const formId = useId();
 	const [baseCvId, setBaseCvId] = useState(() =>
 		baseCvs[0] ? String(baseCvs[0].baseCvId) : "",
 	);
 	const [format, setFormat] = useState<GeneratedCvFormat>("PDF");
-	const [jobDescriptionDraft, setJobDescriptionDraft] = useState<string | null>(null);
+	const [jobDescription, setJobDescription] = useState(initialJobDescription);
 	const [additionalInformation, setAdditionalInformation] = useState("");
 	const [consentAccepted, setConsentAccepted] = useState(false);
 	const [clientError, setClientError] = useState<string | null>(null);
 	const submitting = createFetcher.state !== "idle";
-	const loadingJobDescription = jobDescFetcher.state !== "idle";
 	const needsConsent = !consent.current;
-	const fetchedJobDescription =
-		jobDescFetcher.state === "idle" &&
-		jobDescFetcher.data?.ok &&
-		jobDescFetcher.data.intent === "job-description" &&
-		jobDescFetcher.data.applicationId === application.applicationId
-			? (jobDescFetcher.data.jobDescriptionText ?? "")
-			: null;
-	const jobDescription = jobDescriptionDraft ?? fetchedJobDescription ?? "";
 	const createSucceeded =
 		createFetcher.state === "idle" &&
 		createFetcher.data?.ok === true &&
 		createFetcher.data.intent === "create";
-
-	useEffect(() => {
-		const formData = new FormData();
-		formData.set("intent", "job-description");
-		formData.set("applicationId", String(application.applicationId));
-		jobDescFetcher.submit(formData, { method: "post", action: "/generate" });
-		// Mount-only prefetch for this dialog session.
-		// eslint-disable-next-line react-hooks/exhaustive-deps
-	}, [application.applicationId]);
 
 	useEffect(() => {
 		if (!createSucceeded) return;
@@ -347,13 +333,10 @@ function GenerateDialogForm({
 						id={`${formId}-job-description`}
 						name="jobDescription"
 						value={jobDescription}
-						onChange={(event) => setJobDescriptionDraft(event.target.value)}
-						disabled={submitting || loadingJobDescription}
-						aria-busy={loadingJobDescription}
+						onChange={(event) => setJobDescription(event.target.value)}
+						disabled={submitting}
 						aria-required="true"
-						placeholder={
-							loadingJobDescription ? "Loading job description…" : "Paste the job description"
-						}
+						placeholder="Paste the job description"
 						className="min-h-36"
 					/>
 					{createFetcher.data?.fieldErrors?.jobDescription ? (
@@ -435,12 +418,14 @@ function ApplicationGenerateRow({
 	applicationCvs,
 	baseCvs,
 	consent,
+	initialJobDescription,
 }: {
 	application: Application;
 	generations: CvGeneration[];
 	applicationCvs: ApplicationCv[];
 	baseCvs: BaseCv[];
 	consent: AiConsent;
+	initialJobDescription: string;
 }) {
 	const cancelFetcher = useFetcher<GenerateActionData>();
 	const [dialogOpen, setDialogOpen] = useState(false);
@@ -549,14 +534,21 @@ function ApplicationGenerateRow({
 				onOpenChange={setDialogOpen}
 				atLimit={atLimit}
 				session={dialogSession}
+				initialJobDescription={initialJobDescription}
 			/>
 		</li>
 	);
 }
 
 export function GenerateRoute() {
-	const { applications, baseCvs, generations, applicationCvsByApplicationId, consent } =
-		useLoaderData() as GenerateLoaderData;
+	const {
+		applications,
+		baseCvs,
+		generations,
+		applicationCvsByApplicationId,
+		jobDescriptionsByApplicationId,
+		consent,
+	} = useLoaderData() as GenerateLoaderData;
 	const revalidator = useRevalidator();
 	const hasActiveGeneration = generations.some((generation) =>
 		isActiveCvGenerationStatus(generation.status),
@@ -626,6 +618,9 @@ export function GenerateRoute() {
 									}
 									baseCvs={baseCvs}
 									consent={consent}
+									initialJobDescription={
+										jobDescriptionsByApplicationId[application.applicationId] ?? ""
+									}
 								/>
 							))}
 						</ul>

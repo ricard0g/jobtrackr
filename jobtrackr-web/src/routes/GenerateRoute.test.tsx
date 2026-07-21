@@ -113,6 +113,7 @@ const loaderData = (overrides: Partial<GenerateLoaderData> = {}): GenerateLoader
 	baseCvs: [baseCv()],
 	generations: [],
 	applicationCvsByApplicationId: {},
+	jobDescriptionsByApplicationId: { 1: "Prefetched job description" },
 	consent: consent(),
 	...overrides,
 });
@@ -127,15 +128,7 @@ const renderGenerate = (
 				path: "/generate",
 				Component: GenerateRoute,
 				loader: () => data,
-				action:
-					action ??
-					(async () =>
-						({
-							ok: true,
-							intent: "job-description",
-							applicationId: 1,
-							jobDescriptionText: "Prefetched job description",
-						}) satisfies GenerateActionData),
+				action: action ?? (async () => ({ ok: true, intent: "create" }) satisfies GenerateActionData),
 			},
 		],
 		{ initialEntries: ["/generate"] },
@@ -201,6 +194,7 @@ describe("GenerateRoute", () => {
 				applicationCvsByApplicationId: {
 					3: [applicationCv({ applicationId: 3, applicationCvId: 1 })],
 				},
+				jobDescriptionsByApplicationId: {},
 			}),
 		);
 
@@ -230,6 +224,7 @@ describe("GenerateRoute", () => {
 					generation({ cvGenerationId: 1, applicationId: 1, status: "PENDING" }),
 					generation({ cvGenerationId: 2, applicationId: 2, status: "PROCESSING" }),
 				],
+				jobDescriptionsByApplicationId: {},
 			}),
 		);
 
@@ -264,20 +259,9 @@ describe("GenerateRoute", () => {
 		renderGenerate(
 			loaderData({
 				consent: consent({ current: false, consentVersion: null, consentedAt: null }),
+				jobDescriptionsByApplicationId: { 1: "" },
 			}),
-			async ({ request }) => {
-				const formData = await request.formData();
-				const intent = String(formData.get("intent"));
-				if (intent === "job-description") {
-					return {
-						ok: true,
-						intent: "job-description",
-						applicationId: 1,
-						jobDescriptionText: "",
-					};
-				}
-				return { ok: false, intent: "create", error: "unexpected" };
-			},
+			async () => ({ ok: false, intent: "create", error: "unexpected" }),
 		);
 
 		fireEvent.click(await screen.findByRole("button", { name: "Generate CV for Frontend Engineer" }));
@@ -285,9 +269,7 @@ describe("GenerateRoute", () => {
 		expect(screen.getByText(/will be sent to Google Gemini/i)).toBeTruthy();
 		expect(screen.getByLabelText("Consent to send data to Google Gemini")).toBeTruthy();
 
-		await waitFor(() => {
-			expect(screen.getByLabelText("Job Description")).toBeTruthy();
-		});
+		expect(screen.getByLabelText("Job Description")).toBeTruthy();
 
 		fireEvent.click(screen.getByRole("button", { name: "Generate CV" }));
 		expect(await screen.findByText("A Job Description is required.")).toBeTruthy();
@@ -310,15 +292,6 @@ describe("GenerateRoute", () => {
 		);
 
 		fireEvent.click(await screen.findByRole("button", { name: "Generate CV for Frontend Engineer" }));
-		await waitFor(() => expect(resolvers.length).toBeGreaterThan(0));
-
-		resolvers.shift()?.({
-			ok: true,
-			intent: "job-description",
-			applicationId: 1,
-			jobDescriptionText: "Prefetched job description",
-		});
-
 		await waitFor(() => {
 			expect((screen.getByLabelText("Job Description") as HTMLTextAreaElement).value).toContain(
 				"Prefetched",
@@ -354,7 +327,7 @@ describe("GenerateRoute", () => {
 				if (intent === "delete-cv") {
 					return { ok: true, intent: "delete-cv" };
 				}
-				return { ok: true, intent: "job-description", applicationId: 1, jobDescriptionText: "" };
+				return { ok: true, intent: "create" };
 			},
 		);
 
@@ -381,7 +354,7 @@ describe("GenerateRoute", () => {
 				if (intent === "cancel") {
 					return { ok: true, intent: "cancel" };
 				}
-				return { ok: true, intent: "job-description", applicationId: 1, jobDescriptionText: "" };
+				return { ok: true, intent: "create" };
 			},
 		);
 
@@ -392,24 +365,11 @@ describe("GenerateRoute", () => {
 	});
 
 	it("surfaces create action errors including quota codes", async () => {
-		renderGenerate(loaderData(), async ({ request }) => {
-			const formData = await request.formData();
-			const intent = String(formData.get("intent"));
-			if (intent === "job-description") {
-				return {
-					ok: true,
-					intent: "job-description",
-					applicationId: 1,
-					jobDescriptionText: "Ready job description",
-				};
-			}
-			return {
-				ok: false,
-				intent: "create",
-				error:
-					"This application already has 20 generated CVs. Delete one before generating another.",
-			};
-		});
+		renderGenerate(loaderData({ jobDescriptionsByApplicationId: { 1: "Ready job description" } }), async () => ({
+			ok: false,
+			intent: "create",
+			error: "This application already has 20 generated CVs. Delete one before generating another.",
+		}));
 
 		fireEvent.click(await screen.findByRole("button", { name: "Generate CV for Frontend Engineer" }));
 		await waitFor(() => {

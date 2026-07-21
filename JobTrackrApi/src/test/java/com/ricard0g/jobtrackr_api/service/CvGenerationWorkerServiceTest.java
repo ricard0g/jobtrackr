@@ -111,6 +111,7 @@ class CvGenerationWorkerServiceTest {
 
     @Test
     void processClaimed_uploadsThenPersistsCompletedGeneration() {
+        // given
         final CvGeneration generation = newGeneration();
         when(cvGenerationRepository.findById(11L)).thenReturn(Optional.of(generation));
         when(objectStorage.download("base-key")).thenReturn(new byte[] {1, 2, 3});
@@ -133,9 +134,11 @@ class CvGenerationWorkerServiceTest {
             return cv;
         });
 
+        // when
         service.markProcessing(11L);
         service.processClaimed(11L);
 
+        // then
         verify(objectStorage).upload(anyString(), eq(new byte[] {9, 9, 9}), eq("application/pdf"));
         verify(applicationCvRepository).saveAndFlush(any(ApplicationCv.class));
         assertThat(generation.getStatus()).isEqualTo(CvGenerationStatus.COMPLETED);
@@ -144,6 +147,7 @@ class CvGenerationWorkerServiceTest {
 
     @Test
     void finalizeSuccess_schedulesCleanupWhenGenerationMissingAfterUpload() {
+        // given
         final CvGeneration generation = newGeneration();
         when(userRepository.findByIdForUpdate(USER_ID)).thenReturn(Optional.of(generation.getUser()));
         when(entityManager.createNativeQuery(anyString())).thenReturn(lockQuery);
@@ -157,11 +161,13 @@ class CvGenerationWorkerServiceTest {
                 .thenReturn(Optional.of(generation))
                 .thenReturn(Optional.empty());
 
+        // when
         service.finalizeSuccess(
                 11L,
                 GenerationResult.success(
                         new byte[] {1}, "application/pdf", "fake-cv-v1", "cv-graph-v1", "sha"));
 
+        // then
         final ArgumentCaptor<String> keyCaptor = ArgumentCaptor.forClass(String.class);
         verify(objectStorage).upload(keyCaptor.capture(), any(), anyString());
         verify(applicationCvService).scheduleCleanup(keyCaptor.getValue());
@@ -170,13 +176,16 @@ class CvGenerationWorkerServiceTest {
 
     @Test
     void retryOrFail_doesNotMutateWhenLeaseOwnedByAnotherWorker() {
+        // given
         final CvGeneration generation = newGeneration();
         generation.setStatus(CvGenerationStatus.PROCESSING);
         generation.setLeaseOwner("other-worker");
         when(cvGenerationRepository.findById(11L)).thenReturn(Optional.of(generation));
 
+        // when
         service.retryOrFail(11L, "PROVIDER_UNAVAILABLE", "unavailable", true);
 
+        // then
         assertThat(generation.getStatus()).isEqualTo(CvGenerationStatus.PROCESSING);
         verify(cvGenerationRepository, never()).save(generation);
     }

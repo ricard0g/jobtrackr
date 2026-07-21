@@ -10,6 +10,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import com.ricard0g.jobtrackr_api.config.cvgeneration.CvGenerationProperties;
 import com.ricard0g.jobtrackr_api.dto.CvGenerationDto.CvGenerationDtos;
+import com.ricard0g.jobtrackr_api.dto.CvGenerationDto.JobDescriptionResponseDto;
 import com.ricard0g.jobtrackr_api.exception.ApplicationNotFoundException;
 import com.ricard0g.jobtrackr_api.exception.CvGenerationException;
 import com.ricard0g.jobtrackr_api.exception.UserNotFoundException;
@@ -174,6 +175,16 @@ public class CvGenerationService {
                 && user.getUserAiConsentAt() != null;
         return new CvGenerationDtos.ConsentResponse(
                 user.getUserAiConsentVersion(), user.getUserAiConsentAt(), current);
+    }
+
+    @Transactional(readOnly = true)
+    public JobDescriptionResponseDto getJobDescription(final UUID userId, final Long applicationId) {
+        requireApplication(userId, applicationId);
+        final String text = jobDescriptionRepository
+                .findByApplication_ApplicationId(applicationId)
+                .map(JobDescription::getJobDescriptionText)
+                .orElse("");
+        return new JobDescriptionResponseDto(applicationId, text);
     }
 
     private void ensureConsent(final User user, final boolean consentAccepted) {
