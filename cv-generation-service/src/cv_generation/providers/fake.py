@@ -12,6 +12,7 @@ from cv_generation.models.canonical_cv import (
     ExperienceItem,
     ProjectItem,
 )
+from cv_generation.models.candidate_evidence import CandidateEvidence
 from cv_generation.models.errors import ErrorCode, ServiceError
 from cv_generation.providers.base import DraftingProvider
 
@@ -25,6 +26,16 @@ class FakeProvider(DraftingProvider):
     @property
     def model_id(self) -> str:
         return self._model_id
+
+    def interpret_base_cv(
+        self,
+        *,
+        extracted_text: str,
+        deterministic_hints: dict[str, Any],
+    ) -> CandidateEvidence:
+        """Use deterministic hints in tests; no model calls are made."""
+        del extracted_text
+        return CandidateEvidence.model_validate(deterministic_hints)
 
     def draft(
         self,

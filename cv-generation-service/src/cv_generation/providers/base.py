@@ -6,6 +6,7 @@ from abc import ABC, abstractmethod
 from typing import Any
 
 from cv_generation.models.canonical_cv import CanonicalCV
+from cv_generation.models.candidate_evidence import CandidateEvidence
 
 
 class DraftingProvider(ABC):
@@ -14,6 +15,16 @@ class DraftingProvider(ABC):
     @property
     @abstractmethod
     def model_id(self) -> str:
+        ...
+
+    @abstractmethod
+    def interpret_base_cv(
+        self,
+        *,
+        extracted_text: str,
+        deterministic_hints: dict[str, Any],
+    ) -> CandidateEvidence:
+        """Interpret extracted Base CV text into structured candidate evidence."""
         ...
 
     @abstractmethod

@@ -123,4 +123,7 @@ def validate_canonical_cv(
     if not cv.output_language:
         issues.append("output_language is required")
 
+    if not (cv.experience or cv.education or cv.projects):
+        issues.append("CV must include at least one experience, education, or project entry")
+
     return issues

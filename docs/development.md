@@ -41,8 +41,8 @@ The CV generation service runs on `http://localhost:8081`.
 
 ### CV generation service
 
-- Default provider is `fake` (`CV_GENERATION_PROVIDER=fake`) so local/CI work does not call Gemini.
-- For live Gemini evaluation set `CV_GENERATION_PROVIDER=gemini` and provide `GOOGLE_AI_API_KEY` (or `GEMINI_API_KEY`).
+- User-facing generation defaults to Gemini and requires `GOOGLE_AI_API_KEY` (or `GEMINI_API_KEY`).
+- The deterministic fake provider is explicitly enabled by the automated test suite only.
 - Spring authenticates to FastAPI with `CV_GENERATION_SERVICE_TOKEN` (Bearer). The browser never talks to FastAPI.
 - Health: `GET http://localhost:8081/health/live` and `GET http://localhost:8081/health/ready`
 - WeasyPrint system libraries are installed in the service Dockerfile for PDF rendering.
