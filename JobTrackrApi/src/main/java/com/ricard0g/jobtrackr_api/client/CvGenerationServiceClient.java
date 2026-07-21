@@ -16,13 +16,13 @@ import java.util.UUID;
 
 import org.springframework.stereotype.Component;
 
-import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import com.ricard0g.jobtrackr_api.config.cvgeneration.CvGenerationProperties;
 import com.ricard0g.jobtrackr_api.model.enums.GeneratedCvFormat;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import tools.jackson.databind.JsonNode;
+import tools.jackson.databind.json.JsonMapper;
 
 @Component
 @RequiredArgsConstructor
@@ -63,7 +63,7 @@ public class CvGenerationServiceClient {
 
     private final HttpClient cvGenerationHttpClient;
     private final CvGenerationProperties properties;
-    private final ObjectMapper objectMapper;
+    private final JsonMapper jsonMapper;
 
     public GenerationResult generate(
             final byte[] baseCvBytes,
@@ -161,7 +161,7 @@ public class CvGenerationServiceClient {
             final String additionalInformation,
             final UUID correlationId) {
         try {
-            final String specificationJson = objectMapper.writeValueAsString(new SpecificationPayload(
+            final String specificationJson = jsonMapper.writeValueAsString(new SpecificationPayload(
                     format.name(),
                     jobDescription,
                     additionalInformation,
@@ -199,7 +199,7 @@ public class CvGenerationServiceClient {
     private String parseErrorCode(final byte[] body) {
         final JsonNode node = readJson(body);
         if (node != null && node.hasNonNull("code")) {
-            return node.get("code").asText();
+            return node.get("code").asString();
         }
         return "INTERNAL_ERROR";
     }
@@ -216,8 +216,8 @@ public class CvGenerationServiceClient {
             return null;
         }
         try {
-            return objectMapper.readTree(body);
-        } catch (final IOException exception) {
+            return jsonMapper.readTree(body);
+        } catch (final Exception exception) {
             return null;
         }
     }

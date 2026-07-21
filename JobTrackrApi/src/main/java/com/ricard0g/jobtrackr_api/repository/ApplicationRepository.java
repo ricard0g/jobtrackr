@@ -27,7 +27,7 @@ public interface ApplicationRepository extends JpaRepository<Application, Long> 
             """
             SELECT DISTINCT a FROM Application a
             JOIN FETCH a.company
-            JOIN FETCH a.tags
+            LEFT JOIN FETCH a.tags
             WHERE a.user.userId = :userId
             ORDER BY a.applicationKanbanOrder ASC, a.applicationCreatedAt DESC
             """)
@@ -37,7 +37,7 @@ public interface ApplicationRepository extends JpaRepository<Application, Long> 
             """
             SELECT a FROM Application a
             JOIN FETCH a.company
-            JOIN FETCH a.tags
+            LEFT JOIN FETCH a.tags
             WHERE a.applicationId = :applicationId AND a.user.userId = :userId
             """)
     Optional<Application> findForUser(
