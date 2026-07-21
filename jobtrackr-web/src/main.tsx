@@ -6,7 +6,7 @@ import "./index.css";
 import App from "./App.tsx";
 import RootErrorBoundary from "@/routes/RootErrorBoundary";
 import RouteHydrateFallback from "@/routes/RouteHydrateFallback";
-import { appAction, appLoader, appShouldRevalidate, kanbanLoader, protectedRouteLoader } from "@/routes/app-data";
+import { appAction, appLoader, appShouldRevalidate, kanbanLoader } from "@/routes/app-data";
 import {
 	ApplicationDetailErrorBoundary,
 	ApplicationDetailRoute,
@@ -22,6 +22,7 @@ import { KanbanRoute } from "@/routes/KanbanRoute";
 import { DocumentsRoute } from "@/routes/DocumentsRoute";
 import { documentsAction, documentsLoader } from "@/routes/documents-data";
 import { GenerateRoute } from "@/routes/GenerateRoute";
+import { generateAction, generateLoader } from "@/routes/generate-data";
 
 const router = createBrowserRouter([
 	{
@@ -76,7 +77,8 @@ const router = createBrowserRouter([
 			{
 				path: "generate",
 				Component: GenerateRoute,
-				loader: protectedRouteLoader,
+				loader: generateLoader,
+				action: generateAction,
 				ErrorBoundary: RootErrorBoundary,
 			},
 		],

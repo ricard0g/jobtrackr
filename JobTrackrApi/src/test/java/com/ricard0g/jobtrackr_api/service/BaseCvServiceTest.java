@@ -13,6 +13,7 @@ import static org.mockito.Mockito.when;
 import java.net.URI;
 import java.nio.charset.StandardCharsets;
 import java.time.OffsetDateTime;
+import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -48,6 +49,9 @@ class BaseCvServiceTest {
 
     @Mock
     private BaseCvRepository baseCvRepository;
+
+    @Mock
+    private com.ricard0g.jobtrackr_api.repository.CvGenerationRepository cvGenerationRepository;
 
     @Mock
     private BaseCvValidator baseCvValidator;
@@ -138,6 +142,7 @@ class BaseCvServiceTest {
         final BaseCv baseCv = mock(BaseCv.class);
         when(baseCv.getObjectKey()).thenReturn("opaque-key");
         when(baseCvRepository.findByBaseCvIdAndUser_UserId(BASE_CV_ID, USER_ID)).thenReturn(Optional.of(baseCv));
+        when(cvGenerationRepository.existsByBaseCv_BaseCvIdAndStatusIn(any(), any())).thenReturn(false);
 
         // when
         service.delete(USER_ID, BASE_CV_ID);
@@ -155,7 +160,10 @@ class BaseCvServiceTest {
         final BaseCv baseCv = mock(BaseCv.class);
         when(baseCv.getObjectKey()).thenReturn("opaque-key");
         when(baseCvRepository.findByBaseCvIdAndUser_UserId(BASE_CV_ID, USER_ID)).thenReturn(Optional.of(baseCv));
-        org.mockito.Mockito.doThrow(BaseCvException.storageUnavailable()).when(baseCvStorage).delete("opaque-key");
+        when(cvGenerationRepository.existsByBaseCv_BaseCvIdAndStatusIn(any(), any())).thenReturn(false);
+        org.mockito.Mockito.doThrow(com.ricard0g.jobtrackr_api.exception.StorageUnavailableException.baseCv())
+                .when(baseCvStorage)
+                .delete("opaque-key");
 
         // when / then
         assertThatThrownBy(() -> service.delete(USER_ID, BASE_CV_ID)).isInstanceOf(BaseCvException.class);

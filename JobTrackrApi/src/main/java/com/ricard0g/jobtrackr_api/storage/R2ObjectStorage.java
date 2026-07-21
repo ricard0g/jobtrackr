@@ -7,21 +7,23 @@ import java.nio.charset.StandardCharsets;
 import org.springframework.stereotype.Component;
 
 import com.ricard0g.jobtrackr_api.config.storage.R2Properties;
-import com.ricard0g.jobtrackr_api.exception.BaseCvException;
+import com.ricard0g.jobtrackr_api.exception.StorageUnavailableException;
 
 import lombok.RequiredArgsConstructor;
 import software.amazon.awssdk.core.sync.RequestBody;
 import software.amazon.awssdk.core.exception.SdkException;
+import software.amazon.awssdk.core.ResponseBytes;
 import software.amazon.awssdk.services.s3.S3Client;
 import software.amazon.awssdk.services.s3.model.DeleteObjectRequest;
 import software.amazon.awssdk.services.s3.model.GetObjectRequest;
+import software.amazon.awssdk.services.s3.model.GetObjectResponse;
 import software.amazon.awssdk.services.s3.model.PutObjectRequest;
 import software.amazon.awssdk.services.s3.presigner.S3Presigner;
 import software.amazon.awssdk.services.s3.presigner.model.GetObjectPresignRequest;
 
 @Component
 @RequiredArgsConstructor
-public class R2BaseCvStorage implements BaseCvStorage {
+public class R2ObjectStorage implements ObjectStorage, BaseCvStorage {
 
     private final S3Client r2S3Client;
     private final S3Presigner r2S3Presigner;
@@ -38,7 +40,21 @@ public class R2BaseCvStorage implements BaseCvStorage {
                     .build();
             r2S3Client.putObject(request, RequestBody.fromBytes(bytes));
         } catch (final SdkException exception) {
-            throw BaseCvException.storageUnavailable();
+            throw StorageUnavailableException.baseCv();
+        }
+    }
+
+    @Override
+    public byte[] download(final String objectKey) {
+        try {
+            final GetObjectRequest request = GetObjectRequest.builder()
+                    .bucket(properties.bucket())
+                    .key(objectKey)
+                    .build();
+            final ResponseBytes<GetObjectResponse> response = r2S3Client.getObjectAsBytes(request);
+            return response.asByteArray();
+        } catch (final SdkException exception) {
+            throw StorageUnavailableException.baseCv();
         }
     }
 
@@ -58,7 +74,7 @@ public class R2BaseCvStorage implements BaseCvStorage {
                     .build();
             return r2S3Presigner.presignGetObject(presignRequest).url().toURI();
         } catch (final Exception exception) {
-            throw BaseCvException.storageUnavailable();
+            throw StorageUnavailableException.baseCv();
         }
     }
 
@@ -71,7 +87,7 @@ public class R2BaseCvStorage implements BaseCvStorage {
                     .build();
             r2S3Client.deleteObject(request);
         } catch (final SdkException exception) {
-            throw BaseCvException.storageUnavailable();
+            throw StorageUnavailableException.baseCv();
         }
     }
 }

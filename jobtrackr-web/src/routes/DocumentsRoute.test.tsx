@@ -3,7 +3,6 @@ import { afterEach, describe, expect, it } from "vitest";
 import { createMemoryRouter, RouterProvider } from "react-router";
 
 import { DocumentsRoute } from "@/routes/DocumentsRoute";
-import { GenerateRoute } from "@/routes/GenerateRoute";
 import type { BaseCv } from "@/types/base-cv";
 
 afterEach(cleanup);
@@ -61,16 +60,5 @@ describe("DocumentsRoute", () => {
 		const upload = await screen.findByRole("button", { name: "Upload a Base CV" });
 		expect(upload.getAttribute("aria-disabled")).toBe("true");
 		expect(screen.getByText("Delete a Base CV to make room for another upload.")).toBeTruthy();
-	});
-});
-
-describe("GenerateRoute", () => {
-	it("clearly identifies the placeholder workflow", () => {
-		const router = createMemoryRouter([{ path: "/generate", Component: GenerateRoute }], {
-			initialEntries: ["/generate"],
-		});
-		render(<RouterProvider router={router} />);
-
-		expect(screen.getByRole("heading", { name: "Generate is coming soon" })).toBeTruthy();
 	});
 });

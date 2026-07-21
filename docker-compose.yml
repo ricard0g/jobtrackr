@@ -20,5 +20,30 @@ services:
       timeout: 5s
       retries: 10
 
+  cv-generation:
+    build:
+      context: ./cv-generation-service
+    container_name: jobtrackr-cv-generation
+    ports:
+      - "${CV_GENERATION_PORT:-8081}:8081"
+    environment:
+      CV_GENERATION_SERVICE_TOKEN: ${CV_GENERATION_SERVICE_TOKEN:-dev-service-token}
+      CV_GENERATION_PROVIDER: ${CV_GENERATION_PROVIDER:-fake}
+      GOOGLE_AI_API_KEY: ${GOOGLE_AI_API_KEY:-}
+      GEMINI_API_KEY: ${GEMINI_API_KEY:-}
+      CV_GENERATION_MODEL_ID: ${CV_GENERATION_MODEL_ID:-gemini-2.0-flash}
+      CV_GENERATION_WORKFLOW_VERSION: ${CV_GENERATION_WORKFLOW_VERSION:-cv-graph-v1}
+      HOST: 0.0.0.0
+      PORT: 8081
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "python -c \"import urllib.request; urllib.request.urlopen('http://127.0.0.1:8081/health/live')\"",
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
 volumes:
   jobtrackr_pgdata:

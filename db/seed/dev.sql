@@ -19,9 +19,18 @@ WITH seed_users AS (
     FROM users
     WHERE user_email IN ('agent@example.test')
 )
-DELETE FROM cv_base
+DELETE FROM cv_generations
 USING seed_users
-WHERE cv_base_user_id = seed_users.user_id;
+WHERE cv_generation_user_id = seed_users.user_id;
+
+WITH seed_users AS (
+    SELECT user_id
+    FROM users
+    WHERE user_email IN ('agent@example.test')
+)
+DELETE FROM base_cvs
+USING seed_users
+WHERE base_cv_user_id = seed_users.user_id;
 
 WITH seed_users AS (
     SELECT user_id
@@ -381,39 +390,24 @@ CROSS JOIN (
 ) AS seed_view(saved_view_name, saved_view_is_default, saved_view_filters_json)
 WHERE user_email = 'agent@example.test';
 
-INSERT INTO cv_base (
-    cv_base_user_id,
-    cv_base_location,
-    cv_base_updated_at
+INSERT INTO base_cvs (
+    base_cv_user_id,
+    base_cv_object_key,
+    base_cv_original_filename,
+    base_cv_format,
+    base_cv_content_type,
+    base_cv_byte_size,
+    base_cv_sha256,
+    base_cv_created_at
 )
 SELECT
     user_id,
-    'r2://jobtrackr-dev/cv-base/cloud-agent-demo.pdf',
+    'users/' || user_id::text || '/base-cvs/seed-demo.md',
+    'cloud-agent-demo.md',
+    'MARKDOWN',
+    'text/markdown',
+    512,
+    'bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb',
     now()
 FROM users
 WHERE user_email = 'agent@example.test';
-
-INSERT INTO application_cvs (
-    application_cv_application_id,
-    application_cv_version,
-    application_cv_location,
-    application_cv_tone,
-    application_cv_created_at
-)
-SELECT
-    a.application_id,
-    seed_cv.version,
-    seed_cv.location,
-    seed_cv.tone,
-    now()
-FROM users u
-JOIN applications a
-    ON a.application_user_id = u.user_id
-JOIN (
-    VALUES
-        ('Senior Backend Engineer', 1, 'r2://jobtrackr-dev/application-cvs/github-backend-v1.pdf', 'concise'),
-        ('Full Stack Engineer', 1, 'r2://jobtrackr-dev/application-cvs/acme-full-stack-v1.pdf', 'product-focused'),
-        ('Staff Java Engineer', 1, 'r2://jobtrackr-dev/application-cvs/northstar-java-v1.pdf', 'leadership')
-) AS seed_cv(application_title, version, location, tone)
-    ON seed_cv.application_title = a.application_title
-WHERE u.user_email = 'agent@example.test';

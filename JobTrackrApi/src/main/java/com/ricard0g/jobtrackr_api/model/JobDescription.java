@@ -3,6 +3,7 @@ package com.ricard0g.jobtrackr_api.model;
 import java.time.OffsetDateTime;
 
 import org.hibernate.annotations.CreationTimestamp;
+import org.hibernate.annotations.UpdateTimestamp;
 
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
@@ -40,4 +41,19 @@ public class JobDescription {
     @CreationTimestamp
     @Column(name = "job_description_fetched_at", nullable = false, updatable = false)
     private OffsetDateTime jobDescriptionFetchedAt;
+
+    @UpdateTimestamp
+    @Column(name = "job_description_updated_at")
+    private OffsetDateTime jobDescriptionUpdatedAt;
+
+    public static JobDescription create(final Application application, final String text) {
+        final JobDescription jobDescription = new JobDescription();
+        jobDescription.application = application;
+        jobDescription.jobDescriptionText = text;
+        return jobDescription;
+    }
+
+    public void replaceText(final String text) {
+        this.jobDescriptionText = text;
+    }
 }
