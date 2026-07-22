@@ -57,7 +57,7 @@ def test_generate_success_markdown_binary(client, auth_header, sample_cv_md, sam
     assert "text/markdown" in response.headers["content-type"]
     assert "attachment" in response.headers["content-disposition"].lower()
     assert response.headers["X-Model-Id"]
-    assert response.headers["X-Workflow-Version"] == "cv-graph-v1"
+    assert response.headers["X-Workflow-Version"] == "cv-graph-v2"
     body = response.content.decode("utf-8")
     assert "Ada Lovelace" in body
     assert "ada@example.com" in body
@@ -121,3 +121,26 @@ def test_base_cv_too_large(client, auth_header, monkeypatch):
     )
     assert response.status_code == 413
     assert response.json()["code"] == "BASE_CV_TOO_LARGE"
+
+
+def test_generate_rejects_fake_provider_without_test_override(
+    client,
+    auth_header,
+    sample_cv_md,
+    monkeypatch,
+):
+    from cv_generation.config import clear_settings_cache
+
+    monkeypatch.setenv("CV_GENERATION_ALLOW_FAKE_PROVIDER", "false")
+    clear_settings_cache()
+
+    response = client.post(
+        "/v1/generate",
+        headers=auth_header,
+        files={"file": ("cv.md", sample_cv_md, "text/markdown")},
+        data={"specification": _spec()},
+    )
+
+    assert response.status_code == 503
+    assert response.json()["code"] == "PROVIDER_UNAVAILABLE"
+    assert "test-only" in response.json()["message"]

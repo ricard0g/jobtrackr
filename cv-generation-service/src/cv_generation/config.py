@@ -38,17 +38,22 @@ class Settings(BaseSettings):
 
     # Provider
     cv_generation_provider: ProviderName = Field(
-        default="fake",
+        default="gemini",
         alias="CV_GENERATION_PROVIDER",
+    )
+    cv_generation_allow_fake_provider: bool = Field(
+        default=False,
+        alias="CV_GENERATION_ALLOW_FAKE_PROVIDER",
+        description="Test-only escape hatch; must remain false in user-facing environments.",
     )
     google_ai_api_key: str | None = Field(default=None, alias="GOOGLE_AI_API_KEY")
     gemini_api_key: str | None = Field(default=None, alias="GEMINI_API_KEY")
     cv_generation_model_id: str = Field(
-        default="gemini-2.0-flash",
+        default="gemini-3.1-flash-lite",
         alias="CV_GENERATION_MODEL_ID",
     )
     cv_generation_workflow_version: str = Field(
-        default="cv-graph-v1",
+        default="cv-graph-v2",
         alias="CV_GENERATION_WORKFLOW_VERSION",
     )
 
@@ -103,9 +108,11 @@ class Settings(BaseSettings):
         return self.cv_generation_provider == "fake"
 
     def readiness_ok(self) -> tuple[bool, str]:
-        """Return (ready, reason). Fake mode is always ready."""
+        """Return whether this process can perform user-facing generation."""
         if self.is_fake:
-            return True, "fake provider"
+            if self.cv_generation_allow_fake_provider:
+                return True, "fake provider explicitly enabled for tests"
+            return False, "fake provider is test-only"
         if not self.cv_generation_service_token:
             return False, "CV_GENERATION_SERVICE_TOKEN missing"
         if not self.resolved_gemini_api_key:

@@ -58,8 +58,9 @@ def build_graph(provider: DraftingProvider):
     graph = StateGraph(GraphState)
 
     graph.add_node("extract", _guard(nodes.node_extract))
-    graph.add_node("normalize", _guard(nodes.node_normalize_evidence))
+    graph.add_node("normalize", _guard(lambda s: nodes.node_normalize_evidence(s, provider)))
     graph.add_node("merge", _guard(nodes.node_merge_user_evidence))
+    graph.add_node("validate_evidence", _guard(nodes.node_validate_evidence))
     graph.add_node("analyze_jd", _guard(nodes.node_analyze_jd))
     graph.add_node("draft", _guard(lambda s: nodes.node_draft(s, provider)))
     graph.add_node("validate", _guard(nodes.node_validate))
@@ -70,7 +71,8 @@ def build_graph(provider: DraftingProvider):
     graph.set_entry_point("extract")
     graph.add_edge("extract", "normalize")
     graph.add_edge("normalize", "merge")
-    graph.add_edge("merge", "analyze_jd")
+    graph.add_edge("merge", "validate_evidence")
+    graph.add_edge("validate_evidence", "analyze_jd")
     graph.add_edge("analyze_jd", "draft")
     graph.add_edge("draft", "validate")
     graph.add_conditional_edges(

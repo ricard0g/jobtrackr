@@ -10,9 +10,10 @@ from fastapi.testclient import TestClient
 
 # Force fake provider before settings are loaded
 os.environ["CV_GENERATION_PROVIDER"] = "fake"
+os.environ["CV_GENERATION_ALLOW_FAKE_PROVIDER"] = "true"
 os.environ["CV_GENERATION_SERVICE_TOKEN"] = "test-service-token"
 os.environ["CV_GENERATION_MODEL_ID"] = "fake-cv-v1"
-os.environ["CV_GENERATION_WORKFLOW_VERSION"] = "cv-graph-v1"
+os.environ["CV_GENERATION_WORKFLOW_VERSION"] = "cv-graph-v2"
 
 from cv_generation.config import clear_settings_cache  # noqa: E402
 from cv_generation.main import create_app  # noqa: E402
@@ -24,6 +25,7 @@ FIXTURES = Path(__file__).parent / "fixtures"
 def _reset_settings():
     clear_settings_cache()
     os.environ["CV_GENERATION_PROVIDER"] = "fake"
+    os.environ["CV_GENERATION_ALLOW_FAKE_PROVIDER"] = "true"
     os.environ["CV_GENERATION_SERVICE_TOKEN"] = "test-service-token"
     clear_settings_cache()
     yield

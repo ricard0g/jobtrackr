@@ -48,7 +48,7 @@ Start Postgres:
 ./scripts/dev-up.sh
 ```
 
-This also starts the FastAPI CV generation service on `http://localhost:8081` (fake Gemini provider by default).
+This also starts the FastAPI CV generation service on `http://localhost:8081`. User-facing CV generation requires the Gemini provider and a configured Google AI API key.
 
 Start the API:
 
