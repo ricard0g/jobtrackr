@@ -61,10 +61,19 @@ def node_normalize_evidence(
     provider: DraftingProvider,
 ) -> dict[str, Any]:
     text = state["extracted_text"]
-    deterministic_hints = _parse_evidence_from_text(text)
+    additional = state.get("additional_information")
+    # Hints cover Base CV and user additions so FakeProvider / section parsers
+    # see experience supplied only via additional_information.
+    hint_corpus = text
+    if additional:
+        hint_corpus = f"{text}\n\n# Additional Information\n{additional}".strip()
+    deterministic_hints = _parse_evidence_from_text(hint_corpus)
+    if additional:
+        deterministic_hints = _apply_kv_overrides(deterministic_hints, _parse_kv_overrides(additional))
     interpreted = provider.interpret_base_cv(
         extracted_text=text,
         deterministic_hints=deterministic_hints,
+        additional_information=additional,
     )
     evidence = interpreted.model_dump()
     evidence["raw_text"] = text
@@ -88,21 +97,21 @@ def node_merge_user_evidence(state: GraphState) -> dict[str, Any]:
 
     # Append additional text to corpus so grounding checks pass
     raw = str(evidence.get("raw_text") or "")
-    evidence["raw_text"] = f"{raw}\n\n# Additional Information\n{additional}".strip()
+    if "# Additional Information" not in raw:
+        evidence["raw_text"] = f"{raw}\n\n# Additional Information\n{additional}".strip()
 
     override = _parse_evidence_from_text(additional)
     kv = _parse_kv_overrides(additional)
+    evidence = _apply_kv_overrides(evidence, kv)
 
-    if kv.get("full_name"):
-        evidence["full_name"] = kv["full_name"]
-    elif override.get("full_name"):
+    if not kv.get("full_name") and override.get("full_name"):
         evidence["full_name"] = override["full_name"]
 
     contact = dict(evidence.get("contact") or {})
     for key in ("email", "phone", "linkedin", "github", "portfolio", "location"):
         if kv.get(key):
-            contact[key] = kv[key]
-        elif override.get("contact", {}).get(key):
+            continue
+        if override.get("contact", {}).get(key):
             contact[key] = override["contact"][key]
     # Emails/phones discovered via regex still apply
     if override.get("contact", {}).get("email") and not contact.get("email"):
@@ -142,6 +151,15 @@ def node_merge_user_evidence(state: GraphState) -> dict[str, Any]:
             and str(e.get("institution") or "").lower() not in add_institutions
         ]
         evidence["education"] = add_edu + base_edu
+    if override.get("projects"):
+        add_projects = [p for p in override["projects"] if isinstance(p, dict)]
+        add_names = {str(p.get("name") or "").lower() for p in add_projects}
+        base_projects = [
+            p
+            for p in (evidence.get("projects") or [])
+            if isinstance(p, dict) and str(p.get("name") or "").lower() not in add_names
+        ]
+        evidence["projects"] = add_projects + base_projects
     if override.get("professional_summary"):
         evidence["professional_summary"] = override["professional_summary"]
     if override.get("certifications"):
@@ -192,7 +210,8 @@ def node_validate_evidence(state: GraphState) -> dict[str, Any]:
     if not any(history_counts.values()):
         raise ServiceError(
             ErrorCode.BASE_CV_NOT_EXTRACTABLE,
-            "Base CV text was extracted, but no experience, education, or projects could be structured",
+            "No experience, education, or projects could be structured from the Base CV "
+            "or additional_information",
             details={"structured_sections": history_counts},
         )
     return {}
@@ -336,6 +355,31 @@ def _parse_kv_overrides(text: str) -> dict[str, Any]:
     return out
 
 
+def _apply_kv_overrides(evidence: dict[str, Any], kv: dict[str, Any]) -> dict[str, Any]:
+    """Apply key:value overrides from additional_information onto evidence."""
+    if not kv:
+        return evidence
+    out = dict(evidence)
+    if kv.get("full_name"):
+        out["full_name"] = kv["full_name"]
+    contact = dict(out.get("contact") or {})
+    for key in ("email", "phone", "linkedin", "github", "portfolio", "location"):
+        if kv.get(key):
+            contact[key] = kv[key]
+    out["contact"] = contact
+    if kv.get("skills"):
+        base_skills = list(out.get("skills") or [])
+        seen: set[str] = set()
+        merged: list[str] = []
+        for skill in list(kv["skills"]) + base_skills:
+            key = skill.lower()
+            if key not in seen:
+                seen.add(key)
+                merged.append(skill)
+        out["skills"] = merged
+    return out
+
+
 def _parse_evidence_from_text(text: str) -> dict[str, Any]:
     emails = find_emails(text)
     phones = find_phones(text)
@@ -363,6 +407,7 @@ def _parse_evidence_from_text(text: str) -> dict[str, Any]:
     skills = _extract_skills_section(text)
     experience = _extract_experience(text)
     education = _extract_education(text)
+    projects = _extract_projects(text)
     summary = _extract_summary(text)
 
     return {
@@ -378,7 +423,7 @@ def _parse_evidence_from_text(text: str) -> dict[str, Any]:
         "experience": experience,
         "education": education,
         "professional_summary": summary,
-        "projects": [],
+        "projects": projects,
         "certifications": [],
         "spoken_languages": [],
     }
@@ -515,6 +560,39 @@ def _extract_education(text: str) -> list[dict[str, Any]]:
             continue
         items.append({"institution": line.split(",")[0].strip(), "degree": line})
     return items[:5]
+
+
+def _extract_projects(text: str) -> list[dict[str, Any]]:
+    body = _section_body(text, ("projects", "personal projects", "side projects"))
+    if not body:
+        return []
+    items: list[dict[str, Any]] = []
+    blocks = re.split(r"\n(?=\S)", body)
+    for block in blocks:
+        lines = [ln.strip() for ln in block.splitlines() if ln.strip()]
+        if not lines:
+            continue
+        header = lines[0].lstrip("#").lstrip("*").strip()
+        bullets = [
+            ln.lstrip("-*• ").strip()
+            for ln in lines[1:]
+            if ln.lstrip().startswith(("-", "*", "•"))
+        ]
+        description = None
+        for ln in lines[1:]:
+            if not ln.lstrip().startswith(("-", "*", "•")):
+                description = ln.lstrip("*").strip()
+                break
+        if header:
+            items.append(
+                {
+                    "name": re.sub(r"[*#]", "", header).strip(),
+                    "description": description,
+                    "bullets": bullets,
+                    "technologies": [],
+                }
+            )
+    return items[:10]
 
 
 def _extract_summary(text: str) -> str | None:

@@ -46,15 +46,19 @@ class GeminiProvider(DraftingProvider):
         *,
         extracted_text: str,
         deterministic_hints: dict[str, Any],
+        additional_information: str | None = None,
     ) -> CandidateEvidence:
         prompt = {
-            "task": "interpret_base_cv_as_candidate_evidence",
+            "task": "interpret_candidate_evidence",
             "base_cv_text": extracted_text,
+            "additional_information": additional_information,
             "deterministic_hints": deterministic_hints,
             "rules": [
                 "Extract all supported work experience, education, projects, skills, certifications, and languages",
                 "Preserve employer, institution, title, date, link, and metric text without invention",
-                "Use deterministic hints only when they are supported by base_cv_text",
+                "Treat additional_information as authoritative over conflicting Base CV facts when present",
+                "Structure free-form employment, education, and project facts from additional_information",
+                "Use deterministic hints only when they are supported by base_cv_text or additional_information",
                 "Do not tailor, summarize away, or reorder evidence for a job description",
                 "Use null or empty lists when a field is absent",
             ],

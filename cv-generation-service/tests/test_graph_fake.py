@@ -81,7 +81,7 @@ def test_contact_only_base_cv_is_rejected(sample_jd):
         )
 
     assert exc.value.code == ErrorCode.BASE_CV_NOT_EXTRACTABLE
-    assert "no experience, education, or projects" in exc.value.message
+    assert "no experience, education, or projects" in exc.value.message.lower()
 
 
 class _InterpretingFakeProvider(FakeProvider):
@@ -90,20 +90,32 @@ class _InterpretingFakeProvider(FakeProvider):
         *,
         extracted_text: str,
         deterministic_hints: dict,
+        additional_information: str | None = None,
     ) -> CandidateEvidence:
         del deterministic_hints
+        experience = []
+        if "Example Company" in extracted_text:
+            experience.append(
+                {
+                    "company": "Example Company",
+                    "title": "Software Engineer",
+                    "bullets": ["Built Python services"],
+                }
+            )
+        if additional_information and "Acme Corp" in additional_information:
+            experience.append(
+                {
+                    "company": "Acme Corp",
+                    "title": "Backend Engineer",
+                    "bullets": ["Owned payment APIs"],
+                }
+            )
         return CandidateEvidence.model_validate(
             {
                 "full_name": "Ricardo Guzman",
                 "contact": {"email": "ricardo@example.com"},
                 "skills": ["Python"],
-                "experience": [
-                    {
-                        "company": "Example Company",
-                        "title": "Software Engineer",
-                        "bullets": ["Built Python services"],
-                    }
-                ],
+                "experience": experience,
             }
         )
 
@@ -128,6 +140,61 @@ def test_provider_interpretation_supplies_structure_before_drafting(sample_jd):
     assert result.canonical_cv is not None
     assert result.canonical_cv.experience[0].company == "Example Company"
     assert "Built Python services" in result.content.decode("utf-8")
+
+
+def test_additional_information_can_supply_missing_history(sample_jd):
+    """Free-form additions must be interpreted before evidence validation."""
+    base_cv = (
+        b"Ricardo Guzman\n"
+        b"ricardo@example.com\n"
+        b"Contact details for employment opportunities.\n"
+    )
+    additional = (
+        "I worked at Acme Corp as a Backend Engineer. "
+        "Owned payment APIs written in Python."
+    )
+    result = run_generation(
+        provider=_InterpretingFakeProvider(),
+        base_cv_bytes=base_cv,
+        filename="cv.md",
+        content_type="text/markdown",
+        job_description=sample_jd,
+        additional_information=additional,
+        output_format=OutputFormat.MARKDOWN,
+        correlation_id="00000000-0000-0000-0000-000000000004",
+        workflow_version="cv-graph-v2",
+    )
+
+    assert result.canonical_cv is not None
+    assert result.canonical_cv.experience[0].company == "Acme Corp"
+    assert "Owned payment APIs" in result.content.decode("utf-8")
+
+
+def test_section_structured_additional_information_passes_validation(sample_jd):
+    base_cv = b"Ricardo Guzman\nricardo@example.com\n"
+    additional = (
+        "Experience\n"
+        "Acme Corp — Software Engineer\n"
+        "- Built APIs\n"
+        "Education\n"
+        "MIT, BS Computer Science\n"
+    )
+    result = run_generation(
+        provider=FakeProvider(),
+        base_cv_bytes=base_cv,
+        filename="cv.md",
+        content_type="text/markdown",
+        job_description=sample_jd,
+        additional_information=additional,
+        output_format=OutputFormat.MARKDOWN,
+        correlation_id="00000000-0000-0000-0000-000000000005",
+        workflow_version="cv-graph-v2",
+    )
+
+    assert result.canonical_cv is not None
+    assert result.canonical_cv.experience[0].company == "Acme Corp"
+    assert result.canonical_cv.education
+    assert "MIT" in result.canonical_cv.education[0].institution
 
 
 def test_validation_rejects_fabricated_skill():

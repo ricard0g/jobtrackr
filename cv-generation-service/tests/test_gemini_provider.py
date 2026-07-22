@@ -53,10 +53,15 @@ def test_evidence_interpretation_uses_minimal_thinking_and_bounded_output(monkey
     evidence = provider.interpret_base_cv(
         extracted_text="Ada Lovelace worked at Analytical Engines.",
         deterministic_hints={},
+        additional_information="Also led Project Delta, a billing dashboard.",
     )
 
+    contents = models.calls[0]["contents"]
+    prompt = json.loads(contents.split("\n", 1)[1])
     config = models.calls[0]["config"]
     assert evidence.experience[0].company == "Analytical Engines"
+    assert prompt["additional_information"] == "Also led Project Delta, a billing dashboard."
+    assert any("additional_information as authoritative" in rule for rule in prompt["rules"])
     assert config.thinking_config.thinking_level.value == "MINIMAL"
     assert config.max_output_tokens == 8_192
     assert config.automatic_function_calling.disable is True

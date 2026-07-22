@@ -23,8 +23,9 @@ class DraftingProvider(ABC):
         *,
         extracted_text: str,
         deterministic_hints: dict[str, Any],
+        additional_information: str | None = None,
     ) -> CandidateEvidence:
-        """Interpret extracted Base CV text into structured candidate evidence."""
+        """Interpret Base CV text and user additions into structured candidate evidence."""
         ...
 
     @abstractmethod

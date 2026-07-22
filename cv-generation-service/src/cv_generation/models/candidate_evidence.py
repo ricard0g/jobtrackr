@@ -1,4 +1,4 @@
-"""Structured candidate facts interpreted from a Base CV."""
+"""Structured candidate facts interpreted from a Base CV and user additions."""
 
 from __future__ import annotations
 

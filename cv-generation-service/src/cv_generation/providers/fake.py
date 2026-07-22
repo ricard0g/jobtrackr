@@ -32,9 +32,10 @@ class FakeProvider(DraftingProvider):
         *,
         extracted_text: str,
         deterministic_hints: dict[str, Any],
+        additional_information: str | None = None,
     ) -> CandidateEvidence:
         """Use deterministic hints in tests; no model calls are made."""
-        del extracted_text
+        del extracted_text, additional_information
         return CandidateEvidence.model_validate(deterministic_hints)
 
     def draft(
