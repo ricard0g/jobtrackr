@@ -1,7 +1,7 @@
 ## `2026-07-21` — CV generation now produces structured content
 
 **Type:** `fix`
-**Branch:** `main`
+**Branch:** `feature/candidate-evidence-pipeline`
 **Status:** `🔄 In Progress`
 
 ***
