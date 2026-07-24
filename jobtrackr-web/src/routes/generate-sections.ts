@@ -16,19 +16,37 @@ export type GenerateSections = {
 export const latestGeneration = (generations: CvGeneration[]) =>
 	generations.toSorted((left, right) => right.createdAt.localeCompare(left.createdAt))[0] ?? null;
 
+const newestAmong = (
+	generations: CvGeneration[],
+	activityAt: (generation: CvGeneration) => string,
+) =>
+	generations.toSorted((left, right) =>
+		activityAt(right).localeCompare(activityAt(left)),
+	)[0]!;
+
 // Preparing shows processing first, then queued, then latest-failed, then
 // untouched/no-document Applications; each category orders by its own most
-// relevant activity timestamp, newest first.
+// relevant activity timestamp, newest first. Any in-flight generation counts,
+// not only the chronologically latest attempt.
 const preparingRank = (
 	item: GenerateSectionItem,
 ): { priority: number; activityAt: string } => {
+	const processing = item.generations.filter(
+		(generation) => generation.status === "PROCESSING",
+	);
+	if (processing.length > 0) {
+		const generation = newestAmong(
+			processing,
+			(candidate) => candidate.startedAt ?? candidate.createdAt,
+		);
+		return { priority: 0, activityAt: generation.startedAt ?? generation.createdAt };
+	}
+	const pending = item.generations.filter((generation) => generation.status === "PENDING");
+	if (pending.length > 0) {
+		const generation = newestAmong(pending, (candidate) => candidate.createdAt);
+		return { priority: 1, activityAt: generation.createdAt };
+	}
 	const latest = latestGeneration(item.generations);
-	if (latest?.status === "PROCESSING") {
-		return { priority: 0, activityAt: latest.startedAt ?? latest.createdAt };
-	}
-	if (latest?.status === "PENDING") {
-		return { priority: 1, activityAt: latest.createdAt };
-	}
 	if (latest?.status === "FAILED") {
 		return { priority: 2, activityAt: latest.updatedAt };
 	}
@@ -73,7 +91,9 @@ export function buildGenerateSections(
 			applicationCvs: applicationCvsByApplicationId[application.applicationId] ?? [],
 		};
 		const latest = latestGeneration(item.generations);
-		const hasActiveGeneration = latest != null && isActiveCvGenerationStatus(latest.status);
+		const hasActiveGeneration = item.generations.some((generation) =>
+			isActiveCvGenerationStatus(generation.status),
+		);
 		const latestFailed = latest?.status === "FAILED";
 		const hasGeneratedCv = item.applicationCvs.length > 0;
 		const closed =

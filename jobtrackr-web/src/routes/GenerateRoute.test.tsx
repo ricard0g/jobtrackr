@@ -501,6 +501,66 @@ describe("GenerateRoute", () => {
 		expect(within(generated).getByText("Cancelled With Doc")).toBeTruthy();
 	});
 
+	it("keeps an older active generation in Preparing even when a newer attempt already finished", async () => {
+		renderGenerate(
+			loaderData({
+				applications: [
+					application({ applicationId: 1, applicationTitle: "Older Active Open" }),
+					application({
+						applicationId: 2,
+						applicationTitle: "Older Active Closed",
+						applicationStatus: "REJECTED",
+						company: { ...company, companyName: "Atlas" },
+					}),
+				],
+				generations: [
+					generation({
+						cvGenerationId: 1,
+						applicationId: 1,
+						status: "PROCESSING",
+						createdAt: "2026-07-10T10:00:00.000Z",
+						startedAt: "2026-07-10T10:01:00.000Z",
+					}),
+					generation({
+						cvGenerationId: 2,
+						applicationId: 1,
+						status: "COMPLETED",
+						applicationCvId: 11,
+						createdAt: "2026-07-16T10:00:00.000Z",
+					}),
+					generation({
+						cvGenerationId: 3,
+						applicationId: 2,
+						status: "PENDING",
+						createdAt: "2026-07-10T10:00:00.000Z",
+					}),
+					generation({
+						cvGenerationId: 4,
+						applicationId: 2,
+						status: "FAILED",
+						createdAt: "2026-07-16T10:00:00.000Z",
+					}),
+				],
+				applicationCvsByApplicationId: {
+					1: [applicationCv({ applicationId: 1, applicationCvId: 11 })],
+					2: [
+						applicationCv({
+							applicationId: 2,
+							applicationCvId: 12,
+							createdAt: "2026-07-09T09:00:00.000Z",
+						}),
+					],
+				},
+				jobDescriptionsByApplicationId: {},
+			}),
+		);
+
+		const preparing = await screen.findByRole("region", { name: "Preparing" });
+		expect(within(preparing).getByText("Older Active Open")).toBeTruthy();
+		expect(within(preparing).getByText("Older Active Closed")).toBeTruthy();
+		expect(screen.queryByRole("region", { name: "Generated" })).toBeNull();
+	});
+
 	it("hides closed applications without documents while keeping documented and active ones", async () => {
 		renderGenerate(
 			loaderData({
