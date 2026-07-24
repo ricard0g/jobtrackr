@@ -1162,6 +1162,9 @@ describe("GenerateRoute", () => {
 		fireEvent.click(sectionToggle);
 		expect(sectionToggle.getAttribute("aria-expanded")).toBe("false");
 		expect(within(generated).queryByText("Documented Role")).toBeNull();
+		const controlledId = sectionToggle.getAttribute("aria-controls");
+		expect(controlledId).toBeTruthy();
+		expect(document.getElementById(controlledId!)).toBeTruthy();
 	});
 
 	it("shows one route-level Base CV notice and disables Generate without repeating the message", async () => {

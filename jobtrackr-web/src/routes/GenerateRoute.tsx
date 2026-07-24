@@ -327,8 +327,8 @@ function GenerateDialogForm({
 							<SelectValue />
 						</SelectTrigger>
 						<SelectContent>
+							<SelectItem value="DOCX">DOCX (Recommended)</SelectItem>
 							<SelectItem value="PDF">PDF</SelectItem>
-							<SelectItem value="DOCX">DOCX</SelectItem>
 							<SelectItem value="MARKDOWN">Markdown</SelectItem>
 						</SelectContent>
 					</Select>
@@ -867,7 +867,9 @@ export function GenerateRoute() {
 								</h2>
 								{generatedSectionOpen ? (
 									<div id={generatedPanelId}>{renderSectionItems(generated, "generated")}</div>
-								) : null}
+								) : (
+									<div id={generatedPanelId} hidden />
+								)}
 							</section>
 						) : null}
 					</div>
