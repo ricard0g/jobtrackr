@@ -22,11 +22,14 @@ Design note for the Generate route Preparing presentations introduced with the L
 
 - Accessible segmented control labeled **Preparing layout** with List/Grid options (`aria-pressed`).
 - Preference is versioned browser-local storage only (`jobtrackr:generate-preparing-layout:v1` → `list` | `grid`). It is not sent to the server, synced to a User account, or encoded in the URL. Invalid or missing values default to List.
-- When Grid is active and Preparing has items, the Preparing region may widen to `max-w-6xl`. Header copy and Generated remain aligned to the readable `max-w-4xl` width.
+- List and Grid share the same readable `max-w-4xl` column as Generated.
 - Responsive columns: one on small screens, two from `md`, three from `xl`. Order is left-to-right, then top-to-bottom.
-- Collapsed cards show only company identity (mark), Application title, latest generation state or `No CV yet`, relative activity time, and Generate or the live active indicator.
+- Collapsed cards show company identity (mark), Application title, Application status color tag, latest generation state or `No CV yet`, relative activity time, and Generate or the live active indicator.
+- Cards stay compact: centered column stack with Generate / the live indicator under the content, without forcing a large square footprint.
+- Grid cards use `bg-off-white`, `border-light-gray`, and `shadow-cool-light` (same surface language as Kanban status columns) for clearer contrast against the page.
+- Expanding a Grid card overlays disclosure content below the card face (out of document flow) so sibling cards and row height stay unchanged. Height and opacity animate (~300ms); chevron rotation matches. Motion is disabled under `prefers-reduced-motion`.
+- Hovering the Preparing grid dims sibling cards (`opacity`) while the hovered card stays at full opacity. Expanded state does not keep a card highlighted on its own.
 - Expanded cards reveal the same secondary metadata and valid actions as List items.
-- Expansion is in-card for this comparison. Collapsed cards that share a CSS grid row with an expanded card gain extra whitespace under them. That trade-off is accepted for the initial evaluation.
 
 ## Preferred follow-up experiment
 

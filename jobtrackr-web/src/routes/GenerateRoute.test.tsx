@@ -1745,7 +1745,7 @@ describe("GenerateRoute", () => {
 		expect(
 			within(preparing).getByRole("button", { name: "Generate CV for Platform Engineer" }),
 		).toBeTruthy();
-		expect(within(preparing).queryByText("Interview")).toBeNull();
+		expect(within(preparing).getByText("Interview")).toBeTruthy();
 		expect(within(preparing).queryByText("Berlin · Remote")).toBeNull();
 		expect(within(preparing).queryByText("Northstar Labs")).toBeNull();
 
@@ -1758,7 +1758,6 @@ describe("GenerateRoute", () => {
 			}),
 		).toBeTruthy();
 		expect(within(preparing).getByText("Northstar Labs")).toBeTruthy();
-		expect(within(preparing).getByText("Interview")).toBeTruthy();
 		expect(within(preparing).getByText("Berlin · Remote")).toBeTruthy();
 		expect(within(preparing).getByText("No generations yet")).toBeTruthy();
 	});

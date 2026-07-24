@@ -584,17 +584,222 @@ function ApplicationGenerateRow({
 	const showRichPreparingMeta = section === "preparing" && (!isGrid || expanded);
 	const showGridCollapsedMeta = isGrid && !expanded;
 
+	const preparingPrimaryAction =
+		section === "preparing" ? (hasActiveGeneration ? activeIndicator : generateButton) : null;
+
+	const disclosureChevron = (
+		<ChevronDown
+			aria-hidden="true"
+			className={cn(
+				"shrink-0 text-medium-gray transition-transform duration-300 ease-out motion-reduce:transition-none",
+				expanded && "rotate-180",
+			)}
+			size={16}
+		/>
+	);
+
+	const panelBody = (
+		<>
+			{section === "generated" ? (
+				<div className="flex flex-wrap items-center gap-2">{generateButton}</div>
+			) : null}
+
+			{latest ? (
+				<div
+					className={cn(
+						"rounded-lg px-3 py-2",
+						isGrid ? "border border-light-gray bg-white" : "bg-off-white",
+					)}
+				>
+					<p className="text-sm text-dark-gray">
+						<span className="font-semibold">Latest status: </span>
+						{cvGenerationStatusLabels[latest.status]}
+					</p>
+					{latest.modelId ? (
+						<p className="mt-1 text-xs text-medium-gray" title={latest.modelId}>
+							Model: {displayModelName(latest.modelId)}
+						</p>
+					) : null}
+					{latest.status === "FAILED" ? (
+						<div className="mt-1 space-y-1 text-sm text-red-700">
+							{latest.errorMessage ? <p>{latest.errorMessage}</p> : null}
+							{latest.correlationId ? (
+								<p className="font-mono text-xs text-red-600">
+									Reference: {latest.correlationId}
+								</p>
+							) : null}
+						</div>
+					) : null}
+					{latest.status === "PENDING" ? (
+						<cancelFetcher.Form method="post" action="/generate" className="mt-2">
+							<input type="hidden" name="intent" value="cancel" />
+							<input type="hidden" name="cvGenerationId" value={latest.cvGenerationId} />
+							<Button
+								type="submit"
+								variant="outline"
+								size="sm"
+								disabled={cancelling}
+								aria-label={`Cancel generation for ${application.applicationTitle}`}
+								onClick={(event) => event.stopPropagation()}
+							>
+								{cancelling ? <LoaderCircle className="animate-spin" /> : <XCircle />}
+								Cancel
+							</Button>
+						</cancelFetcher.Form>
+					) : null}
+					{cancelFetcher.data?.ok === false ? (
+						<p role="alert" className="mt-2 text-sm text-red-700">
+							{cancelFetcher.data.error}
+						</p>
+					) : null}
+				</div>
+			) : (
+				<p className="text-sm text-medium-gray">No generations yet</p>
+			)}
+
+			{atLimit ? (
+				<p className="text-sm text-amber-800">
+					Generated CV limit reached ({applicationCvs.length} / {MAX_APPLICATION_CVS}). Delete one
+					to make room.
+				</p>
+			) : null}
+
+			{sortedCvs.length > 0 ? (
+				<div>
+					<h3 className="text-sm font-semibold text-darkest-accent">Successful versions</h3>
+					<ul className="mt-2 space-y-2">
+						{sortedCvs.map((applicationCv) => (
+							<ApplicationCvRow
+								key={applicationCv.applicationCvId}
+								applicationCv={applicationCv}
+							/>
+						))}
+					</ul>
+				</div>
+			) : null}
+		</>
+	);
+
+	const expandedPanel = isGrid ? (
+		<div
+			id={panelId}
+			className={cn(
+				"absolute top-full right-0 left-0 z-20 grid rounded-b-lg border border-t-0 border-light-gray bg-off-white px-3 pb-3 shadow-cool-light transition-[grid-template-rows,opacity] duration-300 ease-out motion-reduce:transition-none",
+				expanded ? "grid-rows-[1fr] opacity-100" : "pointer-events-none grid-rows-[0fr] opacity-0",
+			)}
+			aria-hidden={!expanded}
+			inert={!expanded}
+		>
+			<div className="min-h-0 overflow-hidden">
+				<div className="space-y-3 border-t border-light-gray pt-3 text-left">{panelBody}</div>
+			</div>
+		</div>
+	) : expanded ? (
+		<div id={panelId} className="space-y-3 pb-4 pl-12">
+			{panelBody}
+		</div>
+	) : (
+		<div id={panelId} hidden />
+	);
+
+	if (isGrid) {
+		return (
+			<li
+				className={cn(
+					"relative z-0 flex flex-col items-center rounded-lg border border-light-gray bg-off-white px-3 py-2.5 shadow-cool-light transition-[background-color,border-color,box-shadow,opacity,border-radius] duration-200 ease-out motion-reduce:transition-none",
+					"group-hover/preparing-grid:opacity-35 hover:z-10 hover:!opacity-100",
+					expanded && "z-20 rounded-b-none",
+					completionTransition && "generate-completion-highlight",
+				)}
+				data-expanded={expanded ? "true" : undefined}
+				data-completion-highlight={completionTransition ? "true" : undefined}
+			>
+				<button
+					type="button"
+					className="flex w-full min-w-0 flex-col items-center gap-1.5 rounded-md px-1 py-1 text-center focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-dark-accent/40 focus-visible:ring-offset-2"
+					aria-expanded={expanded}
+					aria-controls={panelId}
+					aria-label={`${expanded ? "Collapse" : "Expand"} ${application.applicationTitle} at ${application.company.companyName}`}
+					onClick={toggleExpanded}
+				>
+					<span className="absolute top-2 right-2 text-medium-gray">{disclosureChevron}</span>
+					<CompanyMark
+						companyName={application.company.companyName}
+						logoUrl={application.company.companyLogo}
+						size="preparing"
+					/>
+					<span className="line-clamp-2 text-sm font-semibold text-dark-gray">
+						{application.applicationTitle}
+					</span>
+					<span
+						className="rounded-full px-2 py-0.5 text-xs font-medium text-white"
+						style={{ backgroundColor: statusOption.color }}
+					>
+						{statusOption.label}
+					</span>
+					{expanded ? (
+						<span className="truncate text-xs text-medium-gray" aria-hidden="true">
+							{application.company.companyName}
+						</span>
+					) : null}
+					{showGridCollapsedMeta ? (
+						<span className="flex flex-col items-center gap-0.5 text-xs text-medium-gray">
+							{!hasActiveGeneration ? (
+								<span className="font-medium text-dark-gray">{stateLabel}</span>
+							) : null}
+							{relativeActivity && absoluteActivity ? (
+								<time dateTime={activityAt} title={absoluteActivity}>
+									{relativeActivity}
+								</time>
+							) : null}
+						</span>
+					) : null}
+					{showRichPreparingMeta ? (
+						<span className="flex flex-col items-center gap-0.5 text-xs text-medium-gray">
+							{placeLabel ? <span>{placeLabel}</span> : null}
+							{!hasActiveGeneration ? (
+								<span className="font-medium text-dark-gray">{stateLabel}</span>
+							) : null}
+							{formatModelParts.length > 0 ? (
+								<span title={latest?.modelId ?? undefined} className="text-medium-gray">
+									{formatModelParts.join(" · ")}
+								</span>
+							) : null}
+							{relativeActivity && absoluteActivity ? (
+								<time dateTime={activityAt} title={absoluteActivity}>
+									{relativeActivity}
+								</time>
+							) : null}
+						</span>
+					) : null}
+				</button>
+				<div className="mt-2 flex w-full shrink-0 justify-center">
+					{preparingPrimaryAction}
+				</div>
+				{expandedPanel}
+				<GenerateDialog
+					application={application}
+					baseCvs={baseCvs}
+					consent={consent}
+					open={dialogOpen}
+					onOpenChange={setDialogOpen}
+					atLimit={atLimit}
+					session={dialogSession}
+					initialJobDescription={initialJobDescription}
+				/>
+			</li>
+		);
+	}
+
 	return (
 		<li
 			className={cn(
-				isGrid
-					? "flex h-full flex-col rounded-lg border border-light-gray bg-white px-3 py-3"
-					: "border-b border-light-gray last:border-b-0",
+				"border-b border-light-gray last:border-b-0",
 				completionTransition && "generate-completion-highlight",
 			)}
 			data-completion-highlight={completionTransition ? "true" : undefined}
 		>
-			<div className={cn("flex items-start gap-3", !isGrid && "py-3")}>
+			<div className="flex items-start gap-3 py-3">
 				<CompanyMark
 					companyName={application.company.companyName}
 					logoUrl={application.company.companyLogo}
@@ -614,11 +819,9 @@ function ApplicationGenerateRow({
 								<span className="truncate font-semibold text-dark-gray">
 									{application.applicationTitle}
 								</span>
-								{!isGrid || expanded ? (
-									<span className="truncate text-sm text-medium-gray" aria-hidden="true">
-										{application.company.companyName}
-									</span>
-								) : null}
+								<span className="truncate text-sm text-medium-gray" aria-hidden="true">
+									{application.company.companyName}
+								</span>
 								{section === "generated" && closed ? (
 									<span
 										className="rounded-full px-2 py-0.5 text-xs font-medium text-white"
@@ -628,19 +831,7 @@ function ApplicationGenerateRow({
 									</span>
 								) : null}
 							</span>
-							{showGridCollapsedMeta ? (
-								<span className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-medium-gray">
-									{!hasActiveGeneration ? (
-										<span className="font-medium text-dark-gray">{stateLabel}</span>
-									) : null}
-									{relativeActivity && absoluteActivity ? (
-										<time dateTime={activityAt} title={absoluteActivity}>
-											{relativeActivity}
-										</time>
-									) : null}
-								</span>
-							) : null}
-							{showRichPreparingMeta ? (
+							{section === "preparing" ? (
 								<span className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-medium-gray">
 									<span
 										className="rounded-full px-2 py-0.5 font-medium text-white"
@@ -666,8 +857,7 @@ function ApplicationGenerateRow({
 										</time>
 									) : null}
 								</span>
-							) : null}
-							{section === "generated" ? (
+							) : (
 								<span className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-medium-gray">
 									<span>
 										{cvCount} Generated CV{cvCount === 1 ? "" : "s"}
@@ -678,107 +868,15 @@ function ApplicationGenerateRow({
 										</time>
 									) : null}
 								</span>
-							) : null}
-						</span>
-						<ChevronDown
-							aria-hidden="true"
-							className={cn(
-								"mt-1 shrink-0 text-medium-gray transition-transform",
-								expanded && "rotate-180",
 							)}
-							size={16}
-						/>
+						</span>
+						{disclosureChevron}
 					</button>
 				</div>
-				<div className="shrink-0 pt-0.5">
-					{section === "preparing"
-						? hasActiveGeneration
-							? activeIndicator
-							: generateButton
-						: null}
-				</div>
+				<div className="shrink-0 pt-0.5">{preparingPrimaryAction}</div>
 			</div>
 
-			{expanded ? (
-				<div id={panelId} className={cn("space-y-3 pb-4", isGrid ? "pt-3" : "pl-12")}>
-					{section === "generated" ? (
-						<div className="flex flex-wrap items-center gap-2">
-							{generateButton}
-						</div>
-					) : null}
-
-					{latest ? (
-						<div className="rounded-lg bg-off-white px-3 py-2">
-							<p className="text-sm text-dark-gray">
-								<span className="font-semibold">Latest status: </span>
-								{cvGenerationStatusLabels[latest.status]}
-							</p>
-							{latest.modelId ? (
-								<p className="mt-1 text-xs text-medium-gray" title={latest.modelId}>
-									Model: {displayModelName(latest.modelId)}
-								</p>
-							) : null}
-							{latest.status === "FAILED" ? (
-								<div className="mt-1 space-y-1 text-sm text-red-700">
-									{latest.errorMessage ? <p>{latest.errorMessage}</p> : null}
-									{latest.correlationId ? (
-										<p className="font-mono text-xs text-red-600">
-											Reference: {latest.correlationId}
-										</p>
-									) : null}
-								</div>
-							) : null}
-							{latest.status === "PENDING" ? (
-								<cancelFetcher.Form method="post" action="/generate" className="mt-2">
-									<input type="hidden" name="intent" value="cancel" />
-									<input type="hidden" name="cvGenerationId" value={latest.cvGenerationId} />
-									<Button
-										type="submit"
-										variant="outline"
-										size="sm"
-										disabled={cancelling}
-										aria-label={`Cancel generation for ${application.applicationTitle}`}
-										onClick={(event) => event.stopPropagation()}
-									>
-										{cancelling ? <LoaderCircle className="animate-spin" /> : <XCircle />}
-										Cancel
-									</Button>
-								</cancelFetcher.Form>
-							) : null}
-							{cancelFetcher.data?.ok === false ? (
-								<p role="alert" className="mt-2 text-sm text-red-700">
-									{cancelFetcher.data.error}
-								</p>
-							) : null}
-						</div>
-					) : (
-						<p className="text-sm text-medium-gray">No generations yet</p>
-					)}
-
-					{atLimit ? (
-						<p className="text-sm text-amber-800">
-							Generated CV limit reached ({applicationCvs.length} / {MAX_APPLICATION_CVS}). Delete
-							one to make room.
-						</p>
-					) : null}
-
-					{sortedCvs.length > 0 ? (
-						<div>
-							<h3 className="text-sm font-semibold text-darkest-accent">Successful versions</h3>
-							<ul className="mt-2 space-y-2">
-								{sortedCvs.map((applicationCv) => (
-									<ApplicationCvRow
-										key={applicationCv.applicationCvId}
-										applicationCv={applicationCv}
-									/>
-								))}
-							</ul>
-						</div>
-					) : null}
-				</div>
-			) : (
-				<div id={panelId} hidden />
-			)}
+			{expandedPanel}
 
 			<GenerateDialog
 				application={application}
@@ -939,7 +1037,7 @@ export function GenerateRoute() {
 		<ul
 			className={
 				layout === "grid"
-					? "grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3"
+					? "group/preparing-grid grid grid-cols-1 items-start gap-2 md:grid-cols-2 xl:grid-cols-3"
 					: "divide-y divide-light-gray border-y border-light-gray"
 			}
 		>
@@ -1013,13 +1111,8 @@ export function GenerateRoute() {
 
 	return (
 		<div className="h-full overflow-y-auto px-4 pb-12">
-			<section
-				className={cn(
-					"mx-auto",
-					preparingLayout === "grid" && preparing.length > 0 ? "max-w-6xl" : "max-w-4xl",
-				)}
-			>
-				<div className="mb-6 mx-auto max-w-4xl">
+			<section className="mx-auto max-w-4xl">
+				<div className="mb-6">
 					<h1 className="text-2xl font-bold text-darkest-accent sm:text-3xl">Generate</h1>
 					<p className="mt-1 text-medium-gray">
 						Create tailored application CVs from your Base CV library.
@@ -1090,7 +1183,6 @@ export function GenerateRoute() {
 							<section
 								aria-labelledby="generate-generated-heading"
 								data-layout="list"
-								className="mx-auto max-w-4xl"
 							>
 								<h2 id="generate-generated-heading" className="mb-3">
 									<button
