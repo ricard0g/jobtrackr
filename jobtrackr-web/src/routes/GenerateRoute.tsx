@@ -1,11 +1,4 @@
-import {
-	Download,
-	FileText,
-	LoaderCircle,
-	Sparkles,
-	Trash2,
-	XCircle,
-} from "lucide-react";
+import { ChevronDown, Download, LayoutGrid, List, LoaderCircle, Sparkles, Trash2, XCircle } from "lucide-react";
 import { useEffect, useId, useRef, useState } from "react";
 import { useFetcher, useLoaderData, useRevalidator } from "react-router";
 
@@ -28,7 +21,11 @@ import {
 	SelectValue,
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
-import type { Application } from "@/types/application";
+import { cn } from "@/lib/utils";
+import {
+	getApplicationStatusOption,
+	type Application,
+} from "@/types/application";
 import type { ApplicationCv } from "@/types/application-cv";
 import type { BaseCv } from "@/types/base-cv";
 import {
@@ -44,13 +41,44 @@ import {
 	type GenerateLoaderData,
 } from "@/routes/generate-data";
 import {
+	activeElapsedStartedAt,
+	companyMonogram,
+	displayModelName,
+	formatAbsoluteTime,
+	formatElapsedDuration,
+	formatRelativeTime,
+	generationStateLabel,
+	locationRemoteLabel,
+	shouldStartExpanded,
+} from "@/routes/generate-display";
+import {
+	readPreparingLayoutPreference,
+	writePreparingLayoutPreference,
+	type PreparingLayout,
+} from "@/routes/generate-layout-preference";
+import {
 	buildGenerateSections,
+	generatedActivityAt,
 	latestGeneration,
+	newestGeneratedCv,
+	preparingActivityAt,
 	type GenerateSectionItem,
 } from "@/routes/generate-sections";
 
 const formatLabels = { PDF: "PDF", DOCX: "DOCX", MARKDOWN: "Markdown" } as const;
 const POLL_INTERVAL_MS = 3_000;
+const ELAPSED_TICK_MS = 1_000;
+
+function useNow(enabled: boolean): Date {
+	const [now, setNow] = useState(() => new Date());
+	useEffect(() => {
+		if (!enabled) return;
+		setNow(new Date());
+		const intervalId = window.setInterval(() => setNow(new Date()), ELAPSED_TICK_MS);
+		return () => window.clearInterval(intervalId);
+	}, [enabled]);
+	return enabled ? now : new Date();
+}
 
 const formatBytes = (bytes: number) =>
 	new Intl.NumberFormat("en", {
@@ -58,10 +86,6 @@ const formatBytes = (bytes: number) =>
 		unit: bytes >= 1024 * 1024 ? "megabyte" : "kilobyte",
 		maximumFractionDigits: 1,
 	}).format(bytes / (bytes >= 1024 * 1024 ? 1024 * 1024 : 1024));
-
-const formatDate = (value: string) =>
-	new Intl.DateTimeFormat("en", { dateStyle: "medium", timeStyle: "short" }).format(new Date(value));
-
 const openSignedDownload = (uri: string) => {
 	const link = document.createElement("a");
 	link.href = uri;
@@ -98,7 +122,7 @@ function ApplicationCvRow({ applicationCv }: { applicationCv: ApplicationCv }) {
 				<p className="truncate text-sm font-semibold text-dark-gray">{applicationCv.originalFilename}</p>
 				<p className="mt-0.5 text-xs text-medium-gray">
 					v{applicationCv.version} · {formatLabels[applicationCv.format]} ·{" "}
-					{formatBytes(applicationCv.byteSize)} · {formatDate(applicationCv.createdAt)}
+					{formatBytes(applicationCv.byteSize)} · {formatAbsoluteTime(applicationCv.createdAt)}
 				</p>
 			</div>
 			<div className="flex gap-1">
@@ -322,8 +346,8 @@ function GenerateDialogForm({
 							<SelectValue />
 						</SelectTrigger>
 						<SelectContent>
+							<SelectItem value="DOCX">DOCX (Recommended)</SelectItem>
 							<SelectItem value="PDF">PDF</SelectItem>
-							<SelectItem value="DOCX">DOCX</SelectItem>
 							<SelectItem value="MARKDOWN">Markdown</SelectItem>
 						</SelectContent>
 					</Select>
@@ -414,6 +438,46 @@ function GenerateDialogForm({
 	);
 }
 
+function CompanyMark({
+	companyName,
+	logoUrl,
+	size,
+}: {
+	companyName: string;
+	logoUrl: string | null;
+	size: "preparing" | "generated";
+}) {
+	const [failed, setFailed] = useState(false);
+	const dimensions = size === "preparing" ? "h-9 w-9 text-xs" : "h-6 w-6 text-[10px]";
+
+	if (!logoUrl || failed) {
+		return (
+			<span
+				aria-hidden="true"
+				className={cn(
+					"inline-flex shrink-0 items-center justify-center rounded-md bg-lightest-accent font-semibold text-dark-accent",
+					dimensions,
+				)}
+			>
+				{companyMonogram(companyName)}
+			</span>
+		);
+	}
+
+	return (
+		<img
+			src={logoUrl}
+			alt=""
+			aria-hidden="true"
+			className={cn(
+				"shrink-0 rounded-md object-contain",
+				size === "preparing" ? "h-9 max-h-9 w-auto max-w-9" : "h-6 max-h-6 w-auto max-w-6",
+			)}
+			onError={() => setFailed(true)}
+		/>
+	);
+}
+
 function ApplicationGenerateRow({
 	application,
 	generations,
@@ -421,6 +485,12 @@ function ApplicationGenerateRow({
 	baseCvs,
 	consent,
 	initialJobDescription,
+	section,
+	layout,
+	now,
+	expanded,
+	onExpandedChange,
+	completionTransition = false,
 }: {
 	application: Application;
 	generations: CvGeneration[];
@@ -428,105 +498,385 @@ function ApplicationGenerateRow({
 	baseCvs: BaseCv[];
 	consent: AiConsent;
 	initialJobDescription: string;
+	section: "preparing" | "generated";
+	layout: PreparingLayout;
+	now: Date;
+	expanded: boolean;
+	onExpandedChange: (expanded: boolean) => void;
+	completionTransition?: boolean;
 }) {
 	const cancelFetcher = useFetcher<GenerateActionData>();
 	const [dialogOpen, setDialogOpen] = useState(false);
 	const [dialogSession, setDialogSession] = useState(0);
+	const panelId = useId();
+	const isGrid = section === "preparing" && layout === "grid";
 	const latest = latestGeneration(generations);
 	const atLimit = applicationCvs.length >= MAX_APPLICATION_CVS;
+	const canGenerate = baseCvs.length > 0 && !atLimit;
 	const cancelling = cancelFetcher.state !== "idle";
 	const sortedCvs = applicationCvs.toSorted((left, right) => right.version - left.version);
+	const hasActiveGeneration = generations.some((generation) =>
+		isActiveCvGenerationStatus(generation.status),
+	);
+	const activeGeneration =
+		generations.find((generation) => generation.status === "PROCESSING") ??
+		generations.find((generation) => generation.status === "PENDING") ??
+		null;
+	const statusOption = getApplicationStatusOption(application.applicationStatus);
+	const placeLabel = locationRemoteLabel(application);
+	const stateLabel = generationStateLabel(generations, applicationCvs.length > 0);
+	const activityAt =
+		section === "generated"
+			? generatedActivityAt(applicationCvs)
+			: preparingActivityAt(application, generations);
+	const relativeActivity = activityAt ? formatRelativeTime(activityAt) : null;
+	const absoluteActivity = activityAt ? formatAbsoluteTime(activityAt) : null;
+	const closed =
+		application.applicationStatus === "REJECTED" ||
+		application.applicationStatus === "WITHDRAWN";
+	const formatModelParts: string[] = [];
+	if (latest?.requestedFormat) {
+		formatModelParts.push(formatLabels[latest.requestedFormat]);
+	}
+	if (latest?.modelId) {
+		formatModelParts.push(displayModelName(latest.modelId));
+	}
+	const newestCv = newestGeneratedCv(applicationCvs);
+	const cvCount = applicationCvs.length;
 
 	const openDialog = () => {
 		setDialogSession((value) => value + 1);
 		setDialogOpen(true);
 	};
 
-	return (
-		<li className="rounded-xl border border-light-gray bg-white p-4">
-			<div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
-				<div className="min-w-0 flex-1">
-					<div className="flex items-start gap-3">
-						<div className="rounded-lg bg-lightest-accent p-2 text-dark-accent">
-							<FileText aria-hidden="true" />
-						</div>
-						<div className="min-w-0">
-							<p className="truncate font-semibold text-dark-gray">{application.applicationTitle}</p>
-							<p className="mt-1 text-sm text-medium-gray">{application.company.companyName}</p>
-						</div>
-					</div>
+	const toggleExpanded = () => onExpandedChange(!expanded);
 
-					{latest ? (
-						<div className="mt-4 rounded-lg bg-off-white px-3 py-2">
-							<p className="text-sm text-dark-gray">
-								<span className="font-semibold">Latest status: </span>
-								{cvGenerationStatusLabels[latest.status]}
-							</p>
-							{latest.status === "FAILED" ? (
-								<div className="mt-1 space-y-1 text-sm text-red-700">
-									{latest.errorMessage ? <p>{latest.errorMessage}</p> : null}
-									{latest.correlationId ? (
-										<p className="font-mono text-xs text-red-600">
-											Reference: {latest.correlationId}
-										</p>
-									) : null}
-								</div>
-							) : null}
-							{latest.status === "PENDING" ? (
-								<cancelFetcher.Form method="post" action="/generate" className="mt-2">
-									<input type="hidden" name="intent" value="cancel" />
-									<input type="hidden" name="cvGenerationId" value={latest.cvGenerationId} />
-									<Button
-										type="submit"
-										variant="outline"
-										size="sm"
-										disabled={cancelling}
-										aria-label={`Cancel generation for ${application.applicationTitle}`}
-									>
-										{cancelling ? <LoaderCircle className="animate-spin" /> : <XCircle />}
-										Cancel
-									</Button>
-								</cancelFetcher.Form>
-							) : null}
-							{cancelFetcher.data?.ok === false ? (
-								<p role="alert" className="mt-2 text-sm text-red-700">
-									{cancelFetcher.data.error}
+	const generateButton = (
+		<Button
+			type="button"
+			size="sm"
+			onClick={(event) => {
+				event.stopPropagation();
+				openDialog();
+			}}
+			disabled={!canGenerate}
+			aria-label={`Generate CV for ${application.applicationTitle}`}
+		>
+			<Sparkles />
+			{section === "generated" ? "Generate again" : "Generate"}
+		</Button>
+	);
+
+	const activeLabel = activeGeneration
+		? cvGenerationStatusLabels[activeGeneration.status]
+		: null;
+	const activeElapsed = activeGeneration
+		? formatElapsedDuration(activeElapsedStartedAt(activeGeneration), now)
+		: null;
+	const activeIndicator = hasActiveGeneration && activeLabel ? (
+		<span className="inline-flex items-center gap-1.5 text-sm font-medium text-dark-accent">
+			<LoaderCircle className="animate-spin" size={14} aria-hidden="true" />
+			{activeLabel}
+			{activeElapsed ? ` · ${activeElapsed}` : null}
+		</span>
+	) : null;
+
+	const showRichPreparingMeta = section === "preparing" && (!isGrid || expanded);
+	const showGridCollapsedMeta = isGrid && !expanded;
+
+	const preparingPrimaryAction =
+		section === "preparing" ? (hasActiveGeneration ? activeIndicator : generateButton) : null;
+
+	const disclosureChevron = (
+		<ChevronDown
+			aria-hidden="true"
+			className={cn(
+				"shrink-0 text-medium-gray transition-transform duration-300 ease-out motion-reduce:transition-none",
+				expanded && "rotate-180",
+			)}
+			size={16}
+		/>
+	);
+
+	const panelBody = (
+		<>
+			{section === "generated" ? (
+				<div className="flex flex-wrap items-center gap-2">{generateButton}</div>
+			) : null}
+
+			{latest ? (
+				<div
+					className={cn(
+						"rounded-lg px-3 py-2",
+						isGrid ? "border border-light-gray bg-white" : "bg-off-white",
+					)}
+				>
+					<p className="text-sm text-dark-gray">
+						<span className="font-semibold">Latest status: </span>
+						{cvGenerationStatusLabels[latest.status]}
+					</p>
+					{latest.modelId ? (
+						<p className="mt-1 text-xs text-medium-gray" title={latest.modelId}>
+							Model: {displayModelName(latest.modelId)}
+						</p>
+					) : null}
+					{latest.status === "FAILED" ? (
+						<div className="mt-1 space-y-1 text-sm text-red-700">
+							{latest.errorMessage ? <p>{latest.errorMessage}</p> : null}
+							{latest.correlationId ? (
+								<p className="font-mono text-xs text-red-600">
+									Reference: {latest.correlationId}
 								</p>
 							) : null}
 						</div>
-					) : (
-						<p className="mt-4 text-sm text-medium-gray">No generations yet</p>
-					)}
+					) : null}
+					{latest.status === "PENDING" ? (
+						<cancelFetcher.Form method="post" action="/generate" className="mt-2">
+							<input type="hidden" name="intent" value="cancel" />
+							<input type="hidden" name="cvGenerationId" value={latest.cvGenerationId} />
+							<Button
+								type="submit"
+								variant="outline"
+								size="sm"
+								disabled={cancelling}
+								aria-label={`Cancel generation for ${application.applicationTitle}`}
+								onClick={(event) => event.stopPropagation()}
+							>
+								{cancelling ? <LoaderCircle className="animate-spin" /> : <XCircle />}
+								Cancel
+							</Button>
+						</cancelFetcher.Form>
+					) : null}
+					{cancelFetcher.data?.ok === false ? (
+						<p role="alert" className="mt-2 text-sm text-red-700">
+							{cancelFetcher.data.error}
+						</p>
+					) : null}
 				</div>
-
-				<Button
-					type="button"
-					onClick={openDialog}
-					disabled={atLimit}
-					aria-label={`Generate CV for ${application.applicationTitle}`}
-				>
-					<Sparkles />
-					Generate
-				</Button>
-			</div>
+			) : (
+				<p className="text-sm text-medium-gray">No generations yet</p>
+			)}
 
 			{atLimit ? (
-				<p className="mt-3 text-sm text-amber-800">
-					Generated CV limit reached ({applicationCvs.length} / {MAX_APPLICATION_CVS}). Delete one to
-					make room.
+				<p className="text-sm text-amber-800">
+					Generated CV limit reached ({applicationCvs.length} / {MAX_APPLICATION_CVS}). Delete one
+					to make room.
 				</p>
 			) : null}
 
 			{sortedCvs.length > 0 ? (
-				<div className="mt-4">
+				<div>
 					<h3 className="text-sm font-semibold text-darkest-accent">Successful versions</h3>
 					<ul className="mt-2 space-y-2">
 						{sortedCvs.map((applicationCv) => (
-							<ApplicationCvRow key={applicationCv.applicationCvId} applicationCv={applicationCv} />
+							<ApplicationCvRow
+								key={applicationCv.applicationCvId}
+								applicationCv={applicationCv}
+							/>
 						))}
 					</ul>
 				</div>
 			) : null}
+		</>
+	);
+
+	const expandedPanel = isGrid ? (
+		<div
+			id={panelId}
+			className={cn(
+				"absolute top-full right-0 left-0 z-20 grid rounded-b-lg border border-t-0 border-light-gray bg-off-white px-3 pb-3 shadow-cool-light transition-[grid-template-rows,opacity] duration-300 ease-out motion-reduce:transition-none",
+				expanded ? "grid-rows-[1fr] opacity-100" : "pointer-events-none grid-rows-[0fr] opacity-0",
+			)}
+			aria-hidden={!expanded}
+			inert={!expanded}
+		>
+			<div className="min-h-0 overflow-hidden">
+				<div className="space-y-3 border-t border-light-gray pt-3 text-left">{panelBody}</div>
+			</div>
+		</div>
+	) : expanded ? (
+		<div id={panelId} className="space-y-3 pb-4 pl-12">
+			{panelBody}
+		</div>
+	) : (
+		<div id={panelId} hidden />
+	);
+
+	if (isGrid) {
+		return (
+			<li
+				className={cn(
+					"relative z-0 flex flex-col items-center rounded-lg border border-light-gray bg-off-white px-3 py-2.5 shadow-cool-light transition-[background-color,border-color,box-shadow,opacity,border-radius] duration-200 ease-out motion-reduce:transition-none",
+					"group-hover/preparing-grid:opacity-35 hover:z-10 hover:!opacity-100",
+					expanded && "z-20 rounded-b-none",
+					completionTransition && "generate-completion-highlight",
+				)}
+				data-expanded={expanded ? "true" : undefined}
+				data-completion-highlight={completionTransition ? "true" : undefined}
+			>
+				<button
+					type="button"
+					className="flex w-full min-w-0 flex-col items-center gap-1.5 rounded-md px-1 py-1 text-center focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-dark-accent/40 focus-visible:ring-offset-2"
+					aria-expanded={expanded}
+					aria-controls={panelId}
+					aria-label={`${expanded ? "Collapse" : "Expand"} ${application.applicationTitle} at ${application.company.companyName}`}
+					onClick={toggleExpanded}
+				>
+					<span className="absolute top-2 right-2 text-medium-gray">{disclosureChevron}</span>
+					<CompanyMark
+						companyName={application.company.companyName}
+						logoUrl={application.company.companyLogo}
+						size="preparing"
+					/>
+					<span className="line-clamp-2 text-sm font-semibold text-dark-gray">
+						{application.applicationTitle}
+					</span>
+					<span
+						className="rounded-full px-2 py-0.5 text-xs font-medium text-white"
+						style={{ backgroundColor: statusOption.color }}
+					>
+						{statusOption.label}
+					</span>
+					{expanded ? (
+						<span className="truncate text-xs text-medium-gray" aria-hidden="true">
+							{application.company.companyName}
+						</span>
+					) : null}
+					{showGridCollapsedMeta ? (
+						<span className="flex flex-col items-center gap-0.5 text-xs text-medium-gray">
+							{!hasActiveGeneration ? (
+								<span className="font-medium text-dark-gray">{stateLabel}</span>
+							) : null}
+							{relativeActivity && absoluteActivity ? (
+								<time dateTime={activityAt} title={absoluteActivity}>
+									{relativeActivity}
+								</time>
+							) : null}
+						</span>
+					) : null}
+					{showRichPreparingMeta ? (
+						<span className="flex flex-col items-center gap-0.5 text-xs text-medium-gray">
+							{placeLabel ? <span>{placeLabel}</span> : null}
+							{!hasActiveGeneration ? (
+								<span className="font-medium text-dark-gray">{stateLabel}</span>
+							) : null}
+							{formatModelParts.length > 0 ? (
+								<span title={latest?.modelId ?? undefined} className="text-medium-gray">
+									{formatModelParts.join(" · ")}
+								</span>
+							) : null}
+							{relativeActivity && absoluteActivity ? (
+								<time dateTime={activityAt} title={absoluteActivity}>
+									{relativeActivity}
+								</time>
+							) : null}
+						</span>
+					) : null}
+				</button>
+				<div className="mt-2 flex w-full shrink-0 justify-center">
+					{preparingPrimaryAction}
+				</div>
+				{expandedPanel}
+				<GenerateDialog
+					application={application}
+					baseCvs={baseCvs}
+					consent={consent}
+					open={dialogOpen}
+					onOpenChange={setDialogOpen}
+					atLimit={atLimit}
+					session={dialogSession}
+					initialJobDescription={initialJobDescription}
+				/>
+			</li>
+		);
+	}
+
+	return (
+		<li
+			className={cn(
+				"border-b border-light-gray last:border-b-0",
+				completionTransition && "generate-completion-highlight",
+			)}
+			data-completion-highlight={completionTransition ? "true" : undefined}
+		>
+			<div className="flex items-start gap-3 py-3">
+				<CompanyMark
+					companyName={application.company.companyName}
+					logoUrl={application.company.companyLogo}
+					size={section === "preparing" ? "preparing" : "generated"}
+				/>
+				<div className="min-w-0 flex-1">
+					<button
+						type="button"
+						className="flex w-full min-w-0 items-start gap-2 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-dark-accent/40 focus-visible:ring-offset-2"
+						aria-expanded={expanded}
+						aria-controls={panelId}
+						aria-label={`${expanded ? "Collapse" : "Expand"} ${application.applicationTitle} at ${application.company.companyName}`}
+						onClick={toggleExpanded}
+					>
+						<span className="min-w-0 flex-1">
+							<span className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
+								<span className="truncate font-semibold text-dark-gray">
+									{application.applicationTitle}
+								</span>
+								<span className="truncate text-sm text-medium-gray" aria-hidden="true">
+									{application.company.companyName}
+								</span>
+								{section === "generated" && closed ? (
+									<span
+										className="rounded-full px-2 py-0.5 text-xs font-medium text-white"
+										style={{ backgroundColor: statusOption.color }}
+									>
+										{statusOption.label}
+									</span>
+								) : null}
+							</span>
+							{section === "preparing" ? (
+								<span className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-medium-gray">
+									<span
+										className="rounded-full px-2 py-0.5 font-medium text-white"
+										style={{ backgroundColor: statusOption.color }}
+									>
+										{statusOption.label}
+									</span>
+									{placeLabel ? <span>{placeLabel}</span> : null}
+									{!hasActiveGeneration ? (
+										<span className="font-medium text-dark-gray">{stateLabel}</span>
+									) : null}
+									{formatModelParts.length > 0 ? (
+										<span
+											title={latest?.modelId ?? undefined}
+											className="text-medium-gray"
+										>
+											{formatModelParts.join(" · ")}
+										</span>
+									) : null}
+									{relativeActivity && absoluteActivity ? (
+										<time dateTime={activityAt} title={absoluteActivity}>
+											{relativeActivity}
+										</time>
+									) : null}
+								</span>
+							) : (
+								<span className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-medium-gray">
+									<span>
+										{cvCount} Generated CV{cvCount === 1 ? "" : "s"}
+									</span>
+									{relativeActivity && absoluteActivity && newestCv ? (
+										<time dateTime={activityAt} title={absoluteActivity}>
+											{relativeActivity}
+										</time>
+									) : null}
+								</span>
+							)}
+						</span>
+						{disclosureChevron}
+					</button>
+				</div>
+				<div className="shrink-0 pt-0.5">{preparingPrimaryAction}</div>
+			</div>
+
+			{expandedPanel}
 
 			<GenerateDialog
 				application={application}
@@ -552,9 +902,47 @@ export function GenerateRoute() {
 		consent,
 	} = useLoaderData() as GenerateLoaderData;
 	const revalidator = useRevalidator();
+	const [generatedSectionOpen, setGeneratedSectionOpen] = useState(true);
+	const [preparingLayout, setPreparingLayout] = useState<PreparingLayout>(() =>
+		readPreparingLayoutPreference(),
+	);
+	const [expandedByApplicationId, setExpandedByApplicationId] = useState(
+		() => new Map<number, boolean>(),
+	);
+	const [completionHighlightIds, setCompletionHighlightIds] = useState<Set<number>>(
+		() => new Set(),
+	);
+	const [completionAnnouncement, setCompletionAnnouncement] = useState("");
+	const previousActiveIdsRef = useRef<Set<number> | null>(null);
+	const generatedPanelId = useId();
 	const hasActiveGeneration = generations.some((generation) =>
 		isActiveCvGenerationStatus(generation.status),
 	);
+	const now = useNow(hasActiveGeneration);
+
+	const setApplicationExpanded = (applicationId: number, expanded: boolean) => {
+		setExpandedByApplicationId((previous) => {
+			const next = new Map(previous);
+			next.set(applicationId, expanded);
+			return next;
+		});
+	};
+
+	const resolveExpanded = (
+		applicationId: number,
+		applicationGenerations: CvGeneration[],
+		completionTransition: boolean,
+	) => {
+		if (expandedByApplicationId.has(applicationId)) {
+			return expandedByApplicationId.get(applicationId)!;
+		}
+		return completionTransition || shouldStartExpanded(applicationGenerations);
+	};
+
+	const selectPreparingLayout = (layout: PreparingLayout) => {
+		setPreparingLayout(layout);
+		writePreparingLayoutPreference(layout);
+	};
 
 	useEffect(() => {
 		if (!hasActiveGeneration) return;
@@ -566,26 +954,159 @@ export function GenerateRoute() {
 		return () => window.clearInterval(intervalId);
 	}, [hasActiveGeneration, revalidator]);
 
+	useEffect(() => {
+		const activeIds = new Set(
+			generations
+				.filter((generation) => isActiveCvGenerationStatus(generation.status))
+				.map((generation) => generation.applicationId),
+		);
+
+		if (previousActiveIdsRef.current === null) {
+			previousActiveIdsRef.current = activeIds;
+			return;
+		}
+
+		const newlyCompleted: number[] = [];
+		const stillWatching = new Set(activeIds);
+
+		for (const applicationId of previousActiveIdsRef.current) {
+			if (activeIds.has(applicationId)) continue;
+
+			const docs = applicationCvsByApplicationId[applicationId] ?? [];
+			const applicationGenerations = generations.filter(
+				(generation) => generation.applicationId === applicationId,
+			);
+			const latest = latestGeneration(applicationGenerations);
+
+			if (latest?.status === "COMPLETED" && docs.length > 0) {
+				newlyCompleted.push(applicationId);
+				continue;
+			}
+
+			// Status completed but Generated CV rows have not arrived yet — keep
+			// watching so a later revalidation can still announce the transition.
+			if (latest?.status === "COMPLETED" && docs.length === 0) {
+				stillWatching.add(applicationId);
+			}
+			// CANCELLED / FAILED / other terminals: drop without success UX.
+		}
+
+		if (newlyCompleted.length > 0) {
+			setCompletionHighlightIds((previous) => new Set([...previous, ...newlyCompleted]));
+			setExpandedByApplicationId((previous) => {
+				const next = new Map(previous);
+				for (const applicationId of newlyCompleted) {
+					next.set(applicationId, true);
+				}
+				return next;
+			});
+			setGeneratedSectionOpen(true);
+			const titles = newlyCompleted.map((applicationId) => {
+				const match = applications.find((item) => item.applicationId === applicationId);
+				return match?.applicationTitle ?? "application";
+			});
+			setCompletionAnnouncement(
+				titles.length === 1
+					? `Generated CV ready for ${titles[0]}`
+					: `Generated CVs ready for ${titles.join(", ")}`,
+			);
+		}
+
+		previousActiveIdsRef.current = stillWatching;
+	}, [applications, applicationCvsByApplicationId, generations]);
+
+	useEffect(() => {
+		if (completionHighlightIds.size === 0) return;
+		const timeoutId = window.setTimeout(() => {
+			setCompletionHighlightIds(new Set());
+		}, 2_500);
+		return () => window.clearTimeout(timeoutId);
+	}, [completionHighlightIds]);
+
 	const { preparing, generated } = buildGenerateSections(
 		applications,
 		generations,
 		applicationCvsByApplicationId,
 	);
 
-	const renderSectionItems = (items: GenerateSectionItem[]) => (
-		<ul className="space-y-3">
-			{items.map(({ application, generations: applicationGenerations, applicationCvs }) => (
-				<ApplicationGenerateRow
-					key={application.applicationId}
-					application={application}
-					generations={applicationGenerations}
-					applicationCvs={applicationCvs}
-					baseCvs={baseCvs}
-					consent={consent}
-					initialJobDescription={jobDescriptionsByApplicationId[application.applicationId] ?? ""}
-				/>
-			))}
+	const renderSectionItems = (
+		items: GenerateSectionItem[],
+		section: "preparing" | "generated",
+		layout: PreparingLayout,
+	) => (
+		<ul
+			className={
+				layout === "grid"
+					? "group/preparing-grid grid grid-cols-1 items-start gap-2 md:grid-cols-2 xl:grid-cols-3"
+					: "divide-y divide-light-gray border-y border-light-gray"
+			}
+		>
+			{items.map(({ application, generations: applicationGenerations, applicationCvs }) => {
+				const newlyCompleted = completionHighlightIds.has(application.applicationId);
+				return (
+					<ApplicationGenerateRow
+						key={application.applicationId}
+						application={application}
+						generations={applicationGenerations}
+						applicationCvs={applicationCvs}
+						baseCvs={baseCvs}
+						consent={consent}
+						initialJobDescription={
+							jobDescriptionsByApplicationId[application.applicationId] ?? ""
+						}
+						section={section}
+						layout={layout}
+						now={now}
+						expanded={resolveExpanded(
+							application.applicationId,
+							applicationGenerations,
+							newlyCompleted,
+						)}
+						onExpandedChange={(next) =>
+							setApplicationExpanded(application.applicationId, next)
+						}
+						completionTransition={newlyCompleted}
+					/>
+				);
+			})}
 		</ul>
+	);
+
+	const layoutControl = (
+		<div
+			role="group"
+			aria-label="Preparing layout"
+			className="inline-flex rounded-lg border border-light-gray bg-white p-0.5"
+		>
+			<Button
+				type="button"
+				variant="ghost"
+				size="sm"
+				aria-pressed={preparingLayout === "list"}
+				className={cn(
+					"rounded-md",
+					preparingLayout === "list" && "bg-lightest-accent text-dark-accent",
+				)}
+				onClick={() => selectPreparingLayout("list")}
+			>
+				<List aria-hidden="true" />
+				List
+			</Button>
+			<Button
+				type="button"
+				variant="ghost"
+				size="sm"
+				aria-pressed={preparingLayout === "grid"}
+				className={cn(
+					"rounded-md",
+					preparingLayout === "grid" && "bg-lightest-accent text-dark-accent",
+				)}
+				onClick={() => selectPreparingLayout("grid")}
+			>
+				<LayoutGrid aria-hidden="true" />
+				Grid
+			</Button>
+		</div>
 	);
 
 	return (
@@ -605,8 +1126,15 @@ export function GenerateRoute() {
 					</p>
 				) : null}
 
+				<div role="status" aria-live="polite" className="sr-only">
+					{completionAnnouncement}
+				</div>
+
 				{baseCvs.length === 0 ? (
-					<p className="mb-4 rounded-lg border border-light-gray bg-white px-3 py-2 text-sm text-medium-gray">
+					<p
+						role="status"
+						className="mb-4 rounded-lg border border-light-gray bg-white px-3 py-2 text-sm text-medium-gray"
+					>
 						Upload a Base CV in Documents before you can generate tailored CVs.
 					</p>
 				) : null}
@@ -630,15 +1158,21 @@ export function GenerateRoute() {
 					</div>
 				) : (
 					<div className="space-y-8">
-						<section aria-labelledby="generate-preparing-heading">
-							<h2
-								id="generate-preparing-heading"
-								className="mb-3 text-lg font-semibold text-darkest-accent"
-							>
-								Preparing
-							</h2>
+						<section
+							aria-labelledby="generate-preparing-heading"
+							data-layout={preparingLayout}
+						>
+							<div className="mb-3 flex flex-wrap items-center justify-between gap-3">
+								<h2
+									id="generate-preparing-heading"
+									className="text-lg font-semibold text-darkest-accent"
+								>
+									Preparing
+								</h2>
+								{preparing.length > 0 ? layoutControl : null}
+							</div>
 							{preparing.length > 0 ? (
-								renderSectionItems(preparing)
+								renderSectionItems(preparing, "preparing", preparingLayout)
 							) : (
 								<p className="rounded-lg border border-dashed border-light-gray px-3 py-4 text-sm text-medium-gray">
 									Nothing to prepare
@@ -646,14 +1180,36 @@ export function GenerateRoute() {
 							)}
 						</section>
 						{generated.length > 0 ? (
-							<section aria-labelledby="generate-generated-heading">
-								<h2
-									id="generate-generated-heading"
-									className="mb-3 text-lg font-semibold text-darkest-accent"
-								>
-									Generated
+							<section
+								aria-labelledby="generate-generated-heading"
+								data-layout="list"
+							>
+								<h2 id="generate-generated-heading" className="mb-3">
+									<button
+										type="button"
+										className="flex w-full items-center justify-between gap-2 text-left text-lg font-semibold text-darkest-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-dark-accent/40 focus-visible:ring-offset-2"
+										aria-expanded={generatedSectionOpen}
+										aria-controls={generatedPanelId}
+										onClick={() => setGeneratedSectionOpen((value) => !value)}
+									>
+										Generated
+										<ChevronDown
+											aria-hidden="true"
+											className={cn(
+												"shrink-0 text-medium-gray transition-transform",
+												generatedSectionOpen && "rotate-180",
+											)}
+											size={18}
+										/>
+									</button>
 								</h2>
-								{renderSectionItems(generated)}
+								{generatedSectionOpen ? (
+									<div id={generatedPanelId}>
+										{renderSectionItems(generated, "generated", "list")}
+									</div>
+								) : (
+									<div id={generatedPanelId} hidden />
+								)}
 							</section>
 						) : null}
 					</div>

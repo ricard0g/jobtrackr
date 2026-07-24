@@ -65,6 +65,26 @@
 	.scrollbar-hide::-webkit-scrollbar {
 		display: none;
 	}
+
+	@keyframes generate-completion-highlight {
+		from {
+			background-color: var(--color-light-accent);
+		}
+		to {
+			background-color: transparent;
+		}
+	}
+
+	.generate-completion-highlight {
+		animation: generate-completion-highlight 2s ease-out;
+	}
+
+	@media (prefers-reduced-motion: reduce) {
+		.generate-completion-highlight {
+			animation: none;
+			background-color: var(--color-lightest-accent);
+		}
+	}
 }
 
 @theme inline {

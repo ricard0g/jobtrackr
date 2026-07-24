@@ -74,6 +74,21 @@ const byPreparingOrder = (left: GenerateSectionItem, right: GenerateSectionItem)
 	return rightRank.activityAt.localeCompare(leftRank.activityAt);
 };
 
+export const preparingActivityAt = (
+	application: Application,
+	generations: CvGeneration[],
+): string =>
+	preparingRank({ application, generations, applicationCvs: [] }).activityAt;
+
+export const newestGeneratedCv = (applicationCvs: ApplicationCv[]) =>
+	applicationCvs.reduce<ApplicationCv | null>((newest, applicationCv) => {
+		if (!newest || applicationCv.createdAt > newest.createdAt) return applicationCv;
+		return newest;
+	}, null);
+
+export const generatedActivityAt = (applicationCvs: ApplicationCv[]): string =>
+	newestGeneratedCv(applicationCvs)?.createdAt ?? "";
+
 export function buildGenerateSections(
 	applications: Application[],
 	generations: CvGeneration[],
