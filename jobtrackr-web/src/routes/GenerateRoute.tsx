@@ -43,6 +43,11 @@ import {
 	type GenerateActionData,
 	type GenerateLoaderData,
 } from "@/routes/generate-data";
+import {
+	buildGenerateSections,
+	latestGeneration,
+	type GenerateSectionItem,
+} from "@/routes/generate-sections";
 
 const formatLabels = { PDF: "PDF", DOCX: "DOCX", MARKDOWN: "Markdown" } as const;
 const POLL_INTERVAL_MS = 3_000;
@@ -64,9 +69,6 @@ const openSignedDownload = (uri: string) => {
 	link.target = "_blank";
 	link.click();
 };
-
-const latestGeneration = (generations: CvGeneration[]) =>
-	generations.toSorted((left, right) => right.createdAt.localeCompare(left.createdAt))[0] ?? null;
 
 function ApplicationCvRow({ applicationCv }: { applicationCv: ApplicationCv }) {
 	const deleteFetcher = useFetcher<GenerateActionData>();
@@ -564,14 +566,26 @@ export function GenerateRoute() {
 		return () => window.clearInterval(intervalId);
 	}, [hasActiveGeneration, revalidator]);
 
-	const generationsByApplicationId = applications.reduce<Record<number, CvGeneration[]>>(
-		(accumulator, application) => {
-			accumulator[application.applicationId] = generations.filter(
-				(generation) => generation.applicationId === application.applicationId,
-			);
-			return accumulator;
-		},
-		{},
+	const { preparing, generated } = buildGenerateSections(
+		applications,
+		generations,
+		applicationCvsByApplicationId,
+	);
+
+	const renderSectionItems = (items: GenerateSectionItem[]) => (
+		<ul className="space-y-3">
+			{items.map(({ application, generations: applicationGenerations, applicationCvs }) => (
+				<ApplicationGenerateRow
+					key={application.applicationId}
+					application={application}
+					generations={applicationGenerations}
+					applicationCvs={applicationCvs}
+					baseCvs={baseCvs}
+					consent={consent}
+					initialJobDescription={jobDescriptionsByApplicationId[application.applicationId] ?? ""}
+				/>
+			))}
+		</ul>
 	);
 
 	return (
@@ -584,48 +598,66 @@ export function GenerateRoute() {
 					</p>
 				</div>
 
-				<div className="rounded-2xl border border-light-gray bg-off-white p-4 shadow-cool-light sm:p-6">
-					{hasActiveGeneration ? (
-						<p className="mb-4 flex items-center gap-2 text-sm text-dark-accent" aria-live="polite">
-							<LoaderCircle className="animate-spin" size={16} />
-							Updating generation status…
-						</p>
-					) : null}
+				{hasActiveGeneration ? (
+					<p className="mb-4 flex items-center gap-2 text-sm text-dark-accent" aria-live="polite">
+						<LoaderCircle className="animate-spin" size={16} />
+						Updating generation status…
+					</p>
+				) : null}
 
-					{baseCvs.length === 0 ? (
-						<p className="mb-4 rounded-lg border border-light-gray bg-white px-3 py-2 text-sm text-medium-gray">
-							Upload a Base CV in Documents before you can generate tailored CVs.
-						</p>
-					) : null}
+				{baseCvs.length === 0 ? (
+					<p className="mb-4 rounded-lg border border-light-gray bg-white px-3 py-2 text-sm text-medium-gray">
+						Upload a Base CV in Documents before you can generate tailored CVs.
+					</p>
+				) : null}
 
-					{applications.length === 0 ? (
-						<div className="flex flex-col items-center py-12 text-center text-medium-gray">
-							<Sparkles className="mb-3" size={32} />
-							<h2 className="font-semibold text-dark-gray">No applications yet</h2>
-							<p className="mt-1 max-w-md text-sm">
-								Add an application on the board, then return here to generate a tailored CV.
-							</p>
-						</div>
-					) : (
-						<ul className="space-y-3">
-							{applications.map((application) => (
-								<ApplicationGenerateRow
-									key={application.applicationId}
-									application={application}
-									generations={generationsByApplicationId[application.applicationId] ?? []}
-									applicationCvs={
-										applicationCvsByApplicationId[application.applicationId] ?? []
-									}
-									baseCvs={baseCvs}
-									consent={consent}
-									initialJobDescription={
-										jobDescriptionsByApplicationId[application.applicationId] ?? ""
-									}
-								/>
-							))}
-						</ul>
-					)}
-				</div>
+				{applications.length === 0 ? (
+					<div className="flex flex-col items-center py-12 text-center text-medium-gray">
+						<Sparkles className="mb-3" size={32} />
+						<h2 className="font-semibold text-dark-gray">No applications yet</h2>
+						<p className="mt-1 max-w-md text-sm">
+							Add an application on the board, then return here to generate a tailored CV.
+						</p>
+					</div>
+				) : preparing.length === 0 && generated.length === 0 ? (
+					<div className="flex flex-col items-center py-12 text-center text-medium-gray">
+						<Sparkles className="mb-3" size={32} />
+						<h2 className="font-semibold text-dark-gray">Nothing to generate right now</h2>
+						<p className="mt-1 max-w-md text-sm">
+							Rejected and withdrawn closed applications without a generated CV are hidden.
+							Add or reopen an application on the board to prepare a tailored CV.
+						</p>
+					</div>
+				) : (
+					<div className="space-y-8">
+						<section aria-labelledby="generate-preparing-heading">
+							<h2
+								id="generate-preparing-heading"
+								className="mb-3 text-lg font-semibold text-darkest-accent"
+							>
+								Preparing
+							</h2>
+							{preparing.length > 0 ? (
+								renderSectionItems(preparing)
+							) : (
+								<p className="rounded-lg border border-dashed border-light-gray px-3 py-4 text-sm text-medium-gray">
+									Nothing to prepare
+								</p>
+							)}
+						</section>
+						{generated.length > 0 ? (
+							<section aria-labelledby="generate-generated-heading">
+								<h2
+									id="generate-generated-heading"
+									className="mb-3 text-lg font-semibold text-darkest-accent"
+								>
+									Generated
+								</h2>
+								{renderSectionItems(generated)}
+							</section>
+						) : null}
+					</div>
+				)}
 			</section>
 		</div>
 	);

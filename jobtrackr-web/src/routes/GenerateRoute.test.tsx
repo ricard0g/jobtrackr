@@ -381,6 +381,457 @@ describe("GenerateRoute", () => {
 		expect(await screen.findByText(/already has 20 generated CVs/i)).toBeTruthy();
 	});
 
+	it("places applications without a Generated CV in Preparing and completed work in Generated", async () => {
+		renderGenerate(
+			loaderData({
+				applications: [
+					application({ applicationId: 1, applicationTitle: "Untouched Role" }),
+					application({
+						applicationId: 2,
+						applicationTitle: "Documented Role",
+						company: { ...company, companyName: "Atlas" },
+					}),
+				],
+				generations: [
+					generation({
+						cvGenerationId: 2,
+						applicationId: 2,
+						status: "COMPLETED",
+						applicationCvId: 9,
+					}),
+				],
+				applicationCvsByApplicationId: {
+					2: [applicationCv({ applicationId: 2, applicationCvId: 9 })],
+				},
+				jobDescriptionsByApplicationId: {},
+			}),
+		);
+
+		const preparing = await screen.findByRole("region", { name: "Preparing" });
+		const generated = screen.getByRole("region", { name: "Generated" });
+		expect(within(preparing).getByText("Untouched Role")).toBeTruthy();
+		expect(within(preparing).queryByText("Documented Role")).toBeNull();
+		expect(within(generated).getByText("Documented Role")).toBeTruthy();
+		expect(within(generated).queryByText("Untouched Role")).toBeNull();
+	});
+
+	it("keeps active and latest-failed applications in Preparing despite older Generated CVs", async () => {
+		renderGenerate(
+			loaderData({
+				applications: [
+					application({ applicationId: 1, applicationTitle: "Active With Doc" }),
+					application({
+						applicationId: 2,
+						applicationTitle: "Failed With Doc",
+						company: { ...company, companyName: "Atlas" },
+					}),
+					application({
+						applicationId: 3,
+						applicationTitle: "Cancelled With Doc",
+						company: { ...company, companyName: "Nova" },
+					}),
+					application({
+						applicationId: 4,
+						applicationTitle: "Cancelled Without Doc",
+						company: { ...company, companyName: "Orbit" },
+					}),
+				],
+				generations: [
+					generation({
+						cvGenerationId: 1,
+						applicationId: 1,
+						status: "COMPLETED",
+						applicationCvId: 11,
+						createdAt: "2026-07-10T10:00:00.000Z",
+					}),
+					generation({
+						cvGenerationId: 2,
+						applicationId: 1,
+						status: "PROCESSING",
+						createdAt: "2026-07-16T10:00:00.000Z",
+					}),
+					generation({
+						cvGenerationId: 3,
+						applicationId: 2,
+						status: "COMPLETED",
+						applicationCvId: 12,
+						createdAt: "2026-07-10T10:00:00.000Z",
+					}),
+					generation({
+						cvGenerationId: 4,
+						applicationId: 2,
+						status: "FAILED",
+						createdAt: "2026-07-16T10:00:00.000Z",
+					}),
+					generation({
+						cvGenerationId: 5,
+						applicationId: 3,
+						status: "COMPLETED",
+						applicationCvId: 13,
+						createdAt: "2026-07-10T10:00:00.000Z",
+					}),
+					generation({
+						cvGenerationId: 6,
+						applicationId: 3,
+						status: "CANCELLED",
+						createdAt: "2026-07-16T10:00:00.000Z",
+					}),
+					generation({
+						cvGenerationId: 7,
+						applicationId: 4,
+						status: "CANCELLED",
+						createdAt: "2026-07-16T10:00:00.000Z",
+					}),
+				],
+				applicationCvsByApplicationId: {
+					1: [applicationCv({ applicationId: 1, applicationCvId: 11 })],
+					2: [applicationCv({ applicationId: 2, applicationCvId: 12 })],
+					3: [applicationCv({ applicationId: 3, applicationCvId: 13 })],
+				},
+				jobDescriptionsByApplicationId: {},
+			}),
+		);
+
+		const preparing = await screen.findByRole("region", { name: "Preparing" });
+		const generated = screen.getByRole("region", { name: "Generated" });
+		expect(within(preparing).getByText("Active With Doc")).toBeTruthy();
+		expect(within(preparing).getByText("Failed With Doc")).toBeTruthy();
+		expect(within(preparing).getByText("Cancelled Without Doc")).toBeTruthy();
+		expect(within(preparing).queryByText("Cancelled With Doc")).toBeNull();
+		expect(within(generated).getByText("Cancelled With Doc")).toBeTruthy();
+	});
+
+	it("hides closed applications without documents while keeping documented and active ones", async () => {
+		renderGenerate(
+			loaderData({
+				applications: [
+					application({
+						applicationId: 1,
+						applicationTitle: "Rejected Without Doc",
+						applicationStatus: "REJECTED",
+					}),
+					application({
+						applicationId: 2,
+						applicationTitle: "Withdrawn Failed Without Doc",
+						applicationStatus: "WITHDRAWN",
+						company: { ...company, companyName: "Atlas" },
+					}),
+					application({
+						applicationId: 3,
+						applicationTitle: "Withdrawn With Doc",
+						applicationStatus: "WITHDRAWN",
+						company: { ...company, companyName: "Nova" },
+					}),
+					application({
+						applicationId: 4,
+						applicationTitle: "Rejected With Active Generation",
+						applicationStatus: "REJECTED",
+						company: { ...company, companyName: "Orbit" },
+					}),
+				],
+				generations: [
+					generation({ cvGenerationId: 1, applicationId: 2, status: "FAILED" }),
+					generation({
+						cvGenerationId: 2,
+						applicationId: 3,
+						status: "COMPLETED",
+						applicationCvId: 13,
+					}),
+					generation({ cvGenerationId: 3, applicationId: 4, status: "PROCESSING" }),
+				],
+				applicationCvsByApplicationId: {
+					3: [applicationCv({ applicationId: 3, applicationCvId: 13 })],
+				},
+				jobDescriptionsByApplicationId: {},
+			}),
+		);
+
+		const preparing = await screen.findByRole("region", { name: "Preparing" });
+		const generated = screen.getByRole("region", { name: "Generated" });
+		expect(screen.queryByText("Rejected Without Doc")).toBeNull();
+		expect(screen.queryByText("Withdrawn Failed Without Doc")).toBeNull();
+		expect(within(generated).getByText("Withdrawn With Doc")).toBeTruthy();
+		expect(within(preparing).getByText("Rejected With Active Generation")).toBeTruthy();
+	});
+
+	it("keeps a closed application with a document in Generated even when its latest attempt failed", async () => {
+		renderGenerate(
+			loaderData({
+				applications: [
+					application({
+						applicationId: 1,
+						applicationTitle: "Closed Failed With Doc",
+						applicationStatus: "REJECTED",
+					}),
+				],
+				generations: [
+					generation({
+						cvGenerationId: 1,
+						applicationId: 1,
+						status: "COMPLETED",
+						applicationCvId: 11,
+						createdAt: "2026-07-10T10:00:00.000Z",
+					}),
+					generation({
+						cvGenerationId: 2,
+						applicationId: 1,
+						status: "FAILED",
+						createdAt: "2026-07-16T10:00:00.000Z",
+					}),
+				],
+				applicationCvsByApplicationId: {
+					1: [applicationCv({ applicationId: 1, applicationCvId: 11 })],
+				},
+				jobDescriptionsByApplicationId: {},
+			}),
+		);
+
+		const generated = await screen.findByRole("region", { name: "Generated" });
+		expect(within(generated).getByText("Closed Failed With Doc")).toBeTruthy();
+		const preparing = screen.getByRole("region", { name: "Preparing" });
+		expect(within(preparing).queryByText("Closed Failed With Doc")).toBeNull();
+		expect(within(preparing).getByText("Nothing to prepare")).toBeTruthy();
+	});
+
+	it("orders Preparing as processing, queued, failed, then untouched with recency inside each", async () => {
+		renderGenerate(
+			loaderData({
+				applications: [
+					application({
+						applicationId: 1,
+						applicationTitle: "Old Untouched",
+						applicationUpdatedAt: "2026-07-13T08:00:00.000Z",
+					}),
+					application({
+						applicationId: 2,
+						applicationTitle: "Old Queued",
+						company: { ...company, companyName: "Atlas" },
+					}),
+					application({
+						applicationId: 3,
+						applicationTitle: "New Processing",
+						company: { ...company, companyName: "Nova" },
+					}),
+					application({
+						applicationId: 4,
+						applicationTitle: "Old Failed",
+						company: { ...company, companyName: "Orbit" },
+					}),
+					application({
+						applicationId: 5,
+						applicationTitle: "New Untouched",
+						applicationUpdatedAt: "2026-07-13T09:00:00.000Z",
+						company: { ...company, companyName: "Vega" },
+					}),
+					application({
+						applicationId: 6,
+						applicationTitle: "New Queued",
+						company: { ...company, companyName: "Lyra" },
+					}),
+					application({
+						applicationId: 7,
+						applicationTitle: "Old Processing",
+						company: { ...company, companyName: "Cygnus" },
+					}),
+					application({
+						applicationId: 8,
+						applicationTitle: "New Failed",
+						company: { ...company, companyName: "Draco" },
+					}),
+				],
+				generations: [
+					// Processing recency comes from startedAt, not createdAt.
+					generation({
+						cvGenerationId: 3,
+						applicationId: 3,
+						status: "PROCESSING",
+						createdAt: "2026-07-16T04:00:00.000Z",
+						startedAt: "2026-07-16T09:00:00.000Z",
+					}),
+					generation({
+						cvGenerationId: 7,
+						applicationId: 7,
+						status: "PROCESSING",
+						createdAt: "2026-07-16T05:00:00.000Z",
+						startedAt: "2026-07-16T08:00:00.000Z",
+					}),
+					generation({
+						cvGenerationId: 2,
+						applicationId: 2,
+						status: "PENDING",
+						createdAt: "2026-07-15T08:00:00.000Z",
+					}),
+					generation({
+						cvGenerationId: 6,
+						applicationId: 6,
+						status: "PENDING",
+						createdAt: "2026-07-15T09:00:00.000Z",
+					}),
+					// Failed recency comes from the terminal update, not createdAt.
+					generation({
+						cvGenerationId: 4,
+						applicationId: 4,
+						status: "FAILED",
+						createdAt: "2026-07-14T05:00:00.000Z",
+						updatedAt: "2026-07-14T08:00:00.000Z",
+					}),
+					generation({
+						cvGenerationId: 8,
+						applicationId: 8,
+						status: "FAILED",
+						createdAt: "2026-07-14T04:00:00.000Z",
+						updatedAt: "2026-07-14T09:00:00.000Z",
+					}),
+				],
+				applicationCvsByApplicationId: {},
+				jobDescriptionsByApplicationId: {},
+			}),
+		);
+
+		const preparing = await screen.findByRole("region", { name: "Preparing" });
+		const rowNames = within(preparing)
+			.getAllByRole("button", { name: /^Generate CV for / })
+			.map((button) => button.getAttribute("aria-label"));
+		expect(rowNames).toEqual([
+			"Generate CV for New Processing",
+			"Generate CV for Old Processing",
+			"Generate CV for New Queued",
+			"Generate CV for Old Queued",
+			"Generate CV for New Failed",
+			"Generate CV for Old Failed",
+			"Generate CV for New Untouched",
+			"Generate CV for Old Untouched",
+		]);
+	});
+
+	it("orders Generated by newest Generated CV rather than application updates", async () => {
+		renderGenerate(
+			loaderData({
+				applications: [
+					application({
+						applicationId: 1,
+						applicationTitle: "Recently Edited Application",
+						applicationUpdatedAt: "2026-07-20T12:00:00.000Z",
+					}),
+					application({
+						applicationId: 2,
+						applicationTitle: "Newest Document Application",
+						applicationUpdatedAt: "2026-07-01T12:00:00.000Z",
+						company: { ...company, companyName: "Atlas" },
+					}),
+				],
+				generations: [
+					generation({
+						cvGenerationId: 1,
+						applicationId: 1,
+						status: "COMPLETED",
+						applicationCvId: 11,
+					}),
+					generation({
+						cvGenerationId: 2,
+						applicationId: 2,
+						status: "COMPLETED",
+						applicationCvId: 12,
+					}),
+				],
+				applicationCvsByApplicationId: {
+					1: [
+						applicationCv({
+							applicationId: 1,
+							applicationCvId: 11,
+							createdAt: "2026-07-10T09:00:00.000Z",
+						}),
+					],
+					2: [
+						applicationCv({
+							applicationId: 2,
+							applicationCvId: 12,
+							createdAt: "2026-07-15T09:00:00.000Z",
+						}),
+					],
+				},
+				jobDescriptionsByApplicationId: {},
+			}),
+		);
+
+		const generated = await screen.findByRole("region", { name: "Generated" });
+		const rowNames = within(generated)
+			.getAllByRole("button", { name: /^Generate CV for / })
+			.map((button) => button.getAttribute("aria-label"));
+		expect(rowNames).toEqual([
+			"Generate CV for Newest Document Application",
+			"Generate CV for Recently Edited Application",
+		]);
+	});
+
+	it("says nothing to prepare when only generated work remains", async () => {
+		renderGenerate(
+			loaderData({
+				applications: [application({ applicationId: 1, applicationTitle: "Documented Role" })],
+				generations: [
+					generation({
+						cvGenerationId: 1,
+						applicationId: 1,
+						status: "COMPLETED",
+						applicationCvId: 11,
+					}),
+				],
+				applicationCvsByApplicationId: {
+					1: [applicationCv({ applicationId: 1, applicationCvId: 11 })],
+				},
+				jobDescriptionsByApplicationId: {},
+			}),
+		);
+
+		const preparing = await screen.findByRole("region", { name: "Preparing" });
+		expect(within(preparing).getByText("Nothing to prepare")).toBeTruthy();
+	});
+
+	it("omits the Generated section when no application has a Generated CV", async () => {
+		renderGenerate(loaderData());
+
+		expect(await screen.findByRole("region", { name: "Preparing" })).toBeTruthy();
+		expect(screen.queryByRole("region", { name: "Generated" })).toBeNull();
+	});
+
+	it("explains that closed applications without documents are hidden when nothing is visible", async () => {
+		renderGenerate(
+			loaderData({
+				applications: [
+					application({
+						applicationId: 1,
+						applicationTitle: "Rejected Role",
+						applicationStatus: "REJECTED",
+					}),
+					application({
+						applicationId: 2,
+						applicationTitle: "Withdrawn Role",
+						applicationStatus: "WITHDRAWN",
+						company: { ...company, companyName: "Atlas" },
+					}),
+				],
+				jobDescriptionsByApplicationId: {},
+			}),
+		);
+
+		expect(
+			await screen.findByText(/closed applications without a generated CV are hidden/i),
+		).toBeTruthy();
+		expect(screen.queryByRole("region", { name: "Preparing" })).toBeNull();
+		expect(screen.queryByRole("region", { name: "Generated" })).toBeNull();
+		expect(screen.queryByText("Rejected Role")).toBeNull();
+	});
+
+	it("shows the empty state when there are no applications", async () => {
+		renderGenerate(loaderData({ applications: [], jobDescriptionsByApplicationId: {} }));
+
+		expect(await screen.findByText("No applications yet")).toBeTruthy();
+		expect(
+			screen.getByText(/Add an application on the board, then return here/i),
+		).toBeTruthy();
+		expect(screen.queryByRole("region", { name: "Preparing" })).toBeNull();
+	});
+
 	it("lists successful versions with accessible download and delete controls", async () => {
 		renderGenerate(
 			loaderData({
