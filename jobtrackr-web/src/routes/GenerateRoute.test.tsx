@@ -1,4 +1,4 @@
-import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createMemoryRouter, RouterProvider, type ActionFunctionArgs } from "react-router";
 
@@ -11,6 +11,7 @@ import type { AiConsent, CvGeneration } from "@/types/cv-generation";
 
 afterEach(() => {
 	cleanup();
+	vi.useRealTimers();
 	vi.restoreAllMocks();
 });
 
@@ -201,8 +202,8 @@ describe("GenerateRoute", () => {
 			}),
 		);
 
-		expect((await screen.findAllByText("Queued")).length).toBeGreaterThan(0);
-		expect(screen.getAllByText("Generating").length).toBeGreaterThan(0);
+		expect((await screen.findAllByText(/Queued/)).length).toBeGreaterThan(0);
+		expect(screen.getAllByText(/Generating/).length).toBeGreaterThan(0);
 		expect(screen.getAllByText("Failed").length).toBeGreaterThan(0);
 		expect(screen.getByText("Cancelled")).toBeTruthy();
 		expect(screen.queryByText(/%/)).toBeNull();
@@ -1197,5 +1198,291 @@ describe("GenerateRoute", () => {
 		expect(
 			screen.getByRole("button", { name: "Generate CV for Second Role" }).hasAttribute("disabled"),
 		).toBe(true);
+	});
+
+	it("shows Generating elapsed time from startedAt with a controlled clock", async () => {
+		vi.useFakeTimers({ now: new Date("2026-07-16T10:05:00.000Z") });
+		renderGenerate(
+			loaderData({
+				applications: [application({ applicationTitle: "Live Role" })],
+				generations: [
+					generation({
+						status: "PROCESSING",
+						createdAt: "2026-07-16T09:50:00.000Z",
+						startedAt: "2026-07-16T10:00:00.000Z",
+					}),
+				],
+			}),
+		);
+
+		await act(async () => {
+			await vi.advanceTimersByTimeAsync(0);
+		});
+		expect(screen.getByText(/Generating · 5m 0s/)).toBeTruthy();
+	});
+
+	it("falls back to createdAt for Generating elapsed when startedAt is missing", async () => {
+		vi.useFakeTimers({ now: new Date("2026-07-16T10:02:30.000Z") });
+		renderGenerate(
+			loaderData({
+				generations: [
+					generation({
+						status: "PROCESSING",
+						createdAt: "2026-07-16T10:00:00.000Z",
+						startedAt: null,
+					}),
+				],
+			}),
+		);
+
+		await act(async () => {
+			await vi.advanceTimersByTimeAsync(0);
+		});
+		expect(screen.getByText(/Generating · 2m 30s/)).toBeTruthy();
+	});
+
+	it("shows Queued elapsed time from createdAt", async () => {
+		vi.useFakeTimers({ now: new Date("2026-07-16T10:00:45.000Z") });
+		renderGenerate(
+			loaderData({
+				generations: [
+					generation({
+						status: "PENDING",
+						createdAt: "2026-07-16T10:00:00.000Z",
+						startedAt: null,
+					}),
+				],
+			}),
+		);
+
+		await act(async () => {
+			await vi.advanceTimersByTimeAsync(0);
+		});
+		expect(screen.getByText(/Queued · 45s/)).toBeTruthy();
+	});
+
+	it("updates active elapsed locally each second without waiting for the 3s poll", async () => {
+		vi.useFakeTimers({ now: new Date("2026-07-16T10:00:10.000Z") });
+		const loader = vi.fn(() =>
+			loaderData({
+				generations: [
+					generation({
+						status: "PROCESSING",
+						createdAt: "2026-07-16T10:00:00.000Z",
+						startedAt: "2026-07-16T10:00:00.000Z",
+					}),
+				],
+			}),
+		);
+		const router = createMemoryRouter(
+			[
+				{
+					path: "/generate",
+					Component: GenerateRoute,
+					loader,
+					action: async () => ({ ok: true, intent: "create" }) satisfies GenerateActionData,
+				},
+			],
+			{ initialEntries: ["/generate"] },
+		);
+		render(<RouterProvider router={router} />);
+
+		await act(async () => {
+			await vi.advanceTimersByTimeAsync(0);
+		});
+		expect(screen.getByText(/Generating · 10s/)).toBeTruthy();
+		const loadsAfterMount = loader.mock.calls.length;
+
+		await act(async () => {
+			await vi.advanceTimersByTimeAsync(1000);
+		});
+		expect(screen.getByText(/Generating · 11s/)).toBeTruthy();
+		expect(loader.mock.calls.length).toBe(loadsAfterMount);
+	});
+
+	it("derives untouched relative time from the Application update timestamp", async () => {
+		vi.useFakeTimers({ now: new Date("2026-07-16T12:00:00.000Z") });
+		renderGenerate(
+			loaderData({
+				applications: [
+					application({
+						applicationTitle: "Untouched Role",
+						applicationUpdatedAt: "2026-07-16T10:00:00.000Z",
+					}),
+				],
+				generations: [],
+			}),
+		);
+
+		await act(async () => {
+			await vi.advanceTimersByTimeAsync(0);
+		});
+		const preparing = screen.getByRole("region", { name: "Preparing" });
+		const activity = within(preparing).getByTitle(
+			new Intl.DateTimeFormat("en", { dateStyle: "medium", timeStyle: "short" }).format(
+				new Date("2026-07-16T10:00:00.000Z"),
+			),
+		);
+		expect(activity.getAttribute("dateTime")).toBe("2026-07-16T10:00:00.000Z");
+		expect(activity.textContent).toMatch(/ago|yesterday|today/i);
+	});
+
+	it("derives failed relative time from the terminal generation update", async () => {
+		vi.useFakeTimers({ now: new Date("2026-07-16T12:00:00.000Z") });
+		renderGenerate(
+			loaderData({
+				applications: [
+					application({
+						applicationTitle: "Failed Timing Role",
+						applicationUpdatedAt: "2026-07-10T08:00:00.000Z",
+					}),
+				],
+				generations: [
+					generation({
+						status: "FAILED",
+						createdAt: "2026-07-16T09:00:00.000Z",
+						updatedAt: "2026-07-16T11:00:00.000Z",
+						errorMessage: "Drafting timed out",
+					}),
+				],
+			}),
+		);
+
+		await act(async () => {
+			await vi.advanceTimersByTimeAsync(0);
+		});
+		const preparing = screen.getByRole("region", { name: "Preparing" });
+		const activity = within(preparing).getByTitle(
+			new Intl.DateTimeFormat("en", { dateStyle: "medium", timeStyle: "short" }).format(
+				new Date("2026-07-16T11:00:00.000Z"),
+			),
+		);
+		expect(activity.getAttribute("dateTime")).toBe("2026-07-16T11:00:00.000Z");
+	});
+
+	it("humanizes known model ids, keeps unknown ids raw, and omits absent models", async () => {
+		renderGenerate(
+			loaderData({
+				applications: [
+					application({ applicationId: 1, applicationTitle: "Known Model Role" }),
+					application({
+						applicationId: 2,
+						applicationTitle: "Unknown Model Role",
+						company: { ...company, companyName: "Cobalt" },
+					}),
+					application({
+						applicationId: 3,
+						applicationTitle: "No Model Role",
+						company: { ...company, companyName: "Atlas" },
+					}),
+				],
+				generations: [
+					generation({
+						cvGenerationId: 1,
+						applicationId: 1,
+						status: "FAILED",
+						modelId: "gemini-3.1-flash-lite",
+						requestedFormat: "PDF",
+					}),
+					generation({
+						cvGenerationId: 2,
+						applicationId: 2,
+						status: "FAILED",
+						modelId: "vendor-opaque-model",
+						requestedFormat: "PDF",
+					}),
+					generation({
+						cvGenerationId: 3,
+						applicationId: 3,
+						status: "FAILED",
+						modelId: null,
+						requestedFormat: "PDF",
+					}),
+				],
+				jobDescriptionsByApplicationId: {},
+			}),
+		);
+
+		const preparing = await screen.findByRole("region", { name: "Preparing" });
+		expect(within(preparing).getByText(/PDF · Gemini 3.1 Flash Lite/)).toBeTruthy();
+		expect(within(preparing).getByText(/PDF · vendor-opaque-model/)).toBeTruthy();
+		const knownMeta = within(preparing).getByText(/PDF · Gemini 3.1 Flash Lite/);
+		expect(knownMeta.getAttribute("title")).toBe("gemini-3.1-flash-lite");
+		const unknownMeta = within(preparing).getByText(/PDF · vendor-opaque-model/);
+		expect(unknownMeta.getAttribute("title")).toBe("vendor-opaque-model");
+		expect(screen.queryByText("Unknown model")).toBeNull();
+		const noModelRow = within(preparing).getByText("No Model Role").closest("li");
+		expect(noModelRow).toBeTruthy();
+		expect(within(noModelRow as HTMLElement).getByText("PDF")).toBeTruthy();
+		expect(within(noModelRow as HTMLElement).queryByText(/gemini|Model:/i)).toBeNull();
+	});
+
+	it("moves a completed generation into Generated expanded with highlight, actions, and a polite announcement", async () => {
+		let current = loaderData({
+			applications: [application({ applicationTitle: "Finishing Role" })],
+			generations: [
+				generation({
+					status: "PROCESSING",
+					startedAt: "2026-07-16T10:00:00.000Z",
+				}),
+			],
+		});
+		const router = createMemoryRouter(
+			[
+				{
+					path: "/generate",
+					Component: GenerateRoute,
+					loader: () => current,
+					action: async () => ({ ok: true, intent: "create" }) satisfies GenerateActionData,
+				},
+			],
+			{ initialEntries: ["/generate"] },
+		);
+		render(<RouterProvider router={router} />);
+
+		expect(await screen.findByText(/Generating ·/)).toBeTruthy();
+		expect(screen.getByRole("region", { name: "Preparing" })).toBeTruthy();
+		expect(screen.queryByRole("region", { name: "Generated" })).toBeNull();
+
+		current = loaderData({
+			applications: [application({ applicationTitle: "Finishing Role" })],
+			generations: [
+				generation({
+					status: "COMPLETED",
+					applicationCvId: 5,
+					modelId: "gemini-3.1-flash-lite",
+					startedAt: "2026-07-16T10:00:00.000Z",
+					completedAt: "2026-07-16T10:01:00.000Z",
+				}),
+			],
+			applicationCvsByApplicationId: {
+				1: [
+					applicationCv({
+						originalFilename: "finishing-v1.pdf",
+						createdAt: "2026-07-16T10:01:00.000Z",
+					}),
+				],
+			},
+		});
+		await act(async () => {
+			await router.revalidate();
+		});
+
+		const generated = await screen.findByRole("region", { name: "Generated" });
+		expect(within(generated).getByText("Finishing Role")).toBeTruthy();
+		expect(
+			within(generated)
+				.getByRole("button", { name: /Collapse Finishing\ Role(?: at .*)?/ })
+				.getAttribute("aria-expanded"),
+		).toBe("true");
+		expect(
+			within(generated).getByRole("button", { name: "Download finishing-v1.pdf" }),
+		).toBeTruthy();
+		expect(document.querySelector("[data-completion-highlight='true']")).toBeTruthy();
+		expect(screen.getByRole("status").textContent).toMatch(/Finishing Role/i);
+		expect(router.state.location.pathname).toBe("/generate");
+		expect(screen.queryByRole("region", { name: "Preparing" })?.textContent).toMatch(
+			/Nothing to prepare/,
+		);
 	});
 });

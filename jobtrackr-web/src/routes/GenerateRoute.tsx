@@ -41,11 +41,13 @@ import {
 	type GenerateLoaderData,
 } from "@/routes/generate-data";
 import {
+	activeElapsedStartedAt,
 	companyMonogram,
+	displayModelName,
 	formatAbsoluteTime,
+	formatElapsedDuration,
 	formatRelativeTime,
 	generationStateLabel,
-	humanizeModelId,
 	locationRemoteLabel,
 	shouldStartExpanded,
 } from "@/routes/generate-display";
@@ -60,6 +62,18 @@ import {
 
 const formatLabels = { PDF: "PDF", DOCX: "DOCX", MARKDOWN: "Markdown" } as const;
 const POLL_INTERVAL_MS = 3_000;
+const ELAPSED_TICK_MS = 1_000;
+
+function useNow(enabled: boolean): Date {
+	const [now, setNow] = useState(() => new Date());
+	useEffect(() => {
+		if (!enabled) return;
+		setNow(new Date());
+		const intervalId = window.setInterval(() => setNow(new Date()), ELAPSED_TICK_MS);
+		return () => window.clearInterval(intervalId);
+	}, [enabled]);
+	return enabled ? now : new Date();
+}
 
 const formatBytes = (bytes: number) =>
 	new Intl.NumberFormat("en", {
@@ -467,6 +481,8 @@ function ApplicationGenerateRow({
 	consent,
 	initialJobDescription,
 	section,
+	now,
+	completionTransition = false,
 }: {
 	application: Application;
 	generations: CvGeneration[];
@@ -475,12 +491,20 @@ function ApplicationGenerateRow({
 	consent: AiConsent;
 	initialJobDescription: string;
 	section: "preparing" | "generated";
+	now: Date;
+	completionTransition?: boolean;
 }) {
 	const cancelFetcher = useFetcher<GenerateActionData>();
 	const [dialogOpen, setDialogOpen] = useState(false);
 	const [dialogSession, setDialogSession] = useState(0);
-	const [expanded, setExpanded] = useState(() => shouldStartExpanded(generations));
+	const [expanded, setExpanded] = useState(
+		() => completionTransition || shouldStartExpanded(generations),
+	);
 	const panelId = useId();
+
+	useEffect(() => {
+		if (completionTransition) setExpanded(true);
+	}, [completionTransition]);
 	const latest = latestGeneration(generations);
 	const atLimit = applicationCvs.length >= MAX_APPLICATION_CVS;
 	const canGenerate = baseCvs.length > 0 && !atLimit;
@@ -510,7 +534,7 @@ function ApplicationGenerateRow({
 		formatModelParts.push(formatLabels[latest.requestedFormat]);
 	}
 	if (latest?.modelId) {
-		formatModelParts.push(humanizeModelId(latest.modelId));
+		formatModelParts.push(displayModelName(latest.modelId));
 	}
 	const newestCv = newestGeneratedCv(applicationCvs);
 	const cvCount = applicationCvs.length;
@@ -538,15 +562,28 @@ function ApplicationGenerateRow({
 		</Button>
 	);
 
-	const activeIndicator = hasActiveGeneration ? (
+	const activeLabel = activeGeneration
+		? cvGenerationStatusLabels[activeGeneration.status]
+		: null;
+	const activeElapsed = activeGeneration
+		? formatElapsedDuration(activeElapsedStartedAt(activeGeneration), now)
+		: null;
+	const activeIndicator = hasActiveGeneration && activeLabel ? (
 		<span className="inline-flex items-center gap-1.5 text-sm font-medium text-dark-accent">
 			<LoaderCircle className="animate-spin" size={14} aria-hidden="true" />
-			{activeGeneration?.status === "PENDING" ? "Queued" : "Generating"}
+			{activeLabel}
+			{activeElapsed ? ` · ${activeElapsed}` : null}
 		</span>
 	) : null;
 
 	return (
-		<li className="border-b border-light-gray last:border-b-0">
+		<li
+			className={cn(
+				"border-b border-light-gray last:border-b-0",
+				completionTransition && "generate-completion-highlight",
+			)}
+			data-completion-highlight={completionTransition ? "true" : undefined}
+		>
 			<div className="flex items-start gap-3 py-3">
 				<CompanyMark
 					companyName={application.company.companyName}
@@ -653,7 +690,7 @@ function ApplicationGenerateRow({
 							</p>
 							{latest.modelId ? (
 								<p className="mt-1 text-xs text-medium-gray" title={latest.modelId}>
-									Model: {humanizeModelId(latest.modelId)}
+									Model: {displayModelName(latest.modelId)}
 								</p>
 							) : null}
 							{latest.status === "FAILED" ? (
@@ -743,10 +780,16 @@ export function GenerateRoute() {
 	} = useLoaderData() as GenerateLoaderData;
 	const revalidator = useRevalidator();
 	const [generatedSectionOpen, setGeneratedSectionOpen] = useState(true);
+	const [completionHighlightIds, setCompletionHighlightIds] = useState<Set<number>>(
+		() => new Set(),
+	);
+	const [completionAnnouncement, setCompletionAnnouncement] = useState("");
+	const previousActiveIdsRef = useRef<Set<number> | null>(null);
 	const generatedPanelId = useId();
 	const hasActiveGeneration = generations.some((generation) =>
 		isActiveCvGenerationStatus(generation.status),
 	);
+	const now = useNow(hasActiveGeneration);
 
 	useEffect(() => {
 		if (!hasActiveGeneration) return;
@@ -757,6 +800,57 @@ export function GenerateRoute() {
 		}, POLL_INTERVAL_MS);
 		return () => window.clearInterval(intervalId);
 	}, [hasActiveGeneration, revalidator]);
+
+	useEffect(() => {
+		const activeIds = new Set(
+			generations
+				.filter((generation) => isActiveCvGenerationStatus(generation.status))
+				.map((generation) => generation.applicationId),
+		);
+
+		if (previousActiveIdsRef.current === null) {
+			previousActiveIdsRef.current = activeIds;
+			return;
+		}
+
+		const newlyCompleted: number[] = [];
+		for (const applicationId of previousActiveIdsRef.current) {
+			if (activeIds.has(applicationId)) continue;
+			const docs = applicationCvsByApplicationId[applicationId] ?? [];
+			const applicationGenerations = generations.filter(
+				(generation) => generation.applicationId === applicationId,
+			);
+			const latestFailed = latestGeneration(applicationGenerations)?.status === "FAILED";
+			// Same membership rule as buildGenerateSections for non-active items with docs.
+			if (docs.length > 0 && !latestFailed) {
+				newlyCompleted.push(applicationId);
+			}
+		}
+
+		if (newlyCompleted.length > 0) {
+			setCompletionHighlightIds((previous) => new Set([...previous, ...newlyCompleted]));
+			setGeneratedSectionOpen(true);
+			const titles = newlyCompleted.map((applicationId) => {
+				const match = applications.find((item) => item.applicationId === applicationId);
+				return match?.applicationTitle ?? "application";
+			});
+			setCompletionAnnouncement(
+				titles.length === 1
+					? `Generated CV ready for ${titles[0]}`
+					: `Generated CVs ready for ${titles.join(", ")}`,
+			);
+		}
+
+		previousActiveIdsRef.current = activeIds;
+	}, [applications, applicationCvsByApplicationId, generations]);
+
+	useEffect(() => {
+		if (completionHighlightIds.size === 0) return;
+		const timeoutId = window.setTimeout(() => {
+			setCompletionHighlightIds(new Set());
+		}, 2_500);
+		return () => window.clearTimeout(timeoutId);
+	}, [completionHighlightIds]);
 
 	const { preparing, generated } = buildGenerateSections(
 		applications,
@@ -769,18 +863,25 @@ export function GenerateRoute() {
 		section: "preparing" | "generated",
 	) => (
 		<ul className="divide-y divide-light-gray border-y border-light-gray">
-			{items.map(({ application, generations: applicationGenerations, applicationCvs }) => (
-				<ApplicationGenerateRow
-					key={application.applicationId}
-					application={application}
-					generations={applicationGenerations}
-					applicationCvs={applicationCvs}
-					baseCvs={baseCvs}
-					consent={consent}
-					initialJobDescription={jobDescriptionsByApplicationId[application.applicationId] ?? ""}
-					section={section}
-				/>
-			))}
+			{items.map(({ application, generations: applicationGenerations, applicationCvs }) => {
+				const newlyCompleted = completionHighlightIds.has(application.applicationId);
+				return (
+					<ApplicationGenerateRow
+						key={application.applicationId}
+						application={application}
+						generations={applicationGenerations}
+						applicationCvs={applicationCvs}
+						baseCvs={baseCvs}
+						consent={consent}
+						initialJobDescription={
+							jobDescriptionsByApplicationId[application.applicationId] ?? ""
+						}
+						section={section}
+						now={now}
+						completionTransition={newlyCompleted}
+					/>
+				);
+			})}
 		</ul>
 	);
 
@@ -800,6 +901,10 @@ export function GenerateRoute() {
 						Updating generation status…
 					</p>
 				) : null}
+
+				<div role="status" aria-live="polite" className="sr-only">
+					{completionAnnouncement}
+				</div>
 
 				{baseCvs.length === 0 ? (
 					<p
