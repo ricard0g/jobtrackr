@@ -814,17 +814,28 @@ export function GenerateRoute() {
 		}
 
 		const newlyCompleted: number[] = [];
+		const stillWatching = new Set(activeIds);
+
 		for (const applicationId of previousActiveIdsRef.current) {
 			if (activeIds.has(applicationId)) continue;
+
 			const docs = applicationCvsByApplicationId[applicationId] ?? [];
 			const applicationGenerations = generations.filter(
 				(generation) => generation.applicationId === applicationId,
 			);
-			const latestFailed = latestGeneration(applicationGenerations)?.status === "FAILED";
-			// Same membership rule as buildGenerateSections for non-active items with docs.
-			if (docs.length > 0 && !latestFailed) {
+			const latest = latestGeneration(applicationGenerations);
+
+			if (latest?.status === "COMPLETED" && docs.length > 0) {
 				newlyCompleted.push(applicationId);
+				continue;
 			}
+
+			// Status completed but Generated CV rows have not arrived yet — keep
+			// watching so a later revalidation can still announce the transition.
+			if (latest?.status === "COMPLETED" && docs.length === 0) {
+				stillWatching.add(applicationId);
+			}
+			// CANCELLED / FAILED / other terminals: drop without success UX.
 		}
 
 		if (newlyCompleted.length > 0) {
@@ -841,7 +852,7 @@ export function GenerateRoute() {
 			);
 		}
 
-		previousActiveIdsRef.current = activeIds;
+		previousActiveIdsRef.current = stillWatching;
 	}, [applications, applicationCvsByApplicationId, generations]);
 
 	useEffect(() => {

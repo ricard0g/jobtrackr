@@ -1485,4 +1485,151 @@ describe("GenerateRoute", () => {
 			/Nothing to prepare/,
 		);
 	});
+
+	it("does not treat cancelling a regeneration as a completion transition", async () => {
+		let current = loaderData({
+			applications: [application({ applicationTitle: "Retry Role" })],
+			generations: [
+				generation({
+					cvGenerationId: 10,
+					status: "COMPLETED",
+					applicationCvId: 5,
+					createdAt: "2026-07-15T09:00:00.000Z",
+					updatedAt: "2026-07-15T09:00:00.000Z",
+				}),
+				generation({
+					cvGenerationId: 11,
+					status: "PENDING",
+					createdAt: "2026-07-16T10:00:00.000Z",
+					updatedAt: "2026-07-16T10:00:00.000Z",
+					startedAt: null,
+				}),
+			],
+			applicationCvsByApplicationId: {
+				1: [applicationCv({ originalFilename: "retry-v1.pdf" })],
+			},
+		});
+		const router = createMemoryRouter(
+			[
+				{
+					path: "/generate",
+					Component: GenerateRoute,
+					loader: () => current,
+					action: async () => ({ ok: true, intent: "cancel" }) satisfies GenerateActionData,
+				},
+			],
+			{ initialEntries: ["/generate"] },
+		);
+		render(<RouterProvider router={router} />);
+
+		expect(await screen.findByText(/Queued ·/)).toBeTruthy();
+		expect(screen.getByRole("region", { name: "Preparing" })).toBeTruthy();
+
+		current = loaderData({
+			applications: [application({ applicationTitle: "Retry Role" })],
+			generations: [
+				generation({
+					cvGenerationId: 10,
+					status: "COMPLETED",
+					applicationCvId: 5,
+					createdAt: "2026-07-15T09:00:00.000Z",
+					updatedAt: "2026-07-15T09:00:00.000Z",
+				}),
+				generation({
+					cvGenerationId: 11,
+					status: "CANCELLED",
+					createdAt: "2026-07-16T10:00:00.000Z",
+					updatedAt: "2026-07-16T10:01:00.000Z",
+					startedAt: null,
+				}),
+			],
+			applicationCvsByApplicationId: {
+				1: [applicationCv({ originalFilename: "retry-v1.pdf" })],
+			},
+		});
+		await act(async () => {
+			await router.revalidate();
+		});
+
+		const generated = await screen.findByRole("region", { name: "Generated" });
+		expect(within(generated).getByText("Retry Role")).toBeTruthy();
+		expect(document.querySelector("[data-completion-highlight='true']")).toBeNull();
+		expect(screen.getByRole("status").textContent ?? "").not.toMatch(/Generated CV ready/i);
+	});
+
+	it("announces completion once Generated CV rows arrive after status completes", async () => {
+		let current = loaderData({
+			applications: [application({ applicationTitle: "Lagging Docs Role" })],
+			generations: [
+				generation({
+					status: "PROCESSING",
+					startedAt: "2026-07-16T10:00:00.000Z",
+				}),
+			],
+		});
+		const router = createMemoryRouter(
+			[
+				{
+					path: "/generate",
+					Component: GenerateRoute,
+					loader: () => current,
+					action: async () => ({ ok: true, intent: "create" }) satisfies GenerateActionData,
+				},
+			],
+			{ initialEntries: ["/generate"] },
+		);
+		render(<RouterProvider router={router} />);
+
+		expect(await screen.findByText(/Generating ·/)).toBeTruthy();
+
+		current = loaderData({
+			applications: [application({ applicationTitle: "Lagging Docs Role" })],
+			generations: [
+				generation({
+					status: "COMPLETED",
+					applicationCvId: 5,
+					startedAt: "2026-07-16T10:00:00.000Z",
+					completedAt: "2026-07-16T10:01:00.000Z",
+				}),
+			],
+			applicationCvsByApplicationId: {},
+		});
+		await act(async () => {
+			await router.revalidate();
+		});
+
+		expect(document.querySelector("[data-completion-highlight='true']")).toBeNull();
+		expect(screen.getByRole("status").textContent ?? "").not.toMatch(/Generated CV ready/i);
+
+		current = loaderData({
+			applications: [application({ applicationTitle: "Lagging Docs Role" })],
+			generations: [
+				generation({
+					status: "COMPLETED",
+					applicationCvId: 5,
+					startedAt: "2026-07-16T10:00:00.000Z",
+					completedAt: "2026-07-16T10:01:00.000Z",
+				}),
+			],
+			applicationCvsByApplicationId: {
+				1: [
+					applicationCv({
+						originalFilename: "lagging-v1.pdf",
+						createdAt: "2026-07-16T10:01:00.000Z",
+					}),
+				],
+			},
+		});
+		await act(async () => {
+			await router.revalidate();
+		});
+
+		const generated = await screen.findByRole("region", { name: "Generated" });
+		expect(within(generated).getByText("Lagging Docs Role")).toBeTruthy();
+		expect(document.querySelector("[data-completion-highlight='true']")).toBeTruthy();
+		expect(screen.getByRole("status").textContent).toMatch(/Generated CV ready for Lagging Docs Role/);
+		expect(
+			within(generated).getByRole("button", { name: "Download lagging-v1.pdf" }),
+		).toBeTruthy();
+	});
 });
