@@ -4,6 +4,10 @@ import { createMemoryRouter, RouterProvider, type ActionFunctionArgs } from "rea
 
 import { GenerateRoute } from "@/routes/GenerateRoute";
 import type { GenerateActionData, GenerateLoaderData } from "@/routes/generate-data";
+import {
+	PREPARING_LAYOUT_STORAGE_KEY,
+	writePreparingLayoutPreference,
+} from "@/routes/generate-layout-preference";
 import type { Application } from "@/types/application";
 import type { ApplicationCv } from "@/types/application-cv";
 import type { BaseCv } from "@/types/base-cv";
@@ -11,6 +15,7 @@ import type { AiConsent, CvGeneration } from "@/types/cv-generation";
 
 afterEach(() => {
 	cleanup();
+	window.localStorage.clear();
 	vi.useRealTimers();
 	vi.restoreAllMocks();
 });
@@ -22,6 +27,7 @@ beforeEach(() => {
 		disconnect() {}
 	}
 	vi.stubGlobal("ResizeObserver", ResizeObserverMock);
+	window.localStorage.clear();
 });
 
 const company = {
@@ -1631,5 +1637,214 @@ describe("GenerateRoute", () => {
 		expect(
 			within(generated).getByRole("button", { name: "Download lagging-v1.pdf" }),
 		).toBeTruthy();
+	});
+
+	it("defaults Preparing to List when no valid saved preference exists", async () => {
+		window.localStorage.setItem(PREPARING_LAYOUT_STORAGE_KEY, "columns");
+		renderGenerate(loaderData());
+
+		await screen.findByRole("heading", { name: "Generate" });
+		const layoutControl = screen.getByRole("group", { name: "Preparing layout" });
+		expect(
+			within(layoutControl).getByRole("button", { name: "List" }).getAttribute("aria-pressed"),
+		).toBe("true");
+		expect(
+			within(layoutControl).getByRole("button", { name: "Grid" }).getAttribute("aria-pressed"),
+		).toBe("false");
+		expect(screen.getByRole("region", { name: "Preparing" }).getAttribute("data-layout")).toBe(
+			"list",
+		);
+	});
+
+	it("persists Preparing Grid locally and restores it on a later route visit", async () => {
+		const data = loaderData({
+			applications: [
+				application({ applicationId: 1, applicationTitle: "Untouched Role" }),
+				application({
+					applicationId: 2,
+					applicationTitle: "Documented Role",
+					company: { ...company, companyName: "Atlas" },
+				}),
+			],
+			generations: [
+				generation({
+					cvGenerationId: 20,
+					applicationId: 2,
+					status: "COMPLETED",
+					applicationCvId: 5,
+				}),
+			],
+			applicationCvsByApplicationId: {
+				2: [applicationCv({ applicationId: 2 })],
+			},
+			jobDescriptionsByApplicationId: {},
+		});
+
+		renderGenerate(data);
+
+		await screen.findByRole("heading", { name: "Generate" });
+		fireEvent.click(screen.getByRole("button", { name: "Grid" }));
+
+		const layoutControl = screen.getByRole("group", { name: "Preparing layout" });
+		expect(
+			within(layoutControl).getByRole("button", { name: "Grid" }).getAttribute("aria-pressed"),
+		).toBe("true");
+		expect(screen.getByRole("region", { name: "Preparing" }).getAttribute("data-layout")).toBe(
+			"grid",
+		);
+		expect(window.localStorage.getItem(PREPARING_LAYOUT_STORAGE_KEY)).toBe("grid");
+		expect(window.location.search).toBe("");
+
+		cleanup();
+		const router = renderGenerate(data);
+
+		await screen.findByRole("heading", { name: "Generate" });
+		expect(
+			within(screen.getByRole("group", { name: "Preparing layout" }))
+				.getByRole("button", { name: "Grid" })
+				.getAttribute("aria-pressed"),
+		).toBe("true");
+		expect(screen.getByRole("region", { name: "Preparing" }).getAttribute("data-layout")).toBe(
+			"grid",
+		);
+		expect(screen.getByRole("region", { name: "Generated" }).getAttribute("data-layout")).toBe(
+			"list",
+		);
+		expect(router.state.location.pathname).toBe("/generate");
+		expect(router.state.location.search).toBe("");
+	});
+
+	it("shows crucial collapsed Grid fields and reveals List-parity details when expanded", async () => {
+		writePreparingLayoutPreference("grid");
+		renderGenerate(
+			loaderData({
+				applications: [
+					application({
+						applicationTitle: "Platform Engineer",
+						applicationStatus: "INTERVIEW",
+						applicationLocation: "Berlin",
+						applicationRemoteType: "REMOTE",
+						applicationUpdatedAt: "2026-07-16T12:00:00.000Z",
+						company: { ...company, companyName: "Northstar Labs", companyLogo: null },
+					}),
+				],
+			}),
+		);
+
+		const preparing = await screen.findByRole("region", { name: "Preparing" });
+		expect(preparing.getAttribute("data-layout")).toBe("grid");
+		expect(within(preparing).getByText("NL")).toBeTruthy();
+		expect(within(preparing).getByText("Platform Engineer")).toBeTruthy();
+		expect(within(preparing).getByText("No CV yet")).toBeTruthy();
+		const activity = within(preparing).getByTitle(
+			new Intl.DateTimeFormat("en", { dateStyle: "medium", timeStyle: "short" }).format(
+				new Date("2026-07-16T12:00:00.000Z"),
+			),
+		);
+		expect(activity.getAttribute("dateTime")).toBe("2026-07-16T12:00:00.000Z");
+		expect(
+			within(preparing).getByRole("button", { name: "Generate CV for Platform Engineer" }),
+		).toBeTruthy();
+		expect(within(preparing).queryByText("Interview")).toBeNull();
+		expect(within(preparing).queryByText("Berlin · Remote")).toBeNull();
+		expect(within(preparing).queryByText("Northstar Labs")).toBeNull();
+
+		fireEvent.click(
+			within(preparing).getByRole("button", { name: /Expand Platform\ Engineer(?: at .*)?/ }),
+		);
+		expect(
+			await within(preparing).findByRole("button", {
+				name: /Collapse Platform\ Engineer(?: at .*)?/,
+			}),
+		).toBeTruthy();
+		expect(within(preparing).getByText("Northstar Labs")).toBeTruthy();
+		expect(within(preparing).getByText("Interview")).toBeTruthy();
+		expect(within(preparing).getByText("Berlin · Remote")).toBeTruthy();
+		expect(within(preparing).getByText("No generations yet")).toBeTruthy();
+	});
+
+	it("keeps live active indicators on Grid cards without Generate", async () => {
+		writePreparingLayoutPreference("grid");
+		renderGenerate(
+			loaderData({
+				applications: [
+					application({ applicationTitle: "Queued Role" }),
+					application({
+						applicationId: 2,
+						applicationTitle: "Generating Role",
+						company: { ...company, companyName: "Orbit" },
+					}),
+				],
+				generations: [
+					generation({
+						cvGenerationId: 1,
+						applicationId: 1,
+						status: "PENDING",
+						createdAt: "2026-07-16T10:00:00.000Z",
+					}),
+					generation({
+						cvGenerationId: 2,
+						applicationId: 2,
+						status: "PROCESSING",
+						startedAt: "2026-07-16T10:00:00.000Z",
+						createdAt: "2026-07-16T09:59:00.000Z",
+					}),
+				],
+				jobDescriptionsByApplicationId: {},
+			}),
+		);
+
+		const preparing = await screen.findByRole("region", { name: "Preparing" });
+		expect(preparing.getAttribute("data-layout")).toBe("grid");
+		fireEvent.click(
+			within(preparing).getByRole("button", { name: /Collapse Queued\ Role(?: at .*)?/ }),
+		);
+		fireEvent.click(
+			within(preparing).getByRole("button", { name: /Collapse Generating\ Role(?: at .*)?/ }),
+		);
+		const indicatorText = (label: string) => (content: string, element: Element | null) =>
+			Boolean(element && element.tagName === "SPAN" && content.startsWith(label) && content.includes("·"));
+		expect(within(preparing).getByText(indicatorText("Queued"))).toBeTruthy();
+		expect(within(preparing).getByText(indicatorText("Generating"))).toBeTruthy();
+		expect(
+			within(preparing).queryByRole("button", { name: "Generate CV for Queued Role" }),
+		).toBeNull();
+		expect(
+			within(preparing).queryByRole("button", { name: "Generate CV for Generating Role" }),
+		).toBeNull();
+	});
+
+	it("preserves disclosure state when switching Preparing layouts", async () => {
+		renderGenerate(
+			loaderData({
+				applications: [
+					application({ applicationId: 1, applicationTitle: "Untouched Role" }),
+				],
+			}),
+		);
+
+		const preparing = await screen.findByRole("region", { name: "Preparing" });
+		fireEvent.click(
+			within(preparing).getByRole("button", { name: /Expand Untouched\ Role(?: at .*)?/ }),
+		);
+		expect(await within(preparing).findByText("No generations yet")).toBeTruthy();
+
+		fireEvent.click(screen.getByRole("button", { name: "Grid" }));
+		expect(screen.getByRole("region", { name: "Preparing" }).getAttribute("data-layout")).toBe(
+			"grid",
+		);
+		expect(
+			within(screen.getByRole("region", { name: "Preparing" }))
+				.getByRole("button", { name: /Collapse Untouched\ Role(?: at .*)?/ })
+				.getAttribute("aria-expanded"),
+		).toBe("true");
+		expect(within(screen.getByRole("region", { name: "Preparing" })).getByText("No generations yet")).toBeTruthy();
+
+		fireEvent.click(screen.getByRole("button", { name: "List" }));
+		expect(
+			within(screen.getByRole("region", { name: "Preparing" }))
+				.getByRole("button", { name: /Collapse Untouched\ Role(?: at .*)?/ })
+				.getAttribute("aria-expanded"),
+		).toBe("true");
 	});
 });

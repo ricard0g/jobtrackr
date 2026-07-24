@@ -1,4 +1,4 @@
-import { ChevronDown, Download, LoaderCircle, Sparkles, Trash2, XCircle } from "lucide-react";
+import { ChevronDown, Download, LayoutGrid, List, LoaderCircle, Sparkles, Trash2, XCircle } from "lucide-react";
 import { useEffect, useId, useRef, useState } from "react";
 import { useFetcher, useLoaderData, useRevalidator } from "react-router";
 
@@ -51,6 +51,11 @@ import {
 	locationRemoteLabel,
 	shouldStartExpanded,
 } from "@/routes/generate-display";
+import {
+	readPreparingLayoutPreference,
+	writePreparingLayoutPreference,
+	type PreparingLayout,
+} from "@/routes/generate-layout-preference";
 import {
 	buildGenerateSections,
 	generatedActivityAt,
@@ -481,7 +486,10 @@ function ApplicationGenerateRow({
 	consent,
 	initialJobDescription,
 	section,
+	layout,
 	now,
+	expanded,
+	onExpandedChange,
 	completionTransition = false,
 }: {
 	application: Application;
@@ -491,20 +499,17 @@ function ApplicationGenerateRow({
 	consent: AiConsent;
 	initialJobDescription: string;
 	section: "preparing" | "generated";
+	layout: PreparingLayout;
 	now: Date;
+	expanded: boolean;
+	onExpandedChange: (expanded: boolean) => void;
 	completionTransition?: boolean;
 }) {
 	const cancelFetcher = useFetcher<GenerateActionData>();
 	const [dialogOpen, setDialogOpen] = useState(false);
 	const [dialogSession, setDialogSession] = useState(0);
-	const [expanded, setExpanded] = useState(
-		() => completionTransition || shouldStartExpanded(generations),
-	);
 	const panelId = useId();
-
-	useEffect(() => {
-		if (completionTransition) setExpanded(true);
-	}, [completionTransition]);
+	const isGrid = section === "preparing" && layout === "grid";
 	const latest = latestGeneration(generations);
 	const atLimit = applicationCvs.length >= MAX_APPLICATION_CVS;
 	const canGenerate = baseCvs.length > 0 && !atLimit;
@@ -544,7 +549,7 @@ function ApplicationGenerateRow({
 		setDialogOpen(true);
 	};
 
-	const toggleExpanded = () => setExpanded((value) => !value);
+	const toggleExpanded = () => onExpandedChange(!expanded);
 
 	const generateButton = (
 		<Button
@@ -576,15 +581,20 @@ function ApplicationGenerateRow({
 		</span>
 	) : null;
 
+	const showRichPreparingMeta = section === "preparing" && (!isGrid || expanded);
+	const showGridCollapsedMeta = isGrid && !expanded;
+
 	return (
 		<li
 			className={cn(
-				"border-b border-light-gray last:border-b-0",
+				isGrid
+					? "flex h-full flex-col rounded-lg border border-light-gray bg-white px-3 py-3"
+					: "border-b border-light-gray last:border-b-0",
 				completionTransition && "generate-completion-highlight",
 			)}
 			data-completion-highlight={completionTransition ? "true" : undefined}
 		>
-			<div className="flex items-start gap-3 py-3">
+			<div className={cn("flex items-start gap-3", !isGrid && "py-3")}>
 				<CompanyMark
 					companyName={application.company.companyName}
 					logoUrl={application.company.companyLogo}
@@ -604,9 +614,11 @@ function ApplicationGenerateRow({
 								<span className="truncate font-semibold text-dark-gray">
 									{application.applicationTitle}
 								</span>
-								<span className="truncate text-sm text-medium-gray" aria-hidden="true">
-									{application.company.companyName}
-								</span>
+								{!isGrid || expanded ? (
+									<span className="truncate text-sm text-medium-gray" aria-hidden="true">
+										{application.company.companyName}
+									</span>
+								) : null}
 								{section === "generated" && closed ? (
 									<span
 										className="rounded-full px-2 py-0.5 text-xs font-medium text-white"
@@ -616,7 +628,19 @@ function ApplicationGenerateRow({
 									</span>
 								) : null}
 							</span>
-							{section === "preparing" ? (
+							{showGridCollapsedMeta ? (
+								<span className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-medium-gray">
+									{!hasActiveGeneration ? (
+										<span className="font-medium text-dark-gray">{stateLabel}</span>
+									) : null}
+									{relativeActivity && absoluteActivity ? (
+										<time dateTime={activityAt} title={absoluteActivity}>
+											{relativeActivity}
+										</time>
+									) : null}
+								</span>
+							) : null}
+							{showRichPreparingMeta ? (
 								<span className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-medium-gray">
 									<span
 										className="rounded-full px-2 py-0.5 font-medium text-white"
@@ -642,7 +666,8 @@ function ApplicationGenerateRow({
 										</time>
 									) : null}
 								</span>
-							) : (
+							) : null}
+							{section === "generated" ? (
 								<span className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-medium-gray">
 									<span>
 										{cvCount} Generated CV{cvCount === 1 ? "" : "s"}
@@ -653,7 +678,7 @@ function ApplicationGenerateRow({
 										</time>
 									) : null}
 								</span>
-							)}
+							) : null}
 						</span>
 						<ChevronDown
 							aria-hidden="true"
@@ -675,7 +700,7 @@ function ApplicationGenerateRow({
 			</div>
 
 			{expanded ? (
-				<div id={panelId} className="space-y-3 pb-4 pl-12">
+				<div id={panelId} className={cn("space-y-3 pb-4", isGrid ? "pt-3" : "pl-12")}>
 					{section === "generated" ? (
 						<div className="flex flex-wrap items-center gap-2">
 							{generateButton}
@@ -780,6 +805,12 @@ export function GenerateRoute() {
 	} = useLoaderData() as GenerateLoaderData;
 	const revalidator = useRevalidator();
 	const [generatedSectionOpen, setGeneratedSectionOpen] = useState(true);
+	const [preparingLayout, setPreparingLayout] = useState<PreparingLayout>(() =>
+		readPreparingLayoutPreference(),
+	);
+	const [expandedByApplicationId, setExpandedByApplicationId] = useState(
+		() => new Map<number, boolean>(),
+	);
 	const [completionHighlightIds, setCompletionHighlightIds] = useState<Set<number>>(
 		() => new Set(),
 	);
@@ -790,6 +821,30 @@ export function GenerateRoute() {
 		isActiveCvGenerationStatus(generation.status),
 	);
 	const now = useNow(hasActiveGeneration);
+
+	const setApplicationExpanded = (applicationId: number, expanded: boolean) => {
+		setExpandedByApplicationId((previous) => {
+			const next = new Map(previous);
+			next.set(applicationId, expanded);
+			return next;
+		});
+	};
+
+	const resolveExpanded = (
+		applicationId: number,
+		applicationGenerations: CvGeneration[],
+		completionTransition: boolean,
+	) => {
+		if (expandedByApplicationId.has(applicationId)) {
+			return expandedByApplicationId.get(applicationId)!;
+		}
+		return completionTransition || shouldStartExpanded(applicationGenerations);
+	};
+
+	const selectPreparingLayout = (layout: PreparingLayout) => {
+		setPreparingLayout(layout);
+		writePreparingLayoutPreference(layout);
+	};
 
 	useEffect(() => {
 		if (!hasActiveGeneration) return;
@@ -840,6 +895,13 @@ export function GenerateRoute() {
 
 		if (newlyCompleted.length > 0) {
 			setCompletionHighlightIds((previous) => new Set([...previous, ...newlyCompleted]));
+			setExpandedByApplicationId((previous) => {
+				const next = new Map(previous);
+				for (const applicationId of newlyCompleted) {
+					next.set(applicationId, true);
+				}
+				return next;
+			});
 			setGeneratedSectionOpen(true);
 			const titles = newlyCompleted.map((applicationId) => {
 				const match = applications.find((item) => item.applicationId === applicationId);
@@ -872,8 +934,15 @@ export function GenerateRoute() {
 	const renderSectionItems = (
 		items: GenerateSectionItem[],
 		section: "preparing" | "generated",
+		layout: PreparingLayout,
 	) => (
-		<ul className="divide-y divide-light-gray border-y border-light-gray">
+		<ul
+			className={
+				layout === "grid"
+					? "grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3"
+					: "divide-y divide-light-gray border-y border-light-gray"
+			}
+		>
 			{items.map(({ application, generations: applicationGenerations, applicationCvs }) => {
 				const newlyCompleted = completionHighlightIds.has(application.applicationId);
 				return (
@@ -888,7 +957,16 @@ export function GenerateRoute() {
 							jobDescriptionsByApplicationId[application.applicationId] ?? ""
 						}
 						section={section}
+						layout={layout}
 						now={now}
+						expanded={resolveExpanded(
+							application.applicationId,
+							applicationGenerations,
+							newlyCompleted,
+						)}
+						onExpandedChange={(next) =>
+							setApplicationExpanded(application.applicationId, next)
+						}
 						completionTransition={newlyCompleted}
 					/>
 				);
@@ -896,10 +974,52 @@ export function GenerateRoute() {
 		</ul>
 	);
 
+	const layoutControl = (
+		<div
+			role="group"
+			aria-label="Preparing layout"
+			className="inline-flex rounded-lg border border-light-gray bg-white p-0.5"
+		>
+			<Button
+				type="button"
+				variant="ghost"
+				size="sm"
+				aria-pressed={preparingLayout === "list"}
+				className={cn(
+					"rounded-md",
+					preparingLayout === "list" && "bg-lightest-accent text-dark-accent",
+				)}
+				onClick={() => selectPreparingLayout("list")}
+			>
+				<List aria-hidden="true" />
+				List
+			</Button>
+			<Button
+				type="button"
+				variant="ghost"
+				size="sm"
+				aria-pressed={preparingLayout === "grid"}
+				className={cn(
+					"rounded-md",
+					preparingLayout === "grid" && "bg-lightest-accent text-dark-accent",
+				)}
+				onClick={() => selectPreparingLayout("grid")}
+			>
+				<LayoutGrid aria-hidden="true" />
+				Grid
+			</Button>
+		</div>
+	);
+
 	return (
 		<div className="h-full overflow-y-auto px-4 pb-12">
-			<section className="mx-auto max-w-4xl">
-				<div className="mb-6">
+			<section
+				className={cn(
+					"mx-auto",
+					preparingLayout === "grid" && preparing.length > 0 ? "max-w-6xl" : "max-w-4xl",
+				)}
+			>
+				<div className="mb-6 mx-auto max-w-4xl">
 					<h1 className="text-2xl font-bold text-darkest-accent sm:text-3xl">Generate</h1>
 					<p className="mt-1 text-medium-gray">
 						Create tailored application CVs from your Base CV library.
@@ -945,15 +1065,21 @@ export function GenerateRoute() {
 					</div>
 				) : (
 					<div className="space-y-8">
-						<section aria-labelledby="generate-preparing-heading">
-							<h2
-								id="generate-preparing-heading"
-								className="mb-3 text-lg font-semibold text-darkest-accent"
-							>
-								Preparing
-							</h2>
+						<section
+							aria-labelledby="generate-preparing-heading"
+							data-layout={preparingLayout}
+						>
+							<div className="mb-3 flex flex-wrap items-center justify-between gap-3">
+								<h2
+									id="generate-preparing-heading"
+									className="text-lg font-semibold text-darkest-accent"
+								>
+									Preparing
+								</h2>
+								{preparing.length > 0 ? layoutControl : null}
+							</div>
 							{preparing.length > 0 ? (
-								renderSectionItems(preparing, "preparing")
+								renderSectionItems(preparing, "preparing", preparingLayout)
 							) : (
 								<p className="rounded-lg border border-dashed border-light-gray px-3 py-4 text-sm text-medium-gray">
 									Nothing to prepare
@@ -961,7 +1087,11 @@ export function GenerateRoute() {
 							)}
 						</section>
 						{generated.length > 0 ? (
-							<section aria-labelledby="generate-generated-heading">
+							<section
+								aria-labelledby="generate-generated-heading"
+								data-layout="list"
+								className="mx-auto max-w-4xl"
+							>
 								<h2 id="generate-generated-heading" className="mb-3">
 									<button
 										type="button"
@@ -982,7 +1112,9 @@ export function GenerateRoute() {
 									</button>
 								</h2>
 								{generatedSectionOpen ? (
-									<div id={generatedPanelId}>{renderSectionItems(generated, "generated")}</div>
+									<div id={generatedPanelId}>
+										{renderSectionItems(generated, "generated", "list")}
+									</div>
 								) : (
 									<div id={generatedPanelId} hidden />
 								)}
