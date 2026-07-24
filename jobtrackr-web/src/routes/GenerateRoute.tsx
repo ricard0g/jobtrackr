@@ -1,11 +1,4 @@
-import {
-	Download,
-	FileText,
-	LoaderCircle,
-	Sparkles,
-	Trash2,
-	XCircle,
-} from "lucide-react";
+import { ChevronDown, Download, LoaderCircle, Sparkles, Trash2, XCircle } from "lucide-react";
 import { useEffect, useId, useRef, useState } from "react";
 import { useFetcher, useLoaderData, useRevalidator } from "react-router";
 
@@ -28,7 +21,11 @@ import {
 	SelectValue,
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
-import type { Application } from "@/types/application";
+import { cn } from "@/lib/utils";
+import {
+	getApplicationStatusOption,
+	type Application,
+} from "@/types/application";
 import type { ApplicationCv } from "@/types/application-cv";
 import type { BaseCv } from "@/types/base-cv";
 import {
@@ -44,8 +41,20 @@ import {
 	type GenerateLoaderData,
 } from "@/routes/generate-data";
 import {
+	companyMonogram,
+	formatAbsoluteTime,
+	formatRelativeTime,
+	generationStateLabel,
+	humanizeModelId,
+	locationRemoteLabel,
+	shouldStartExpanded,
+} from "@/routes/generate-display";
+import {
 	buildGenerateSections,
+	generatedActivityAt,
 	latestGeneration,
+	newestGeneratedCv,
+	preparingActivityAt,
 	type GenerateSectionItem,
 } from "@/routes/generate-sections";
 
@@ -58,10 +67,6 @@ const formatBytes = (bytes: number) =>
 		unit: bytes >= 1024 * 1024 ? "megabyte" : "kilobyte",
 		maximumFractionDigits: 1,
 	}).format(bytes / (bytes >= 1024 * 1024 ? 1024 * 1024 : 1024));
-
-const formatDate = (value: string) =>
-	new Intl.DateTimeFormat("en", { dateStyle: "medium", timeStyle: "short" }).format(new Date(value));
-
 const openSignedDownload = (uri: string) => {
 	const link = document.createElement("a");
 	link.href = uri;
@@ -98,7 +103,7 @@ function ApplicationCvRow({ applicationCv }: { applicationCv: ApplicationCv }) {
 				<p className="truncate text-sm font-semibold text-dark-gray">{applicationCv.originalFilename}</p>
 				<p className="mt-0.5 text-xs text-medium-gray">
 					v{applicationCv.version} · {formatLabels[applicationCv.format]} ·{" "}
-					{formatBytes(applicationCv.byteSize)} · {formatDate(applicationCv.createdAt)}
+					{formatBytes(applicationCv.byteSize)} · {formatAbsoluteTime(applicationCv.createdAt)}
 				</p>
 			</div>
 			<div className="flex gap-1">
@@ -414,6 +419,46 @@ function GenerateDialogForm({
 	);
 }
 
+function CompanyMark({
+	companyName,
+	logoUrl,
+	size,
+}: {
+	companyName: string;
+	logoUrl: string | null;
+	size: "preparing" | "generated";
+}) {
+	const [failed, setFailed] = useState(false);
+	const dimensions = size === "preparing" ? "h-9 w-9 text-xs" : "h-6 w-6 text-[10px]";
+
+	if (!logoUrl || failed) {
+		return (
+			<span
+				aria-hidden="true"
+				className={cn(
+					"inline-flex shrink-0 items-center justify-center rounded-md bg-lightest-accent font-semibold text-dark-accent",
+					dimensions,
+				)}
+			>
+				{companyMonogram(companyName)}
+			</span>
+		);
+	}
+
+	return (
+		<img
+			src={logoUrl}
+			alt=""
+			aria-hidden="true"
+			className={cn(
+				"shrink-0 rounded-md object-contain",
+				size === "preparing" ? "h-9 max-h-9 w-auto max-w-9" : "h-6 max-h-6 w-auto max-w-6",
+			)}
+			onError={() => setFailed(true)}
+		/>
+	);
+}
+
 function ApplicationGenerateRow({
 	application,
 	generations,
@@ -421,6 +466,7 @@ function ApplicationGenerateRow({
 	baseCvs,
 	consent,
 	initialJobDescription,
+	section,
 }: {
 	application: Application;
 	generations: CvGeneration[];
@@ -428,40 +474,188 @@ function ApplicationGenerateRow({
 	baseCvs: BaseCv[];
 	consent: AiConsent;
 	initialJobDescription: string;
+	section: "preparing" | "generated";
 }) {
 	const cancelFetcher = useFetcher<GenerateActionData>();
 	const [dialogOpen, setDialogOpen] = useState(false);
 	const [dialogSession, setDialogSession] = useState(0);
+	const [expanded, setExpanded] = useState(() => shouldStartExpanded(generations));
+	const panelId = useId();
 	const latest = latestGeneration(generations);
 	const atLimit = applicationCvs.length >= MAX_APPLICATION_CVS;
+	const canGenerate = baseCvs.length > 0 && !atLimit;
 	const cancelling = cancelFetcher.state !== "idle";
 	const sortedCvs = applicationCvs.toSorted((left, right) => right.version - left.version);
+	const hasActiveGeneration = generations.some((generation) =>
+		isActiveCvGenerationStatus(generation.status),
+	);
+	const activeGeneration =
+		generations.find((generation) => generation.status === "PROCESSING") ??
+		generations.find((generation) => generation.status === "PENDING") ??
+		null;
+	const statusOption = getApplicationStatusOption(application.applicationStatus);
+	const placeLabel = locationRemoteLabel(application);
+	const stateLabel = generationStateLabel(generations, applicationCvs.length > 0);
+	const activityAt =
+		section === "generated"
+			? generatedActivityAt(applicationCvs)
+			: preparingActivityAt(application, generations);
+	const relativeActivity = activityAt ? formatRelativeTime(activityAt) : null;
+	const absoluteActivity = activityAt ? formatAbsoluteTime(activityAt) : null;
+	const closed =
+		application.applicationStatus === "REJECTED" ||
+		application.applicationStatus === "WITHDRAWN";
+	const formatModelParts: string[] = [];
+	if (latest?.requestedFormat) {
+		formatModelParts.push(formatLabels[latest.requestedFormat]);
+	}
+	if (latest?.modelId) {
+		formatModelParts.push(humanizeModelId(latest.modelId));
+	}
+	const newestCv = newestGeneratedCv(applicationCvs);
+	const cvCount = applicationCvs.length;
 
 	const openDialog = () => {
 		setDialogSession((value) => value + 1);
 		setDialogOpen(true);
 	};
 
+	const toggleExpanded = () => setExpanded((value) => !value);
+
+	const generateButton = (
+		<Button
+			type="button"
+			size="sm"
+			onClick={(event) => {
+				event.stopPropagation();
+				openDialog();
+			}}
+			disabled={!canGenerate}
+			aria-label={`Generate CV for ${application.applicationTitle}`}
+		>
+			<Sparkles />
+			{section === "generated" ? "Generate again" : "Generate"}
+		</Button>
+	);
+
+	const activeIndicator = hasActiveGeneration ? (
+		<span className="inline-flex items-center gap-1.5 text-sm font-medium text-dark-accent">
+			<LoaderCircle className="animate-spin" size={14} aria-hidden="true" />
+			{activeGeneration?.status === "PENDING" ? "Queued" : "Generating"}
+		</span>
+	) : null;
+
 	return (
-		<li className="rounded-xl border border-light-gray bg-white p-4">
-			<div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+		<li className="border-b border-light-gray last:border-b-0">
+			<div className="flex items-start gap-3 py-3">
+				<CompanyMark
+					companyName={application.company.companyName}
+					logoUrl={application.company.companyLogo}
+					size={section === "preparing" ? "preparing" : "generated"}
+				/>
 				<div className="min-w-0 flex-1">
-					<div className="flex items-start gap-3">
-						<div className="rounded-lg bg-lightest-accent p-2 text-dark-accent">
-							<FileText aria-hidden="true" />
+					<button
+						type="button"
+						className="flex w-full min-w-0 items-start gap-2 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-dark-accent/40 focus-visible:ring-offset-2"
+						aria-expanded={expanded}
+						aria-controls={panelId}
+						aria-label={`${expanded ? "Collapse" : "Expand"} ${application.applicationTitle} at ${application.company.companyName}`}
+						onClick={toggleExpanded}
+					>
+						<span className="min-w-0 flex-1">
+							<span className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
+								<span className="truncate font-semibold text-dark-gray">
+									{application.applicationTitle}
+								</span>
+								<span className="truncate text-sm text-medium-gray" aria-hidden="true">
+									{application.company.companyName}
+								</span>
+								{section === "generated" && closed ? (
+									<span
+										className="rounded-full px-2 py-0.5 text-xs font-medium text-white"
+										style={{ backgroundColor: statusOption.color }}
+									>
+										{statusOption.label}
+									</span>
+								) : null}
+							</span>
+							{section === "preparing" ? (
+								<span className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-medium-gray">
+									<span
+										className="rounded-full px-2 py-0.5 font-medium text-white"
+										style={{ backgroundColor: statusOption.color }}
+									>
+										{statusOption.label}
+									</span>
+									{placeLabel ? <span>{placeLabel}</span> : null}
+									{!hasActiveGeneration ? (
+										<span className="font-medium text-dark-gray">{stateLabel}</span>
+									) : null}
+									{formatModelParts.length > 0 ? (
+										<span
+											title={latest?.modelId ?? undefined}
+											className="text-medium-gray"
+										>
+											{formatModelParts.join(" · ")}
+										</span>
+									) : null}
+									{relativeActivity && absoluteActivity ? (
+										<time dateTime={activityAt} title={absoluteActivity}>
+											{relativeActivity}
+										</time>
+									) : null}
+								</span>
+							) : (
+								<span className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-medium-gray">
+									<span>
+										{cvCount} Generated CV{cvCount === 1 ? "" : "s"}
+									</span>
+									{relativeActivity && absoluteActivity && newestCv ? (
+										<time dateTime={activityAt} title={absoluteActivity}>
+											{relativeActivity}
+										</time>
+									) : null}
+								</span>
+							)}
+						</span>
+						<ChevronDown
+							aria-hidden="true"
+							className={cn(
+								"mt-1 shrink-0 text-medium-gray transition-transform",
+								expanded && "rotate-180",
+							)}
+							size={16}
+						/>
+					</button>
+				</div>
+				<div className="shrink-0 pt-0.5">
+					{section === "preparing"
+						? hasActiveGeneration
+							? activeIndicator
+							: generateButton
+						: null}
+				</div>
+			</div>
+
+			{expanded ? (
+				<div id={panelId} className="space-y-3 pb-4 pl-12">
+					{section === "generated" ? (
+						<div className="flex flex-wrap items-center gap-2">
+							{generateButton}
 						</div>
-						<div className="min-w-0">
-							<p className="truncate font-semibold text-dark-gray">{application.applicationTitle}</p>
-							<p className="mt-1 text-sm text-medium-gray">{application.company.companyName}</p>
-						</div>
-					</div>
+					) : null}
 
 					{latest ? (
-						<div className="mt-4 rounded-lg bg-off-white px-3 py-2">
+						<div className="rounded-lg bg-off-white px-3 py-2">
 							<p className="text-sm text-dark-gray">
 								<span className="font-semibold">Latest status: </span>
 								{cvGenerationStatusLabels[latest.status]}
 							</p>
+							{latest.modelId ? (
+								<p className="mt-1 text-xs text-medium-gray" title={latest.modelId}>
+									Model: {humanizeModelId(latest.modelId)}
+								</p>
+							) : null}
 							{latest.status === "FAILED" ? (
 								<div className="mt-1 space-y-1 text-sm text-red-700">
 									{latest.errorMessage ? <p>{latest.errorMessage}</p> : null}
@@ -482,6 +676,7 @@ function ApplicationGenerateRow({
 										size="sm"
 										disabled={cancelling}
 										aria-label={`Cancel generation for ${application.applicationTitle}`}
+										onClick={(event) => event.stopPropagation()}
 									>
 										{cancelling ? <LoaderCircle className="animate-spin" /> : <XCircle />}
 										Cancel
@@ -495,38 +690,33 @@ function ApplicationGenerateRow({
 							) : null}
 						</div>
 					) : (
-						<p className="mt-4 text-sm text-medium-gray">No generations yet</p>
+						<p className="text-sm text-medium-gray">No generations yet</p>
 					)}
+
+					{atLimit ? (
+						<p className="text-sm text-amber-800">
+							Generated CV limit reached ({applicationCvs.length} / {MAX_APPLICATION_CVS}). Delete
+							one to make room.
+						</p>
+					) : null}
+
+					{sortedCvs.length > 0 ? (
+						<div>
+							<h3 className="text-sm font-semibold text-darkest-accent">Successful versions</h3>
+							<ul className="mt-2 space-y-2">
+								{sortedCvs.map((applicationCv) => (
+									<ApplicationCvRow
+										key={applicationCv.applicationCvId}
+										applicationCv={applicationCv}
+									/>
+								))}
+							</ul>
+						</div>
+					) : null}
 				</div>
-
-				<Button
-					type="button"
-					onClick={openDialog}
-					disabled={atLimit}
-					aria-label={`Generate CV for ${application.applicationTitle}`}
-				>
-					<Sparkles />
-					Generate
-				</Button>
-			</div>
-
-			{atLimit ? (
-				<p className="mt-3 text-sm text-amber-800">
-					Generated CV limit reached ({applicationCvs.length} / {MAX_APPLICATION_CVS}). Delete one to
-					make room.
-				</p>
-			) : null}
-
-			{sortedCvs.length > 0 ? (
-				<div className="mt-4">
-					<h3 className="text-sm font-semibold text-darkest-accent">Successful versions</h3>
-					<ul className="mt-2 space-y-2">
-						{sortedCvs.map((applicationCv) => (
-							<ApplicationCvRow key={applicationCv.applicationCvId} applicationCv={applicationCv} />
-						))}
-					</ul>
-				</div>
-			) : null}
+			) : (
+				<div id={panelId} hidden />
+			)}
 
 			<GenerateDialog
 				application={application}
@@ -552,6 +742,8 @@ export function GenerateRoute() {
 		consent,
 	} = useLoaderData() as GenerateLoaderData;
 	const revalidator = useRevalidator();
+	const [generatedSectionOpen, setGeneratedSectionOpen] = useState(true);
+	const generatedPanelId = useId();
 	const hasActiveGeneration = generations.some((generation) =>
 		isActiveCvGenerationStatus(generation.status),
 	);
@@ -572,8 +764,11 @@ export function GenerateRoute() {
 		applicationCvsByApplicationId,
 	);
 
-	const renderSectionItems = (items: GenerateSectionItem[]) => (
-		<ul className="space-y-3">
+	const renderSectionItems = (
+		items: GenerateSectionItem[],
+		section: "preparing" | "generated",
+	) => (
+		<ul className="divide-y divide-light-gray border-y border-light-gray">
 			{items.map(({ application, generations: applicationGenerations, applicationCvs }) => (
 				<ApplicationGenerateRow
 					key={application.applicationId}
@@ -583,6 +778,7 @@ export function GenerateRoute() {
 					baseCvs={baseCvs}
 					consent={consent}
 					initialJobDescription={jobDescriptionsByApplicationId[application.applicationId] ?? ""}
+					section={section}
 				/>
 			))}
 		</ul>
@@ -606,7 +802,10 @@ export function GenerateRoute() {
 				) : null}
 
 				{baseCvs.length === 0 ? (
-					<p className="mb-4 rounded-lg border border-light-gray bg-white px-3 py-2 text-sm text-medium-gray">
+					<p
+						role="status"
+						className="mb-4 rounded-lg border border-light-gray bg-white px-3 py-2 text-sm text-medium-gray"
+					>
 						Upload a Base CV in Documents before you can generate tailored CVs.
 					</p>
 				) : null}
@@ -638,7 +837,7 @@ export function GenerateRoute() {
 								Preparing
 							</h2>
 							{preparing.length > 0 ? (
-								renderSectionItems(preparing)
+								renderSectionItems(preparing, "preparing")
 							) : (
 								<p className="rounded-lg border border-dashed border-light-gray px-3 py-4 text-sm text-medium-gray">
 									Nothing to prepare
@@ -647,13 +846,28 @@ export function GenerateRoute() {
 						</section>
 						{generated.length > 0 ? (
 							<section aria-labelledby="generate-generated-heading">
-								<h2
-									id="generate-generated-heading"
-									className="mb-3 text-lg font-semibold text-darkest-accent"
-								>
-									Generated
+								<h2 id="generate-generated-heading" className="mb-3">
+									<button
+										type="button"
+										className="flex w-full items-center justify-between gap-2 text-left text-lg font-semibold text-darkest-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-dark-accent/40 focus-visible:ring-offset-2"
+										aria-expanded={generatedSectionOpen}
+										aria-controls={generatedPanelId}
+										onClick={() => setGeneratedSectionOpen((value) => !value)}
+									>
+										Generated
+										<ChevronDown
+											aria-hidden="true"
+											className={cn(
+												"shrink-0 text-medium-gray transition-transform",
+												generatedSectionOpen && "rotate-180",
+											)}
+											size={18}
+										/>
+									</button>
 								</h2>
-								{renderSectionItems(generated)}
+								{generatedSectionOpen ? (
+									<div id={generatedPanelId}>{renderSectionItems(generated, "generated")}</div>
+								) : null}
 							</section>
 						) : null}
 					</div>

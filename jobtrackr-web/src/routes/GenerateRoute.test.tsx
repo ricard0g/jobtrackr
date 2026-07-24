@@ -143,8 +143,11 @@ describe("GenerateRoute", () => {
 
 		expect(await screen.findByRole("heading", { name: "Generate" })).toBeTruthy();
 		expect(screen.getByText("Frontend Engineer")).toBeTruthy();
-		expect(screen.getByText("No generations yet")).toBeTruthy();
+		expect(screen.getByText("No CV yet")).toBeTruthy();
 		expect(screen.getByRole("button", { name: "Generate CV for Frontend Engineer" })).toBeTruthy();
+		expect(
+			screen.getByRole("button", { name: /Expand Frontend\ Engineer(?: at .*)?/ }).getAttribute("aria-expanded"),
+		).toBe("false");
 	});
 
 	it("presents queued, generating, completed, failed, and cancelled statuses without percentages", async () => {
@@ -198,15 +201,17 @@ describe("GenerateRoute", () => {
 			}),
 		);
 
-		expect(await screen.findByText("Queued")).toBeTruthy();
-		expect(screen.getByText("Generating")).toBeTruthy();
-		expect(screen.getByText("Completed")).toBeTruthy();
-		expect(screen.getByText("Failed")).toBeTruthy();
+		expect((await screen.findAllByText("Queued")).length).toBeGreaterThan(0);
+		expect(screen.getAllByText("Generating").length).toBeGreaterThan(0);
+		expect(screen.getAllByText("Failed").length).toBeGreaterThan(0);
 		expect(screen.getByText("Cancelled")).toBeTruthy();
 		expect(screen.queryByText(/%/)).toBeNull();
 		expect(screen.getByText("Model timeout")).toBeTruthy();
 		expect(screen.getByText("Reference: corr-failed-4")).toBeTruthy();
 		expect(screen.getByText("Updating generation status…")).toBeTruthy();
+
+		fireEvent.click(screen.getByRole("button", { name: /Expand Completed\ Role(?: at .*)?/ }));
+		expect(await screen.findByText("Completed")).toBeTruthy();
 	});
 
 	it("shows cancel only for queued generations", async () => {
@@ -248,6 +253,7 @@ describe("GenerateRoute", () => {
 			}),
 		);
 
+		fireEvent.click(await screen.findByRole("button", { name: /Expand Frontend\ Engineer(?: at .*)?/ }));
 		const generateButton = await screen.findByRole("button", {
 			name: "Generate CV for Frontend Engineer",
 		});
@@ -331,6 +337,7 @@ describe("GenerateRoute", () => {
 			},
 		);
 
+		fireEvent.click(await screen.findByRole("button", { name: /Expand Frontend\ Engineer(?: at .*)?/ }));
 		expect(await screen.findByText("Successful versions")).toBeTruthy();
 		fireEvent.click(screen.getByRole("button", { name: "Download application-1-v1.pdf" }));
 		await waitFor(() => expect(intents).toContain("download-cv"));
@@ -750,17 +757,19 @@ describe("GenerateRoute", () => {
 
 		const preparing = await screen.findByRole("region", { name: "Preparing" });
 		const rowNames = within(preparing)
-			.getAllByRole("button", { name: /^Generate CV for / })
-			.map((button) => button.getAttribute("aria-label"));
+			.getAllByRole("button", { name: /^(Expand|Collapse) / })
+			.map((button) =>
+				button.getAttribute("aria-label")?.replace(/^(Expand|Collapse) /, "").replace(/ at .*$/, ""),
+			);
 		expect(rowNames).toEqual([
-			"Generate CV for New Processing",
-			"Generate CV for Old Processing",
-			"Generate CV for New Queued",
-			"Generate CV for Old Queued",
-			"Generate CV for New Failed",
-			"Generate CV for Old Failed",
-			"Generate CV for New Untouched",
-			"Generate CV for Old Untouched",
+			"New Processing",
+			"Old Processing",
+			"New Queued",
+			"Old Queued",
+			"New Failed",
+			"Old Failed",
+			"New Untouched",
+			"Old Untouched",
 		]);
 	});
 
@@ -816,11 +825,13 @@ describe("GenerateRoute", () => {
 
 		const generated = await screen.findByRole("region", { name: "Generated" });
 		const rowNames = within(generated)
-			.getAllByRole("button", { name: /^Generate CV for / })
-			.map((button) => button.getAttribute("aria-label"));
+			.getAllByRole("button", { name: /^(Expand|Collapse) / })
+			.map((button) =>
+				button.getAttribute("aria-label")?.replace(/^(Expand|Collapse) /, "").replace(/ at .*$/, ""),
+			);
 		expect(rowNames).toEqual([
-			"Generate CV for Newest Document Application",
-			"Generate CV for Recently Edited Application",
+			"Newest Document Application",
+			"Recently Edited Application",
 		]);
 	});
 
@@ -912,11 +923,276 @@ describe("GenerateRoute", () => {
 			}),
 		);
 
+		fireEvent.click(await screen.findByRole("button", { name: /Expand Frontend\ Engineer(?: at .*)?/ }));
 		const list = await screen.findByText("Successful versions");
 		const section = list.closest("div");
 		expect(section).toBeTruthy();
 		expect(within(section as HTMLElement).getByText("application-1-v2.pdf")).toBeTruthy();
 		expect(screen.getByRole("button", { name: "Download application-1-v2.pdf" })).toBeTruthy();
 		expect(screen.getByRole("button", { name: "Delete application-1-v2.pdf" })).toBeTruthy();
+	});
+
+	it("shows rich Preparing list metadata with company monogram and visible Generate", async () => {
+		renderGenerate(
+			loaderData({
+				applications: [
+					application({
+						applicationTitle: "Platform Engineer",
+						applicationStatus: "INTERVIEW",
+						applicationLocation: "Berlin",
+						applicationRemoteType: "REMOTE",
+						applicationUpdatedAt: "2026-07-16T12:00:00.000Z",
+						company: {
+							...company,
+							companyName: "Northstar Labs",
+							companyLogo: null,
+						},
+					}),
+				],
+				generations: [
+					generation({
+						status: "FAILED",
+						requestedFormat: "DOCX",
+						modelId: "gemini-3.1-flash-lite",
+						errorMessage: "Drafting timed out",
+						updatedAt: "2026-07-16T10:00:00.000Z",
+					}),
+				],
+			}),
+		);
+
+		const preparing = await screen.findByRole("region", { name: "Preparing" });
+		expect(within(preparing).getByText("NL")).toBeTruthy();
+		expect(within(preparing).getByText("Platform Engineer")).toBeTruthy();
+		expect(within(preparing).getByText("Northstar Labs")).toBeTruthy();
+		expect(within(preparing).getByText("Interview")).toBeTruthy();
+		expect(within(preparing).getByText("Berlin · Remote")).toBeTruthy();
+		expect(within(preparing).getAllByText("Failed").length).toBeGreaterThan(0);
+		expect(within(preparing).getByText(/DOCX · Gemini 3.1 Flash Lite/)).toBeTruthy();
+		const activity = within(preparing).getByTitle(
+			new Intl.DateTimeFormat("en", { dateStyle: "medium", timeStyle: "short" }).format(
+				new Date("2026-07-16T10:00:00.000Z"),
+			),
+		);
+		expect(activity.getAttribute("dateTime")).toBe("2026-07-16T10:00:00.000Z");
+		expect(activity.textContent).toMatch(/ago|yesterday|today/i);
+		expect(
+			within(preparing).getByRole("button", { name: "Generate CV for Platform Engineer" }),
+		).toBeTruthy();
+		expect(
+			within(preparing)
+				.getByRole("button", { name: /Collapse Platform\ Engineer(?: at .*)?/ })
+				.getAttribute("aria-expanded"),
+		).toBe("true");
+		expect(within(preparing).getByText("Drafting timed out")).toBeTruthy();
+		expect(within(preparing).queryByRole("img")).toBeNull();
+	});
+
+	it("falls back to a monogram when a company logo fails to load", async () => {
+		renderGenerate(
+			loaderData({
+				applications: [
+					application({
+						company: {
+							...company,
+							companyName: "Broken Image Co",
+							companyLogo: "https://example.test/broken-logo.png",
+						},
+					}),
+				],
+			}),
+		);
+
+		const preparing = await screen.findByRole("region", { name: "Preparing" });
+		const logo = preparing.querySelector("img");
+		expect(logo).toBeTruthy();
+		expect(logo?.getAttribute("aria-hidden")).toBe("true");
+		expect(logo?.className).toContain("object-contain");
+		fireEvent.error(logo!);
+		expect(within(preparing).getByText("BI")).toBeTruthy();
+		expect(preparing.querySelector("img")).toBeNull();
+	});
+
+	it("keeps Generated items compact until expanded and preserves Generate again plus document actions", async () => {
+		renderGenerate(
+			loaderData({
+				applications: [
+					application({
+						applicationId: 1,
+						applicationTitle: "Settled Role",
+						applicationStatus: "WITHDRAWN",
+						company: { ...company, companyName: "Atlas Systems", companyLogo: null },
+					}),
+				],
+				generations: [
+					generation({
+						status: "COMPLETED",
+						applicationCvId: 5,
+						requestedFormat: "PDF",
+						modelId: "gemini-mock",
+					}),
+				],
+				applicationCvsByApplicationId: {
+					1: [
+						applicationCv({
+							createdAt: "2026-07-15T09:00:00.000Z",
+							originalFilename: "settled-v1.pdf",
+						}),
+					],
+				},
+			}),
+		);
+
+		const generated = await screen.findByRole("region", { name: "Generated" });
+		expect(within(generated).getByText("AS")).toBeTruthy();
+		expect(within(generated).getByText("Settled Role")).toBeTruthy();
+		expect(within(generated).getByText("1 Generated CV")).toBeTruthy();
+		expect(within(generated).getByText("Withdrawn")).toBeTruthy();
+		const activity = within(generated).getByTitle(
+			new Intl.DateTimeFormat("en", { dateStyle: "medium", timeStyle: "short" }).format(
+				new Date("2026-07-15T09:00:00.000Z"),
+			),
+		);
+		expect(activity.getAttribute("dateTime")).toBe("2026-07-15T09:00:00.000Z");
+		expect(
+			within(generated)
+				.getByRole("button", { name: /Expand Settled\ Role(?: at .*)?/ })
+				.getAttribute("aria-expanded"),
+		).toBe("false");
+		expect(
+			within(generated).queryByRole("button", { name: "Generate CV for Settled Role" }),
+		).toBeNull();
+		expect(within(generated).queryByText("Successful versions")).toBeNull();
+
+		fireEvent.click(within(generated).getByRole("button", { name: /Expand Settled\ Role(?: at .*)?/ }));
+		expect(
+			await within(generated).findByRole("button", { name: "Generate CV for Settled Role" }),
+		).toBeTruthy();
+		expect(within(generated).getByText("Generate again")).toBeTruthy();
+		expect(within(generated).getByText("Successful versions")).toBeTruthy();
+		expect(
+			within(generated).getByRole("button", { name: "Download settled-v1.pdf" }),
+		).toBeTruthy();
+	});
+
+	it("expands active and failed items by default while leaving untouched items collapsed and independent", async () => {
+		renderGenerate(
+			loaderData({
+				applications: [
+					application({ applicationId: 1, applicationTitle: "Active Role" }),
+					application({
+						applicationId: 2,
+						applicationTitle: "Failed Role",
+						company: { ...company, companyName: "Nova" },
+					}),
+					application({
+						applicationId: 3,
+						applicationTitle: "Untouched Role",
+						company: { ...company, companyName: "Orbit" },
+					}),
+				],
+				generations: [
+					generation({ cvGenerationId: 1, applicationId: 1, status: "PROCESSING" }),
+					generation({
+						cvGenerationId: 2,
+						applicationId: 2,
+						status: "FAILED",
+						errorMessage: "Provider error",
+					}),
+				],
+				jobDescriptionsByApplicationId: {},
+			}),
+		);
+
+		expect(
+			(await screen.findByRole("button", { name: /Collapse Active\ Role(?: at .*)?/ })).getAttribute(
+				"aria-expanded",
+			),
+		).toBe("true");
+		expect(
+			screen.getByRole("button", { name: /Collapse Failed\ Role(?: at .*)?/ }).getAttribute("aria-expanded"),
+		).toBe("true");
+		expect(
+			screen.getByRole("button", { name: /Expand Untouched\ Role(?: at .*)?/ }).getAttribute("aria-expanded"),
+		).toBe("false");
+		expect(screen.getByText("Provider error")).toBeTruthy();
+		expect(screen.queryByText("No generations yet")).toBeNull();
+
+		fireEvent.click(screen.getByRole("button", { name: /Expand Untouched\ Role(?: at .*)?/ }));
+		expect(await screen.findByText("No generations yet")).toBeTruthy();
+		expect(
+			screen.getByRole("button", { name: /Collapse Untouched\ Role(?: at .*)?/ }).getAttribute("aria-expanded"),
+		).toBe("true");
+		expect(
+			screen.getByRole("button", { name: /Collapse Active\ Role(?: at .*)?/ }).getAttribute("aria-expanded"),
+		).toBe("true");
+
+		fireEvent.click(screen.getByRole("button", { name: /Collapse Active\ Role(?: at .*)?/ }));
+		expect(
+			screen.getByRole("button", { name: /Expand Active\ Role(?: at .*)?/ }).getAttribute("aria-expanded"),
+		).toBe("false");
+		expect(
+			screen.getByRole("button", { name: /Collapse Untouched\ Role(?: at .*)?/ }).getAttribute("aria-expanded"),
+		).toBe("true");
+	});
+
+	it("keeps the Generated section expanded initially and collapsible as a whole", async () => {
+		renderGenerate(
+			loaderData({
+				applications: [
+					application({ applicationId: 1, applicationTitle: "Documented Role" }),
+				],
+				generations: [
+					generation({
+						status: "COMPLETED",
+						applicationCvId: 5,
+					}),
+				],
+				applicationCvsByApplicationId: {
+					1: [applicationCv()],
+				},
+			}),
+		);
+
+		const generated = await screen.findByRole("region", { name: "Generated" });
+		const sectionToggle = within(generated).getByRole("button", { name: "Generated" });
+		expect(sectionToggle.getAttribute("aria-expanded")).toBe("true");
+		expect(within(generated).getByText("Documented Role")).toBeTruthy();
+
+		fireEvent.click(sectionToggle);
+		expect(sectionToggle.getAttribute("aria-expanded")).toBe("false");
+		expect(within(generated).queryByText("Documented Role")).toBeNull();
+	});
+
+	it("shows one route-level Base CV notice and disables Generate without repeating the message", async () => {
+		renderGenerate(
+			loaderData({
+				baseCvs: [],
+				applications: [
+					application({ applicationId: 1, applicationTitle: "First Role" }),
+					application({
+						applicationId: 2,
+						applicationTitle: "Second Role",
+						company: { ...company, companyName: "Atlas" },
+					}),
+				],
+				jobDescriptionsByApplicationId: {},
+			}),
+		);
+
+		expect(
+			await screen.findByText(
+				"Upload a Base CV in Documents before you can generate tailored CVs.",
+			),
+		).toBeTruthy();
+		expect(
+			screen.getAllByText("Upload a Base CV in Documents before you can generate tailored CVs."),
+		).toHaveLength(1);
+		expect(
+			screen.getByRole("button", { name: "Generate CV for First Role" }).hasAttribute("disabled"),
+		).toBe(true);
+		expect(
+			screen.getByRole("button", { name: "Generate CV for Second Role" }).hasAttribute("disabled"),
+		).toBe(true);
 	});
 });
