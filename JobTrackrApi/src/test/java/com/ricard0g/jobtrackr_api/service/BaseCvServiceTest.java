@@ -27,6 +27,7 @@ import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.web.multipart.MultipartFile;
 
 import com.ricard0g.jobtrackr_api.dto.BaseCvDto.BaseCvDownloadDto;
+import com.ricard0g.jobtrackr_api.dto.BaseCvDto.BaseCvPreviewDto;
 import com.ricard0g.jobtrackr_api.exception.BaseCvException;
 import com.ricard0g.jobtrackr_api.model.BaseCv;
 import com.ricard0g.jobtrackr_api.model.User;
@@ -134,6 +135,40 @@ class BaseCvServiceTest {
 
         // then
         assertThat(download.uri()).isEqualTo(uri);
+    }
+
+    @Test
+    void preview_streamsOwnedMarkdownAsUtf8TextMarkdown() {
+        // given
+        final BaseCv baseCv = mock(BaseCv.class);
+        final byte[] markdownBytes = "# Candidate Evidence\n\n- Java".getBytes(StandardCharsets.UTF_8);
+        when(baseCv.getFormat()).thenReturn(BaseCvFormat.MARKDOWN);
+        when(baseCv.getObjectKey()).thenReturn("opaque-key");
+        when(baseCv.getOriginalFilename()).thenReturn("notes.md");
+        when(baseCvRepository.findByBaseCvIdAndUser_UserId(BASE_CV_ID, USER_ID)).thenReturn(Optional.of(baseCv));
+        when(baseCvStorage.download("opaque-key")).thenReturn(markdownBytes);
+
+        // when
+        final BaseCvPreviewDto preview = service.preview(USER_ID, BASE_CV_ID);
+
+        // then
+        assertThat(preview.bytes()).isEqualTo(markdownBytes);
+        assertThat(preview.contentType()).isEqualTo("text/markdown; charset=UTF-8");
+        assertThat(preview.originalFilename()).isEqualTo("notes.md");
+    }
+
+    @Test
+    void preview_whenDocx_throwsUnsupportedFormatWithoutReadingStorage() {
+        // given
+        final BaseCv baseCv = mock(BaseCv.class);
+        when(baseCv.getFormat()).thenReturn(BaseCvFormat.DOCX);
+        when(baseCvRepository.findByBaseCvIdAndUser_UserId(BASE_CV_ID, USER_ID)).thenReturn(Optional.of(baseCv));
+
+        // when / then
+        assertThatThrownBy(() -> service.preview(USER_ID, BASE_CV_ID))
+                .isInstanceOfSatisfying(BaseCvException.class,
+                        exception -> assertThat(exception.getCode()).isEqualTo("BASE_CV_PREVIEW_UNSUPPORTED_FORMAT"));
+        verify(baseCvStorage, never()).download(any());
     }
 
     @Test

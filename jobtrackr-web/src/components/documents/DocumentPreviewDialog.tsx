@@ -1,6 +1,7 @@
 import { Download, LoaderCircle } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 
+import { MarkdownDocumentViewer } from "@/components/documents/MarkdownDocumentViewer";
 import { PdfDocumentViewer } from "@/components/documents/PdfDocumentViewer";
 import { Button } from "@/components/ui/button";
 import {
@@ -29,9 +30,17 @@ type DocumentPreviewDialogProps = {
 type PreviewState =
 	| { status: "idle" }
 	| { status: "loading" }
-	| { status: "ready"; objectUrl: string }
+	| { status: "ready"; kind: "pdf"; objectUrl: string }
+	| { status: "ready"; kind: "markdown"; markdown: string }
 	| { status: "error"; message: string }
 	| { status: "unsupported" };
+
+const PREVIEWABLE_FORMATS = new Set<BaseCvFormat>(["PDF", "MARKDOWN"]);
+
+function isMarkdownPreviewBlob(blob: Blob): boolean {
+	const contentType = blob.type.toLowerCase();
+	return contentType.startsWith("text/markdown") || contentType.startsWith("text/plain");
+}
 
 export function DocumentPreviewDialog({
 	document: previewDocument,
@@ -58,7 +67,7 @@ export function DocumentPreviewDialog({
 			return;
 		}
 
-		if (previewDocument.format !== "PDF") {
+		if (!PREVIEWABLE_FORMATS.has(previewDocument.format)) {
 			releaseObjectUrl();
 			setPreview({ status: "unsupported" });
 			return;
@@ -69,11 +78,17 @@ export function DocumentPreviewDialog({
 		setPreview({ status: "loading" });
 
 		void loadPreview(controller.signal)
-			.then((blob) => {
+			.then(async (blob) => {
 				if (controller.signal.aborted) return;
+				if (isMarkdownPreviewBlob(blob)) {
+					const markdown = await blob.text();
+					if (controller.signal.aborted) return;
+					setPreview({ status: "ready", kind: "markdown", markdown });
+					return;
+				}
 				const objectUrl = URL.createObjectURL(blob);
 				objectUrlRef.current = objectUrl;
-				setPreview({ status: "ready", objectUrl });
+				setPreview({ status: "ready", kind: "pdf", objectUrl });
 			})
 			.catch((error: unknown) => {
 				if (controller.signal.aborted) return;
@@ -116,7 +131,7 @@ export function DocumentPreviewDialog({
 				{preview.status === "unsupported" ? (
 					<div className="flex flex-1 flex-col items-center justify-center gap-3 p-6 text-center">
 						<p className="text-sm text-medium-gray">
-							Only PDF format is previewable right now.
+							Only PDF and Markdown formats are previewable right now.
 						</p>
 						<div className="flex flex-wrap justify-center gap-2">
 							<Button type="button" variant="outline" onClick={onDownloadOriginal}>
@@ -150,12 +165,20 @@ export function DocumentPreviewDialog({
 					</div>
 				) : null}
 
-				{preview.status === "ready" && previewDocument ? (
+				{preview.status === "ready" && preview.kind === "pdf" && previewDocument ? (
 					<PdfDocumentViewer
 						fileUrl={preview.objectUrl}
 						filename={previewDocument.filename}
 						onDownloadOriginal={onDownloadOriginal}
 						onRetryPreview={() => setRetryNonce((value) => value + 1)}
+						onClose={() => onOpenChange(false)}
+					/>
+				) : null}
+
+				{preview.status === "ready" && preview.kind === "markdown" ? (
+					<MarkdownDocumentViewer
+						markdown={preview.markdown}
+						onDownloadOriginal={onDownloadOriginal}
 						onClose={() => onOpenChange(false)}
 					/>
 				) : null}

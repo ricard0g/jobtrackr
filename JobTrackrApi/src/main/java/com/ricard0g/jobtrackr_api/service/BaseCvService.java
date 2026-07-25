@@ -35,6 +35,7 @@ import lombok.extern.slf4j.Slf4j;
 public class BaseCvService {
 
     public static final int MAX_BASE_CVS = 20;
+    private static final String MARKDOWN_PREVIEW_CONTENT_TYPE = "text/markdown; charset=UTF-8";
 
     private final UserRepository userRepository;
     private final BaseCvRepository baseCvRepository;
@@ -106,12 +107,17 @@ public class BaseCvService {
     @Transactional(readOnly = true)
     public BaseCvPreviewDto preview(final UUID userId, final Long baseCvId) {
         final BaseCv baseCv = requireOwnedBaseCv(userId, baseCvId);
-        if (baseCv.getFormat() != BaseCvFormat.PDF) {
+        final boolean previewSupported =
+                baseCv.getFormat() == BaseCvFormat.PDF || baseCv.getFormat() == BaseCvFormat.MARKDOWN;
+        if (!previewSupported) {
             throw BaseCvException.previewUnsupportedFormat();
         }
         try {
             final byte[] bytes = baseCvStorage.download(baseCv.getObjectKey());
-            return new BaseCvPreviewDto(bytes, baseCv.getContentType(), baseCv.getOriginalFilename());
+            final String contentType = baseCv.getFormat() == BaseCvFormat.MARKDOWN
+                    ? MARKDOWN_PREVIEW_CONTENT_TYPE
+                    : baseCv.getContentType();
+            return new BaseCvPreviewDto(bytes, contentType, baseCv.getOriginalFilename());
         } catch (final StorageUnavailableException exception) {
             throw BaseCvException.previewUnavailable();
         }

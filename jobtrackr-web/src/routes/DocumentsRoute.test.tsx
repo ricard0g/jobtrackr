@@ -337,8 +337,52 @@ describe("DocumentsRoute", () => {
 		expect(api.getBaseCvPreview).toHaveBeenCalledWith(1, expect.any(AbortSignal));
 	});
 
-	it("shows that only PDF is previewable for non-PDF Base CVs", async () => {
+	it("shows that only PDF and Markdown are previewable for DOCX Base CVs", async () => {
 		const previewSpy = vi.spyOn(api, "getBaseCvPreview");
+
+		renderDocuments({
+			baseCvs: [
+				baseCv({
+					baseCvId: 3,
+					originalFilename: "resume.docx",
+					format: "DOCX",
+					contentType:
+						"application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+					byteSize: 2048,
+				}),
+			],
+		});
+
+		await screen.findByText("resume.docx");
+		fireEvent.click(screen.getByRole("button", { name: "Preview resume.docx" }));
+
+		expect(await screen.findByRole("dialog", { name: "resume.docx" })).toBeTruthy();
+		expect(screen.getByText("Only PDF and Markdown formats are previewable right now.")).toBeTruthy();
+		expect(screen.getByRole("button", { name: "Download Original" })).toBeTruthy();
+		expect(screen.getByRole("button", { name: "Close" })).toBeTruthy();
+		expect(previewSpy).not.toHaveBeenCalled();
+	});
+
+	it("renders Markdown with GFM structures, safe links, and no PDF controls", async () => {
+		const markdown = [
+			"# Candidate Evidence",
+			"",
+			"| Skill | Level |",
+			"| --- | --- |",
+			"| Java | Senior |",
+			"",
+			"- [x] Ownership checked",
+			"- [ ] Still drafting",
+			"",
+			'<script>window.__xss = true</script>',
+			'<iframe src="https://evil.example"></iframe>',
+			"",
+			"See [profile](https://example.com/profile).",
+		].join("\n");
+
+		vi.spyOn(api, "getBaseCvPreview").mockResolvedValue(
+			new Blob([markdown], { type: "text/markdown; charset=UTF-8" }),
+		);
 
 		renderDocuments({
 			baseCvs: [
@@ -347,7 +391,7 @@ describe("DocumentsRoute", () => {
 					originalFilename: "notes.md",
 					format: "MARKDOWN",
 					contentType: "text/markdown",
-					byteSize: 1024,
+					byteSize: markdown.length,
 				}),
 			],
 		});
@@ -355,11 +399,59 @@ describe("DocumentsRoute", () => {
 		await screen.findByText("notes.md");
 		fireEvent.click(screen.getByRole("button", { name: "Preview notes.md" }));
 
-		expect(await screen.findByRole("dialog", { name: "notes.md" })).toBeTruthy();
-		expect(screen.getByText("Only PDF format is previewable right now.")).toBeTruthy();
+		expect(await screen.findByRole("heading", { name: "Candidate Evidence" })).toBeTruthy();
+		const previewScroll = screen.getByTestId("markdown-preview-scroll");
+		expect(screen.getByRole("table")).toBeTruthy();
+		expect(screen.getByText("Java")).toBeTruthy();
+		expect(screen.getByRole("checkbox", { name: "Ownership checked" })).toBeTruthy();
+		expect(previewScroll.textContent).not.toContain("window.__xss = true");
+		expect(previewScroll.querySelector("iframe")).toBeNull();
+		expect(previewScroll.querySelector("script")).toBeNull();
+
+		const link = screen.getByRole("link", { name: "profile" });
+		expect(link.getAttribute("href")).toBe("https://example.com/profile");
+		expect(link.getAttribute("target")).toBe("_blank");
+		expect(link.getAttribute("rel")).toBe("noopener noreferrer");
+
+		expect(screen.queryByRole("button", { name: "Previous page" })).toBeNull();
+		expect(screen.queryByRole("button", { name: "Zoom in" })).toBeNull();
 		expect(screen.getByRole("button", { name: "Download Original" })).toBeTruthy();
 		expect(screen.getByRole("button", { name: "Close" })).toBeTruthy();
-		expect(previewSpy).not.toHaveBeenCalled();
+		expect(previewScroll).toBeTruthy();
+	});
+
+	it("keeps Markdown preview retry and cleanup behavior", async () => {
+		vi.spyOn(api, "getBaseCvPreview")
+			.mockRejectedValueOnce(new Error("Preview could not be loaded."))
+			.mockResolvedValueOnce(
+				new Blob(["# Recovered"], { type: "text/markdown; charset=UTF-8" }),
+			);
+
+		renderDocuments({
+			baseCvs: [
+				baseCv({
+					baseCvId: 2,
+					originalFilename: "notes.md",
+					format: "MARKDOWN",
+					contentType: "text/markdown",
+					byteSize: 64,
+				}),
+			],
+		});
+
+		await screen.findByText("notes.md");
+		fireEvent.click(screen.getByRole("button", { name: "Preview notes.md" }));
+
+		expect(await screen.findByText("Preview could not be loaded.")).toBeTruthy();
+		fireEvent.click(screen.getByRole("button", { name: "Retry Preview" }));
+
+		expect(await screen.findByRole("heading", { name: "Recovered" })).toBeTruthy();
+		expect(api.getBaseCvPreview).toHaveBeenCalledTimes(2);
+
+		fireEvent.click(screen.getByRole("button", { name: "Close" }));
+		await waitFor(() => {
+			expect(screen.queryByRole("dialog")).toBeNull();
+		});
 	});
 
 	it("renders PDF page controls after the preview loads", async () => {

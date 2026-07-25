@@ -142,6 +142,25 @@ class BaseCvControllerTest {
     }
 
     @Test
+    void preview_streamsOwnedMarkdownInlineWithPrivateNoStoreCaching() throws Exception {
+        // given
+        final byte[] markdownBytes = "# Notes\n\nSafe preview".getBytes(StandardCharsets.UTF_8);
+        when(baseCvService.preview(USER_ID, BASE_CV_ID)).thenReturn(
+                new BaseCvPreviewDto(markdownBytes, "text/markdown; charset=UTF-8", "notes.md"));
+
+        // when / then
+        mockMvc.perform(get(BASE_PATH + "/{baseCvId}/preview", BASE_CV_ID).principal(principal()))
+                .andExpect(status().isOk())
+                .andExpect(content().contentTypeCompatibleWith(MediaType.valueOf("text/markdown")))
+                .andExpect(content().bytes(markdownBytes))
+                .andExpect(header().string(HttpHeaders.CACHE_CONTROL, "private, no-store"))
+                .andExpect(header().string(
+                        HttpHeaders.CONTENT_DISPOSITION,
+                        "inline; filename=\"notes.md\"; filename*=UTF-8''notes.md"));
+        verify(baseCvService).preview(USER_ID, BASE_CV_ID);
+    }
+
+    @Test
     void preview_whenNotOwned_returnsNotFoundWithoutLeakingStorage() throws Exception {
         // given
         when(baseCvService.preview(USER_ID, BASE_CV_ID)).thenThrow(BaseCvException.notFound());
