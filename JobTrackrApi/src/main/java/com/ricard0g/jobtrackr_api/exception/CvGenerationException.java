@@ -100,11 +100,11 @@ public class CvGenerationException extends RuntimeException {
                 "Idempotency-Key must be between 1 and 128 characters");
     }
 
-    public static CvGenerationException applicationCvNotFound() {
+    public static CvGenerationException generatedCvNotFound() {
         return new CvGenerationException(
-                "APPLICATION_CV_NOT_FOUND",
+                "GENERATED_CV_NOT_FOUND",
                 HttpStatus.NOT_FOUND,
-                "Generated Application CV not found");
+                "Generated CV not found");
     }
 
     public static CvGenerationException storageUnavailable() {

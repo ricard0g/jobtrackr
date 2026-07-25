@@ -29,15 +29,38 @@ export const loadState = (): MockState => {
 	try {
 		const parsedValue: unknown = JSON.parse(rawValue);
 		if (isMockState(parsedValue)) {
-			parsedValue.baseCvs ??= [];
-			parsedValue.cvGenerations ??= [];
-			parsedValue.applicationCvs ??= [];
-			parsedValue.jobDescriptions ??= [];
-			parsedValue.aiConsents ??= [];
-			parsedValue.counters.baseCvId ??= 1;
-			parsedValue.counters.cvGenerationId ??= 1;
-			parsedValue.counters.applicationCvId ??= 1;
-			return parsedValue;
+			const legacy = parsedValue as MockState & {
+				applicationCvs?: Array<Record<string, unknown> & { applicationCvId?: number }>;
+				counters: MockState["counters"] & { applicationCvId?: number };
+			};
+			legacy.baseCvs ??= [];
+			legacy.cvGenerations ??= [];
+			legacy.jobDescriptions ??= [];
+			legacy.aiConsents ??= [];
+			legacy.counters.baseCvId ??= 1;
+			legacy.counters.cvGenerationId ??= 1;
+			legacy.counters.generatedCvId ??= legacy.counters.applicationCvId ?? 1;
+			if (!legacy.generatedCvs?.length && legacy.applicationCvs?.length) {
+				legacy.generatedCvs = legacy.applicationCvs.map((cv) => {
+					const { applicationCvId, ...rest } = cv;
+					return {
+						...rest,
+						generatedCvId: applicationCvId ?? 0,
+					} as MockState["generatedCvs"][number];
+				});
+			}
+			legacy.generatedCvs ??= [];
+			for (const generation of legacy.cvGenerations as Array<
+				Record<string, unknown> & {
+					generatedCvId?: number | null;
+					applicationCvId?: number | null;
+				}
+			>) {
+				if (!("generatedCvId" in generation) && "applicationCvId" in generation) {
+					generation.generatedCvId = generation.applicationCvId ?? null;
+				}
+			}
+			return legacy;
 		}
 	} catch {
 		// Fall through to reseed corrupt local data.

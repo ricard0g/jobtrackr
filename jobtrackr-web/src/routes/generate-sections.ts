@@ -1,11 +1,11 @@
 import type { Application } from "@/types/application";
-import type { ApplicationCv } from "@/types/application-cv";
+import type { GeneratedCv } from "@/types/generated-cv";
 import { isActiveCvGenerationStatus, type CvGeneration } from "@/types/cv-generation";
 
 export type GenerateSectionItem = {
 	application: Application;
 	generations: CvGeneration[];
-	applicationCvs: ApplicationCv[];
+	generatedCvs: GeneratedCv[];
 };
 
 export type GenerateSections = {
@@ -59,9 +59,9 @@ const preparingRank = (
 // Generated orders by document history, so unrelated Application edits do not
 // reorder it. Items in this section always have at least one Generated CV.
 const newestGeneratedCvAt = (item: GenerateSectionItem) =>
-	item.applicationCvs.reduce(
-		(newest, applicationCv) =>
-			applicationCv.createdAt > newest ? applicationCv.createdAt : newest,
+	item.generatedCvs.reduce(
+		(newest, generatedCv) =>
+			generatedCv.createdAt > newest ? generatedCv.createdAt : newest,
 		"",
 	);
 
@@ -78,21 +78,21 @@ export const preparingActivityAt = (
 	application: Application,
 	generations: CvGeneration[],
 ): string =>
-	preparingRank({ application, generations, applicationCvs: [] }).activityAt;
+	preparingRank({ application, generations, generatedCvs: [] }).activityAt;
 
-export const newestGeneratedCv = (applicationCvs: ApplicationCv[]) =>
-	applicationCvs.reduce<ApplicationCv | null>((newest, applicationCv) => {
-		if (!newest || applicationCv.createdAt > newest.createdAt) return applicationCv;
+export const newestGeneratedCv = (generatedCvs: GeneratedCv[]) =>
+	generatedCvs.reduce<GeneratedCv | null>((newest, generatedCv) => {
+		if (!newest || generatedCv.createdAt > newest.createdAt) return generatedCv;
 		return newest;
 	}, null);
 
-export const generatedActivityAt = (applicationCvs: ApplicationCv[]): string =>
-	newestGeneratedCv(applicationCvs)?.createdAt ?? "";
+export const generatedActivityAt = (generatedCvs: GeneratedCv[]): string =>
+	newestGeneratedCv(generatedCvs)?.createdAt ?? "";
 
 export function buildGenerateSections(
 	applications: Application[],
 	generations: CvGeneration[],
-	applicationCvsByApplicationId: Record<number, ApplicationCv[]>,
+	generatedCvsByApplicationId: Record<number, GeneratedCv[]>,
 ): GenerateSections {
 	const preparing: GenerateSectionItem[] = [];
 	const generated: GenerateSectionItem[] = [];
@@ -103,14 +103,14 @@ export function buildGenerateSections(
 			generations: generations.filter(
 				(generation) => generation.applicationId === application.applicationId,
 			),
-			applicationCvs: applicationCvsByApplicationId[application.applicationId] ?? [],
+			generatedCvs: generatedCvsByApplicationId[application.applicationId] ?? [],
 		};
 		const latest = latestGeneration(item.generations);
 		const hasActiveGeneration = item.generations.some((generation) =>
 			isActiveCvGenerationStatus(generation.status),
 		);
 		const latestFailed = latest?.status === "FAILED";
-		const hasGeneratedCv = item.applicationCvs.length > 0;
+		const hasGeneratedCv = item.generatedCvs.length > 0;
 		const closed =
 			application.applicationStatus === "REJECTED" ||
 			application.applicationStatus === "WITHDRAWN";

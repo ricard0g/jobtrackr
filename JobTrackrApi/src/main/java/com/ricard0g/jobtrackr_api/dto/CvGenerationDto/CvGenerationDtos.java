@@ -34,7 +34,7 @@ public final class CvGenerationDtos {
             UUID correlationId,
             String errorCode,
             String errorMessage,
-            Long applicationCvId,
+            Long generatedCvId,
             String modelId,
             String workflowVersion,
             OffsetDateTime createdAt,
@@ -46,7 +46,7 @@ public final class CvGenerationDtos {
         public static Response from(final CvGeneration generation) {
             final Long baseCvId =
                     generation.getBaseCv() == null ? null : generation.getBaseCv().getBaseCvId();
-            final Long applicationCvId = generation.getApplicationCv() == null
+            final Long generatedCvId = generation.getApplicationCv() == null
                     ? null
                     : generation.getApplicationCv().getApplicationCvId();
             return new Response(
@@ -59,7 +59,7 @@ public final class CvGenerationDtos {
                     generation.getCorrelationId(),
                     generation.getErrorCode(),
                     generation.getErrorMessage(),
-                    applicationCvId,
+                    generatedCvId,
                     generation.getModelId(),
                     generation.getWorkflowVersion(),
                     generation.getCreatedAt(),

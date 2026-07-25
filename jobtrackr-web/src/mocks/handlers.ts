@@ -159,7 +159,7 @@ const validateSalaryRange = (
 };
 
 const MAX_BASE_CV_BYTES = 10 * 1024 * 1024;
-const MAX_APPLICATION_CVS = 20;
+const MAX_GENERATED_CVS = 20;
 const MAX_JOB_DESCRIPTION_CHARS = 50_000;
 const MAX_ADDITIONAL_INFO_CHARS = 5_000;
 const generatedFormats: GeneratedCvFormat[] = ["PDF", "DOCX", "MARKDOWN"];
@@ -177,7 +177,7 @@ const toPublicCvGeneration = (generation: MockCvGenerationRecord): CvGeneration 
 	correlationId: generation.correlationId,
 	errorCode: generation.errorCode,
 	errorMessage: generation.errorMessage,
-	applicationCvId: generation.applicationCvId,
+	generatedCvId: generation.generatedCvId,
 	modelId: generation.modelId,
 	workflowVersion: generation.workflowVersion,
 	createdAt: generation.createdAt,
@@ -1164,8 +1164,8 @@ export const handlers = [
 		state.jobDescriptions = state.jobDescriptions.filter(
 			(jobDescription) => jobDescription.applicationId !== application.applicationId,
 		);
-		state.applicationCvs = state.applicationCvs.filter(
-			(applicationCv) => applicationCv.applicationId !== application.applicationId,
+		state.generatedCvs = state.generatedCvs.filter(
+			(generatedCv) => generatedCv.applicationId !== application.applicationId,
 		);
 		state.cvGenerations = state.cvGenerations.filter(
 			(generation) => generation.applicationId !== application.applicationId,
@@ -1468,10 +1468,10 @@ export const handlers = [
 				"Selected Base CV is unavailable or not owned by you",
 			);
 		}
-		const ownedCvs = state.applicationCvs.filter(
-			(applicationCv) => applicationCv.applicationId === application.applicationId,
+		const ownedCvs = state.generatedCvs.filter(
+			(generatedCv) => generatedCv.applicationId === application.applicationId,
 		);
-		if (ownedCvs.length >= MAX_APPLICATION_CVS) {
+		if (ownedCvs.length >= MAX_GENERATED_CVS) {
 			return errorJson(
 				409,
 				"GENERATION_LIMIT_REACHED",
@@ -1508,7 +1508,7 @@ export const handlers = [
 			correlationId: crypto.randomUUID(),
 			errorCode: null,
 			errorMessage: null,
-			applicationCvId: null,
+			generatedCvId: null,
 			modelId: null,
 			workflowVersion: null,
 			createdAt: timestamp,
@@ -1601,7 +1601,7 @@ export const handlers = [
 		});
 	}),
 
-	http.get(`${API_BASE_URL}/applications/:applicationId/application-cvs`, ({ request, params }) => {
+	http.get(`${API_BASE_URL}/applications/:applicationId/generated-cvs`, ({ request, params }) => {
 		const state = loadState();
 		const auth = requireAuth(request, state);
 		if (auth instanceof Response) return auth;
@@ -1611,16 +1611,16 @@ export const handlers = [
 			return errorJson(404, "APPLICATION_NOT_FOUND", "Application not found");
 		}
 		return HttpResponse.json(
-			state.applicationCvs
+			state.generatedCvs
 				.filter(
-					(applicationCv) =>
-						applicationCv.applicationId === application.applicationId &&
-						applicationCv.userId === auth.user.userId,
+					(generatedCv) =>
+						generatedCv.applicationId === application.applicationId &&
+						generatedCv.userId === auth.user.userId,
 				)
 				.toSorted((left, right) => right.version - left.version)
 				.map(
 					({
-						applicationCvId,
+						generatedCvId,
 						applicationId: ownedApplicationId,
 						version,
 						originalFilename,
@@ -1630,7 +1630,7 @@ export const handlers = [
 						generationId,
 						createdAt,
 					}) => ({
-						applicationCvId,
+						generatedCvId,
 						applicationId: ownedApplicationId,
 						version,
 						originalFilename,
@@ -1644,39 +1644,39 @@ export const handlers = [
 		);
 	}),
 
-	http.get(`${API_BASE_URL}/application-cvs/:applicationCvId/download`, ({ request, params }) => {
+	http.get(`${API_BASE_URL}/generated-cvs/:generatedCvId/download`, ({ request, params }) => {
 		const state = loadState();
 		const auth = requireAuth(request, state);
 		if (auth instanceof Response) return auth;
-		const applicationCvId = getPositiveId(params, "applicationCvId");
-		const applicationCv = state.applicationCvs.find(
+		const generatedCvId = getPositiveId(params, "generatedCvId");
+		const generatedCv = state.generatedCvs.find(
 			(candidate) =>
-				candidate.applicationCvId === applicationCvId && candidate.userId === auth.user.userId,
+				candidate.generatedCvId === generatedCvId && candidate.userId === auth.user.userId,
 		);
-		if (!applicationCv) {
-			return errorJson(404, "APPLICATION_CV_NOT_FOUND", "Generated Application CV not found");
+		if (!generatedCv) {
+			return errorJson(404, "GENERATED_CV_NOT_FOUND", "Generated CV not found");
 		}
-		const body = `Mock download for ${applicationCv.originalFilename}`;
-		const uri = `data:${applicationCv.contentType};charset=utf-8,${encodeURIComponent(body)}`;
+		const body = `Mock download for ${generatedCv.originalFilename}`;
+		const uri = `data:${generatedCv.contentType};charset=utf-8,${encodeURIComponent(body)}`;
 		return HttpResponse.json({ uri });
 	}),
 
-	http.delete(`${API_BASE_URL}/application-cvs/:applicationCvId`, ({ request, params }) => {
+	http.delete(`${API_BASE_URL}/generated-cvs/:generatedCvId`, ({ request, params }) => {
 		const state = loadState();
 		const auth = requireAuth(request, state);
 		if (auth instanceof Response) return auth;
-		const applicationCvId = getPositiveId(params, "applicationCvId");
-		const index = state.applicationCvs.findIndex(
+		const generatedCvId = getPositiveId(params, "generatedCvId");
+		const index = state.generatedCvs.findIndex(
 			(candidate) =>
-				candidate.applicationCvId === applicationCvId && candidate.userId === auth.user.userId,
+				candidate.generatedCvId === generatedCvId && candidate.userId === auth.user.userId,
 		);
 		if (index < 0) {
-			return errorJson(404, "APPLICATION_CV_NOT_FOUND", "Generated Application CV not found");
+			return errorJson(404, "GENERATED_CV_NOT_FOUND", "Generated CV not found");
 		}
-		const [removed] = state.applicationCvs.splice(index, 1);
+		const [removed] = state.generatedCvs.splice(index, 1);
 		state.cvGenerations.forEach((generation) => {
-			if (generation.applicationCvId === removed.applicationCvId) {
-				generation.applicationCvId = null;
+			if (generation.generatedCvId === removed.generatedCvId) {
+				generation.generatedCvId = null;
 			}
 		});
 		saveState(state);

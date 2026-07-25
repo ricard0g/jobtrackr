@@ -12,7 +12,7 @@ import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
-import com.ricard0g.jobtrackr_api.dto.ApplicationCvDto.ApplicationCvDtos;
+import com.ricard0g.jobtrackr_api.dto.GeneratedCvDto.GeneratedCvDtos;
 import com.ricard0g.jobtrackr_api.service.ApplicationCvService;
 
 import jakarta.validation.constraints.Positive;
@@ -22,29 +22,29 @@ import lombok.RequiredArgsConstructor;
 @RequestMapping("/api/v1")
 @RequiredArgsConstructor
 @Validated
-public class ApplicationCvController {
+public class GeneratedCvController {
 
     private final ApplicationCvService applicationCvService;
 
-    @GetMapping("/applications/{applicationId}/application-cvs")
-    public ResponseEntity<List<ApplicationCvDtos.Response>> list(
+    @GetMapping("/applications/{applicationId}/generated-cvs")
+    public ResponseEntity<List<GeneratedCvDtos.Response>> list(
             final Principal principal, @PathVariable @Positive final Long applicationId) {
         final UUID userId = AuthenticatedUserId.from(principal);
         return ResponseEntity.ok(applicationCvService.listForApplication(userId, applicationId));
     }
 
-    @GetMapping("/application-cvs/{applicationCvId}/download")
-    public ResponseEntity<ApplicationCvDtos.Download> download(
-            final Principal principal, @PathVariable @Positive final Long applicationCvId) {
+    @GetMapping("/generated-cvs/{generatedCvId}/download")
+    public ResponseEntity<GeneratedCvDtos.Download> download(
+            final Principal principal, @PathVariable @Positive final Long generatedCvId) {
         final UUID userId = AuthenticatedUserId.from(principal);
-        return ResponseEntity.ok(applicationCvService.createDownload(userId, applicationCvId));
+        return ResponseEntity.ok(applicationCvService.createDownload(userId, generatedCvId));
     }
 
-    @DeleteMapping("/application-cvs/{applicationCvId}")
+    @DeleteMapping("/generated-cvs/{generatedCvId}")
     public ResponseEntity<Void> delete(
-            final Principal principal, @PathVariable @Positive final Long applicationCvId) {
+            final Principal principal, @PathVariable @Positive final Long generatedCvId) {
         final UUID userId = AuthenticatedUserId.from(principal);
-        applicationCvService.delete(userId, applicationCvId);
+        applicationCvService.delete(userId, generatedCvId);
         return ResponseEntity.noContent().build();
     }
 }

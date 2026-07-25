@@ -19,7 +19,7 @@ export type CvGeneration = {
 	correlationId: string;
 	errorCode: string | null;
 	errorMessage: string | null;
-	applicationCvId: number | null;
+	generatedCvId: number | null;
 	modelId: string | null;
 	workflowVersion: string | null;
 	createdAt: string;

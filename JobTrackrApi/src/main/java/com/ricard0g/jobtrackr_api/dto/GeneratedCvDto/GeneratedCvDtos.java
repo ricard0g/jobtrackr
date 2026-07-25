@@ -1,16 +1,16 @@
-package com.ricard0g.jobtrackr_api.dto.ApplicationCvDto;
+package com.ricard0g.jobtrackr_api.dto.GeneratedCvDto;
 
 import java.time.OffsetDateTime;
 
 import com.ricard0g.jobtrackr_api.model.ApplicationCv;
 import com.ricard0g.jobtrackr_api.model.enums.GeneratedCvFormat;
 
-public final class ApplicationCvDtos {
+public final class GeneratedCvDtos {
 
-    private ApplicationCvDtos() {}
+    private GeneratedCvDtos() {}
 
     public record Response(
-            Long applicationCvId,
+            Long generatedCvId,
             Long applicationId,
             Integer version,
             String originalFilename,

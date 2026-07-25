@@ -22,7 +22,7 @@ import { API_BASE_URL, AUTH_BASE_URL } from "@/lib/api-config";
 import type { Tag, TagWriteRequest } from "@/types/tag";
 import type { User } from "@/types/user";
 import type { BaseCv, BaseCvDownload } from "@/types/base-cv";
-import type { ApplicationCv, ApplicationCvDownload } from "@/types/application-cv";
+import type { GeneratedCv, GeneratedCvDownload } from "@/types/generated-cv";
 import type {
 	AiConsent,
 	AiConsentRequest,
@@ -425,12 +425,12 @@ export const api = {
 		}),
 	getJobDescription: (applicationId: number) =>
 		apiRequest<JobDescriptionResponse>(`/applications/${applicationId}/job-description`),
-	getApplicationCvs: (applicationId: number) =>
-		apiRequest<ApplicationCv[]>(`/applications/${applicationId}/application-cvs`),
-	getApplicationCvDownload: (applicationCvId: number) =>
-		apiRequest<ApplicationCvDownload>(`/application-cvs/${applicationCvId}/download`),
-	deleteApplicationCv: (applicationCvId: number) =>
-		apiRequest<void>(`/application-cvs/${applicationCvId}`, { method: "DELETE" }),
+	getGeneratedCvs: (applicationId: number) =>
+		apiRequest<GeneratedCv[]>(`/applications/${applicationId}/generated-cvs`),
+	getGeneratedCvDownload: (generatedCvId: number) =>
+		apiRequest<GeneratedCvDownload>(`/generated-cvs/${generatedCvId}/download`),
+	deleteGeneratedCv: (generatedCvId: number) =>
+		apiRequest<void>(`/generated-cvs/${generatedCvId}`, { method: "DELETE" }),
 };
 
 export type AppLoaderData = {

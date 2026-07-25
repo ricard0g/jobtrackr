@@ -1,7 +1,7 @@
 import type { GeneratedCvFormat } from "@/types/cv-generation";
 
-export type ApplicationCv = {
-	applicationCvId: number;
+export type GeneratedCv = {
+	generatedCvId: number;
 	applicationId: number;
 	version: number;
 	originalFilename: string;
@@ -12,6 +12,6 @@ export type ApplicationCv = {
 	createdAt: string;
 };
 
-export type ApplicationCvDownload = {
+export type GeneratedCvDownload = {
 	uri: string;
 };

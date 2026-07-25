@@ -1,5 +1,5 @@
 import type {
-	MockApplicationCvRecord,
+	MockGeneratedCvRecord,
 	MockAiConsentRecord,
 	MockBaseCvRecord,
 	MockCvGenerationRecord,
@@ -106,7 +106,7 @@ export const createMockCvGeneration = (
 				: status === "CANCELLED"
 					? "Generation cancelled by user"
 					: null,
-		applicationCvId: null,
+		generatedCvId: null,
 		modelId: status === "COMPLETED" ? "gemini-mock" : null,
 		workflowVersion: status === "COMPLETED" ? "v1" : null,
 		createdAt,
@@ -124,10 +124,10 @@ export const createMockCvGeneration = (
 	};
 };
 
-export const createMockApplicationCv = (
-	overrides: Partial<MockApplicationCvRecord> &
-		Pick<MockApplicationCvRecord, "applicationCvId" | "applicationId" | "version">,
-): MockApplicationCvRecord => {
+export const createMockGeneratedCv = (
+	overrides: Partial<MockGeneratedCvRecord> &
+		Pick<MockGeneratedCvRecord, "generatedCvId" | "applicationId" | "version">,
+): MockGeneratedCvRecord => {
 	const format: GeneratedCvFormat = overrides.format ?? "PDF";
 	return {
 		userId: demoUserId,
@@ -163,7 +163,7 @@ export const createMockAiConsent = (
 export const generateSeedStates = {
 	empty: () => ({
 		cvGenerations: [] as MockCvGenerationRecord[],
-		applicationCvs: [] as MockApplicationCvRecord[],
+		generatedCvs: [] as MockGeneratedCvRecord[],
 	}),
 	queued: () => ({
 		cvGenerations: [
@@ -174,7 +174,7 @@ export const generateSeedStates = {
 				createdAt: "2026-07-16T10:00:00.000Z",
 			}),
 		],
-		applicationCvs: [] as MockApplicationCvRecord[],
+		generatedCvs: [] as MockGeneratedCvRecord[],
 	}),
 	processing: () => ({
 		cvGenerations: [
@@ -185,23 +185,23 @@ export const generateSeedStates = {
 				createdAt: "2026-07-16T10:05:00.000Z",
 			}),
 		],
-		applicationCvs: [] as MockApplicationCvRecord[],
+		generatedCvs: [] as MockGeneratedCvRecord[],
 	}),
 	successful: () => {
 		const generation = createMockCvGeneration({
 			cvGenerationId: 3,
 			applicationId: 2,
 			status: "COMPLETED",
-			applicationCvId: 1,
+			generatedCvId: 1,
 			createdAt: "2026-07-15T09:00:00.000Z",
 		});
-		const applicationCv = createMockApplicationCv({
-			applicationCvId: 1,
+		const generatedCv = createMockGeneratedCv({
+			generatedCvId: 1,
 			applicationId: 2,
 			version: 1,
 			generationId: 3,
 		});
-		return { cvGenerations: [generation], applicationCvs: [applicationCv] };
+		return { cvGenerations: [generation], generatedCvs: [generatedCv] };
 	},
 	failed: () => ({
 		cvGenerations: [
@@ -212,7 +212,7 @@ export const generateSeedStates = {
 				createdAt: "2026-07-14T11:00:00.000Z",
 			}),
 		],
-		applicationCvs: [] as MockApplicationCvRecord[],
+		generatedCvs: [] as MockGeneratedCvRecord[],
 	}),
 	cancelled: () => ({
 		cvGenerations: [
@@ -223,7 +223,7 @@ export const generateSeedStates = {
 				createdAt: "2026-07-13T08:00:00.000Z",
 			}),
 		],
-		applicationCvs: [] as MockApplicationCvRecord[],
+		generatedCvs: [] as MockGeneratedCvRecord[],
 	}),
 	quotaFull: (applicationId = 1) => ({
 		cvGenerations: Array.from({ length: 20 }, (_, index) =>
@@ -231,13 +231,13 @@ export const generateSeedStates = {
 				cvGenerationId: index + 1,
 				applicationId,
 				status: "COMPLETED",
-				applicationCvId: index + 1,
+				generatedCvId: index + 1,
 				createdAt: `2026-07-${String(Math.min(index + 1, 28)).padStart(2, "0")}T12:00:00.000Z`,
 			}),
 		),
-		applicationCvs: Array.from({ length: 20 }, (_, index) =>
-			createMockApplicationCv({
-				applicationCvId: index + 1,
+		generatedCvs: Array.from({ length: 20 }, (_, index) =>
+			createMockGeneratedCv({
+				generatedCvId: index + 1,
 				applicationId,
 				version: index + 1,
 				generationId: index + 1,
@@ -515,7 +515,7 @@ export const createSeedState = (): MockState => {
 			...failed.cvGenerations,
 			...cancelled.cvGenerations,
 		],
-		applicationCvs: [...successful.applicationCvs],
+		generatedCvs: [...successful.generatedCvs],
 		jobDescriptions: [
 			createMockJobDescription({
 				applicationId: 1,
@@ -542,7 +542,7 @@ export const createSeedState = (): MockState => {
 			tagId: 5,
 			baseCvId: 3,
 			cvGenerationId: 6,
-			applicationCvId: 2,
+			generatedCvId: 2,
 		},
 	};
 };

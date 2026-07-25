@@ -8,7 +8,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import com.ricard0g.jobtrackr_api.config.cvgeneration.CvGenerationProperties;
-import com.ricard0g.jobtrackr_api.dto.ApplicationCvDto.ApplicationCvDtos;
+import com.ricard0g.jobtrackr_api.dto.GeneratedCvDto.GeneratedCvDtos;
 import com.ricard0g.jobtrackr_api.exception.ApplicationNotFoundException;
 import com.ricard0g.jobtrackr_api.exception.CvGenerationException;
 import com.ricard0g.jobtrackr_api.exception.UserNotFoundException;
@@ -37,21 +37,21 @@ public class ApplicationCvService {
     private final CvGenerationProperties properties;
 
     @Transactional(readOnly = true)
-    public List<ApplicationCvDtos.Response> listForApplication(final UUID userId, final Long applicationId) {
+    public List<GeneratedCvDtos.Response> listForApplication(final UUID userId, final Long applicationId) {
         requireApplication(userId, applicationId);
         return applicationCvRepository
                 .findAllByApplication_ApplicationIdAndApplication_User_UserIdOrderByVersionDesc(
                         applicationId, userId)
                 .stream()
-                .map(ApplicationCvDtos.Response::from)
+                .map(GeneratedCvDtos.Response::from)
                 .toList();
     }
 
     @Transactional(readOnly = true)
-    public ApplicationCvDtos.Download createDownload(final UUID userId, final Long applicationCvId) {
+    public GeneratedCvDtos.Download createDownload(final UUID userId, final Long applicationCvId) {
         final ApplicationCv applicationCv = requireOwned(userId, applicationCvId);
         try {
-            return new ApplicationCvDtos.Download(objectStorage
+            return new GeneratedCvDtos.Download(objectStorage
                     .createDownloadUri(applicationCv.getObjectKey(), applicationCv.getOriginalFilename())
                     .toString());
         } catch (final RuntimeException exception) {
@@ -109,7 +109,7 @@ public class ApplicationCvService {
     private ApplicationCv requireOwned(final UUID userId, final Long applicationCvId) {
         return applicationCvRepository
                 .findByApplicationCvIdAndApplication_User_UserId(applicationCvId, userId)
-                .orElseThrow(CvGenerationException::applicationCvNotFound);
+                .orElseThrow(CvGenerationException::generatedCvNotFound);
     }
 
     private void requireUser(final UUID userId) {
