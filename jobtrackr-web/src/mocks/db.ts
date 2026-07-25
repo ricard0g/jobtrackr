@@ -40,7 +40,10 @@ export const loadState = (): MockState => {
 			legacy.counters.baseCvId ??= 1;
 			legacy.counters.cvGenerationId ??= 1;
 			legacy.counters.generatedCvId ??= legacy.counters.applicationCvId ?? 1;
-			if (!legacy.generatedCvs?.length && legacy.applicationCvs?.length) {
+			const hadLegacyCvs = legacy.applicationCvs !== undefined;
+			// Migrate only when the new key is absent. An empty generatedCvs array means
+			// the user deleted every document; do not resurrect from leftover applicationCvs.
+			if (legacy.generatedCvs === undefined && legacy.applicationCvs?.length) {
 				legacy.generatedCvs = legacy.applicationCvs.map((cv) => {
 					const { applicationCvId, ...rest } = cv;
 					return {
@@ -50,6 +53,9 @@ export const loadState = (): MockState => {
 				});
 			}
 			legacy.generatedCvs ??= [];
+			delete legacy.applicationCvs;
+			delete legacy.counters.applicationCvId;
+			let migratedGenerationFields = false;
 			for (const generation of legacy.cvGenerations as Array<
 				Record<string, unknown> & {
 					generatedCvId?: number | null;
@@ -58,7 +64,15 @@ export const loadState = (): MockState => {
 			>) {
 				if (!("generatedCvId" in generation) && "applicationCvId" in generation) {
 					generation.generatedCvId = generation.applicationCvId ?? null;
+					migratedGenerationFields = true;
 				}
+				if ("applicationCvId" in generation) {
+					delete generation.applicationCvId;
+					migratedGenerationFields = true;
+				}
+			}
+			if (hadLegacyCvs || migratedGenerationFields) {
+				saveState(legacy);
 			}
 			return legacy;
 		}
