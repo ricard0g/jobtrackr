@@ -427,9 +427,12 @@ export const api = {
 		apiRequest<JobDescriptionResponse>(`/applications/${applicationId}/job-description`),
 	getGeneratedCvs: (applicationId: number) =>
 		apiRequest<GeneratedCv[]>(`/applications/${applicationId}/generated-cvs`),
-	getGeneratedCvsPage: (cursor?: string | null) => {
-		const params = cursor ? `?cursor=${encodeURIComponent(cursor)}` : "";
-		return apiRequest<GeneratedCvPage>(`/generated-cvs${params}`);
+	getGeneratedCvsPage: ({ page = 0, size = 20 }: { page?: number; size?: number } = {}) => {
+		const params = new URLSearchParams({
+			page: String(page),
+			size: String(size),
+		});
+		return apiRequest<GeneratedCvPage>(`/generated-cvs?${params.toString()}`);
 	},
 	getGeneratedCvDownload: (generatedCvId: number) =>
 		apiRequest<GeneratedCvDownload>(`/generated-cvs/${generatedCvId}/download`),

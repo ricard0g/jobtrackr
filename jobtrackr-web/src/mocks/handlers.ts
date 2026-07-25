@@ -78,38 +78,6 @@ const getPositiveId = (params: PathParams, name: string) => {
 	return Number.isInteger(value) && value > 0 ? value : null;
 };
 
-const toBase64Url = (value: string) => {
-	const bytes = new TextEncoder().encode(value);
-	let binary = "";
-	for (const byte of bytes) binary += String.fromCharCode(byte);
-	return btoa(binary).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
-};
-
-const fromBase64Url = (value: string) => {
-	const padded = value.replace(/-/g, "+").replace(/_/g, "/");
-	const padLength = (4 - (padded.length % 4)) % 4;
-	const binary = atob(padded + "=".repeat(padLength));
-	const bytes = Uint8Array.from(binary, (char) => char.charCodeAt(0));
-	return new TextDecoder().decode(bytes);
-};
-
-const encodeGeneratedCvCursor = (createdAt: string, generatedCvId: number) =>
-	toBase64Url(`${createdAt}|${generatedCvId}`);
-
-const decodeGeneratedCvCursor = (opaque: string) => {
-	const payload = fromBase64Url(opaque);
-	const separatorIndex = payload.lastIndexOf("|");
-	if (separatorIndex <= 0 || separatorIndex === payload.length - 1) {
-		throw new Error("invalid cursor");
-	}
-	const createdAt = payload.slice(0, separatorIndex);
-	const generatedCvId = Number(payload.slice(separatorIndex + 1));
-	if (!Number.isInteger(generatedCvId) || generatedCvId <= 0) {
-		throw new Error("invalid cursor");
-	}
-	return { createdAt, generatedCvId };
-};
-
 const readJson = async <T>(request: Request): Promise<T> =>
 	(await request.json()) as T;
 
@@ -1681,15 +1649,9 @@ export const handlers = [
 		const auth = requireAuth(request, state);
 		if (auth instanceof Response) return auth;
 
-		const cursorParam = new URL(request.url).searchParams.get("cursor");
-		let cursor: { createdAt: string; generatedCvId: number } | null = null;
-		if (cursorParam !== null && cursorParam.length > 0) {
-			try {
-				cursor = decodeGeneratedCvCursor(cursorParam);
-			} catch {
-				return errorJson(400, "INVALID_CURSOR", "Generated CV cursor is invalid");
-			}
-		}
+		const url = new URL(request.url);
+		const page = Math.max(0, Number(url.searchParams.get("page") ?? "0") || 0);
+		const size = Math.min(100, Math.max(1, Number(url.searchParams.get("size") ?? "20") || 20));
 
 		const companyNameById = new Map(
 			state.companies.map((company) => [company.companyId, company.companyName]),
@@ -1704,20 +1666,10 @@ export const handlers = [
 				const createdAtCompare = right.createdAt.localeCompare(left.createdAt);
 				if (createdAtCompare !== 0) return createdAtCompare;
 				return right.generatedCvId - left.generatedCvId;
-			})
-			.filter((generatedCv) => {
-				if (!cursor) return true;
-				return (
-					generatedCv.createdAt < cursor.createdAt ||
-					(generatedCv.createdAt === cursor.createdAt &&
-						generatedCv.generatedCvId < cursor.generatedCvId)
-				);
 			});
 
-		const pageSize = 20;
-		const pageRows = sorted.slice(0, pageSize + 1);
-		const hasMore = pageRows.length > pageSize;
-		const items = (hasMore ? pageRows.slice(0, pageSize) : pageRows).map((generatedCv) => {
+		const total = sorted.length;
+		const items = sorted.slice(page * size, page * size + size).map((generatedCv) => {
 			const application = applicationById.get(generatedCv.applicationId);
 			return {
 				generatedCvId: generatedCv.generatedCvId,
@@ -1735,11 +1687,8 @@ export const handlers = [
 				createdAt: generatedCv.createdAt,
 			};
 		});
-		const last = items.at(-1);
-		const nextCursor =
-			hasMore && last ? encodeGeneratedCvCursor(last.createdAt, last.generatedCvId) : null;
 
-		return HttpResponse.json({ items, nextCursor });
+		return HttpResponse.json({ items, total, page, size });
 	}),
 
 	http.get(`${API_BASE_URL}/generated-cvs/:generatedCvId/download`, ({ request, params }) => {

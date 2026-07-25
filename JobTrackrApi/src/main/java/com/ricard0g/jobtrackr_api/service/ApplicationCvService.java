@@ -1,11 +1,11 @@
 package com.ricard0g.jobtrackr_api.service;
 
-import java.time.OffsetDateTime;
 import java.util.List;
 import java.util.UUID;
 
 import org.springframework.dao.DataIntegrityViolationException;
-import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -22,7 +22,6 @@ import com.ricard0g.jobtrackr_api.repository.ApplicationRepository;
 import com.ricard0g.jobtrackr_api.repository.StorageCleanupJobRepository;
 import com.ricard0g.jobtrackr_api.repository.UserRepository;
 import com.ricard0g.jobtrackr_api.storage.ObjectStorage;
-import com.ricard0g.jobtrackr_api.util.GeneratedCvCursor;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -31,8 +30,6 @@ import lombok.extern.slf4j.Slf4j;
 @RequiredArgsConstructor
 @Slf4j
 public class ApplicationCvService {
-
-    public static final int USER_WIDE_PAGE_SIZE = 20;
 
     private final UserRepository userRepository;
     private final ApplicationRepository applicationRepository;
@@ -53,40 +50,12 @@ public class ApplicationCvService {
     }
 
     @Transactional(readOnly = true)
-    public GeneratedCvDtos.Page listForUser(final UUID userId, final String cursor) {
+    public GeneratedCvDtos.PageResponse listForUser(final UUID userId, final Pageable pageable) {
         requireUser(userId);
-
-        final OffsetDateTime cursorCreatedAt;
-        final Long cursorId;
-        if (cursor == null || cursor.isBlank()) {
-            cursorCreatedAt = null;
-            cursorId = null;
-        } else {
-            final GeneratedCvCursor decoded = GeneratedCvCursor.decode(cursor);
-            cursorCreatedAt = decoded.createdAt();
-            cursorId = decoded.generatedCvId();
-        }
-
-        final List<ApplicationCv> rows = applicationCvRepository.findPageForUser(
-                userId,
-                cursorCreatedAt,
-                cursorId,
-                PageRequest.of(0, USER_WIDE_PAGE_SIZE + 1));
-
-        final boolean hasMore = rows.size() > USER_WIDE_PAGE_SIZE;
-        final List<ApplicationCv> pageItems =
-                hasMore ? rows.subList(0, USER_WIDE_PAGE_SIZE) : rows;
-
-        final String nextCursor;
-        if (hasMore) {
-            final ApplicationCv last = pageItems.get(pageItems.size() - 1);
-            nextCursor = GeneratedCvCursor.encode(last.getCreatedAt(), last.getApplicationCvId());
-        } else {
-            nextCursor = null;
-        }
-
-        return new GeneratedCvDtos.Page(
-                pageItems.stream().map(GeneratedCvDtos.Summary::from).toList(), nextCursor);
+        final Page<GeneratedCvDtos.Summary> page = applicationCvRepository
+                .findAllByApplication_User_UserId(userId, pageable)
+                .map(GeneratedCvDtos.Summary::from);
+        return GeneratedCvDtos.PageResponse.from(page);
     }
 
     @Transactional(readOnly = true)

@@ -19,7 +19,9 @@ export type GeneratedCvSummary = GeneratedCv & {
 
 export type GeneratedCvPage = {
 	items: GeneratedCvSummary[];
-	nextCursor: string | null;
+	total: number;
+	page: number;
+	size: number;
 };
 
 export type GeneratedCvDownload = {

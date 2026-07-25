@@ -1,13 +1,16 @@
-import type { ActionFunctionArgs } from "react-router";
+import type { ActionFunctionArgs, ShouldRevalidateFunctionArgs } from "react-router";
 
 import { api, ApiError, requireSession } from "@/lib/api";
 import type { BaseCv } from "@/types/base-cv";
 import type { GeneratedCvSummary } from "@/types/generated-cv";
 
+export const GENERATED_CV_PAGE_SIZE = 20;
+
 export type DocumentsLoaderData = {
 	baseCvs: BaseCv[];
 	generatedCvs: GeneratedCvSummary[];
-	generatedCvsNextCursor: string | null;
+	generatedCvsPage: number;
+	generatedCvsTotal: number;
 	generatedCvsError: string | null;
 };
 
@@ -53,16 +56,18 @@ const actionError = (intent: DocumentsActionIntent, error: unknown): DocumentsAc
 
 const loadGeneratedCvsPage = async () => {
 	try {
-		const page = await api.getGeneratedCvsPage();
+		const page = await api.getGeneratedCvsPage({ page: 0, size: GENERATED_CV_PAGE_SIZE });
 		return {
 			generatedCvs: page.items,
-			generatedCvsNextCursor: page.nextCursor ?? null,
+			generatedCvsPage: page.page,
+			generatedCvsTotal: page.total,
 			generatedCvsError: null as string | null,
 		};
 	} catch (error) {
 		return {
 			generatedCvs: [] as GeneratedCvSummary[],
-			generatedCvsNextCursor: null as string | null,
+			generatedCvsPage: 0,
+			generatedCvsTotal: 0,
 			generatedCvsError: messageFromError(error, "Generated CVs could not be loaded."),
 		};
 	}
@@ -138,4 +143,15 @@ export async function documentsAction({ request }: ActionFunctionArgs): Promise<
 		const fallbackIntent = knownIntents.includes(intent) ? intent : "upload";
 		return actionError(fallbackIntent, error);
 	}
+}
+
+export function documentsShouldRevalidate({
+	formData,
+	defaultShouldRevalidate,
+}: ShouldRevalidateFunctionArgs) {
+	const intent = formData?.get("intent");
+	if (intent === "download" || intent === "download-generated-cv") {
+		return false;
+	}
+	return defaultShouldRevalidate;
 }

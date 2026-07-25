@@ -45,7 +45,8 @@ const renderDocuments = (
 	const loaderData: DocumentsLoaderData = {
 		baseCvs: [],
 		generatedCvs: [],
-		generatedCvsNextCursor: null,
+		generatedCvsPage: 0,
+		generatedCvsTotal: 0,
 		generatedCvsError: null,
 		...data,
 	};
@@ -104,6 +105,7 @@ describe("DocumentsRoute", () => {
 			generatedCvs: Array.from({ length: 5 }, (_, index) =>
 				generatedCv({ generatedCvId: index + 1 }),
 			),
+			generatedCvsTotal: 5,
 		});
 
 		const upload = await screen.findByRole("button", { name: "Upload a Base CV" });
@@ -116,7 +118,7 @@ describe("DocumentsRoute", () => {
 		renderDocuments({
 			baseCvs: [baseCv()],
 			generatedCvs: [generatedCv()],
-			generatedCvsNextCursor: null,
+			generatedCvsTotal: 1,
 		});
 
 		expect(await screen.findByText("acme-backend-v2.pdf")).toBeTruthy();
@@ -135,7 +137,6 @@ describe("DocumentsRoute", () => {
 		renderDocuments({
 			baseCvs: [baseCv()],
 			generatedCvs: [],
-			generatedCvsNextCursor: null,
 			generatedCvsError: "Generated CVs could not be loaded.",
 		});
 
@@ -157,13 +158,16 @@ describe("DocumentsRoute", () => {
 					createdAt: "2026-07-17T10:00:00Z",
 				}),
 			],
-			nextCursor: null,
+			total: 2,
+			page: 1,
+			size: 20,
 		});
 
 		renderDocuments({
 			baseCvs: [],
 			generatedCvs: [generatedCv()],
-			generatedCvsNextCursor: "cursor-1",
+			generatedCvsPage: 0,
+			generatedCvsTotal: 2,
 		});
 
 		expect(await screen.findByText("acme-backend-v2.pdf")).toBeTruthy();
@@ -174,7 +178,69 @@ describe("DocumentsRoute", () => {
 		});
 		expect(screen.getByText("acme-backend-v2.pdf")).toBeTruthy();
 		expect(screen.getByText("All Generated CVs loaded")).toBeTruthy();
-		expect(api.getGeneratedCvsPage).toHaveBeenCalledWith("cursor-1");
+		expect(api.getGeneratedCvsPage).toHaveBeenCalledWith({ page: 1, size: 20 });
+	});
+
+	it("keeps appended Generated CVs after a Documents action revalidates the loader", async () => {
+		vi.spyOn(api, "getGeneratedCvsPage").mockResolvedValue({
+			items: [
+				generatedCv({
+					generatedCvId: 102,
+					originalFilename: "older-acme.pdf",
+					applicationTitle: "Platform Engineer",
+					companyName: "Acme",
+					createdAt: "2026-07-17T10:00:00Z",
+				}),
+			],
+			total: 2,
+			page: 1,
+			size: 20,
+		});
+
+		let loaderData: DocumentsLoaderData = {
+			baseCvs: [baseCv()],
+			generatedCvs: [generatedCv()],
+			generatedCvsPage: 0,
+			generatedCvsTotal: 2,
+			generatedCvsError: null,
+		};
+
+		const router = createMemoryRouter(
+			[
+				{
+					path: "/documents",
+					Component: DocumentsRoute,
+					loader: () => loaderData,
+					action: async () => {
+						loaderData = {
+							baseCvs: [],
+							generatedCvs: [generatedCv()],
+							generatedCvsPage: 0,
+							generatedCvsTotal: 2,
+							generatedCvsError: null,
+						};
+						return { ok: true, intent: "delete" };
+					},
+				},
+			],
+			{ initialEntries: ["/documents"] },
+		);
+		render(<RouterProvider router={router} />);
+
+		expect(await screen.findByText("acme-backend-v2.pdf")).toBeTruthy();
+		fireEvent.click(screen.getByRole("button", { name: "Load more" }));
+		await waitFor(() => {
+			expect(screen.getByText("older-acme.pdf")).toBeTruthy();
+		});
+
+		vi.spyOn(window, "confirm").mockReturnValue(true);
+		fireEvent.click(screen.getByRole("button", { name: "Delete engineering-profile.pdf" }));
+
+		await waitFor(() => {
+			expect(screen.queryByText("engineering-profile.pdf")).toBeNull();
+		});
+		expect(screen.getByText("acme-backend-v2.pdf")).toBeTruthy();
+		expect(screen.getByText("older-acme.pdf")).toBeTruthy();
 	});
 
 	it("confirms before deleting a Generated CV", async () => {
@@ -184,6 +250,7 @@ describe("DocumentsRoute", () => {
 		renderDocuments(
 			{
 				generatedCvs: [generatedCv()],
+				generatedCvsTotal: 1,
 			},
 			action,
 		);

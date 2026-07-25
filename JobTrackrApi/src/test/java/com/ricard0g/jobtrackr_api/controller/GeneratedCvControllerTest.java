@@ -1,5 +1,7 @@
 package com.ricard0g.jobtrackr_api.controller;
 
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
@@ -17,6 +19,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.boot.webmvc.test.autoconfigure.WebMvcTest;
 import org.springframework.context.annotation.Import;
+import org.springframework.data.domain.Pageable;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 
@@ -60,10 +63,10 @@ class GeneratedCvControllerTest {
     }
 
     @Test
-    void listForUser_returnsPageWithApplicationContextAndCursor() throws Exception {
+    void listForUser_returnsSpringDataPageWithApplicationContext() throws Exception {
         // given
-        when(applicationCvService.listForUser(USER_ID, null))
-                .thenReturn(new GeneratedCvDtos.Page(List.of(sampleSummary()), "next-cursor"));
+        when(applicationCvService.listForUser(eq(USER_ID), any(Pageable.class)))
+                .thenReturn(new GeneratedCvDtos.PageResponse(List.of(sampleSummary()), 21, 0, 20));
 
         // when / then
         mockMvc.perform(get("/api/v1/generated-cvs").principal(principal()))
@@ -77,24 +80,28 @@ class GeneratedCvControllerTest {
                 .andExpect(jsonPath("$.items[0].format").value("PDF"))
                 .andExpect(jsonPath("$.items[0].byteSize").value(2048))
                 .andExpect(jsonPath("$.items[0].createdAt").exists())
-                .andExpect(jsonPath("$.nextCursor").value("next-cursor"));
-        verify(applicationCvService).listForUser(USER_ID, null);
+                .andExpect(jsonPath("$.total").value(21))
+                .andExpect(jsonPath("$.page").value(0))
+                .andExpect(jsonPath("$.size").value(20));
+        verify(applicationCvService).listForUser(eq(USER_ID), any(Pageable.class));
     }
 
     @Test
-    void listForUser_forwardsCursorQueryParam() throws Exception {
+    void listForUser_forwardsPageAndSizeQueryParams() throws Exception {
         // given
-        when(applicationCvService.listForUser(USER_ID, "opaque-cursor"))
-                .thenReturn(new GeneratedCvDtos.Page(List.of(), null));
+        when(applicationCvService.listForUser(eq(USER_ID), any(Pageable.class)))
+                .thenReturn(new GeneratedCvDtos.PageResponse(List.of(), 0, 1, 20));
 
         // when / then
         mockMvc.perform(get("/api/v1/generated-cvs")
-                        .param("cursor", "opaque-cursor")
+                        .param("page", "1")
+                        .param("size", "20")
                         .principal(principal()))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.items").isEmpty())
-                .andExpect(jsonPath("$.nextCursor").doesNotExist());
-        verify(applicationCvService).listForUser(USER_ID, "opaque-cursor");
+                .andExpect(jsonPath("$.page").value(1))
+                .andExpect(jsonPath("$.size").value(20));
+        verify(applicationCvService).listForUser(eq(USER_ID), any(Pageable.class));
     }
 
     @Test

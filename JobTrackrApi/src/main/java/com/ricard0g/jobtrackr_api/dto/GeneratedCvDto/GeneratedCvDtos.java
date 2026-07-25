@@ -3,6 +3,8 @@ package com.ricard0g.jobtrackr_api.dto.GeneratedCvDto;
 import java.time.OffsetDateTime;
 import java.util.List;
 
+import org.springframework.data.domain.Page;
+
 import com.ricard0g.jobtrackr_api.model.ApplicationCv;
 import com.ricard0g.jobtrackr_api.model.enums.GeneratedCvFormat;
 
@@ -70,7 +72,13 @@ public final class GeneratedCvDtos {
         }
     }
 
-    public record Page(List<Summary> items, String nextCursor) {}
+    public record PageResponse(List<Summary> items, long total, int page, int size) {
+
+        public static PageResponse from(final Page<Summary> page) {
+            return new PageResponse(
+                    page.getContent(), page.getTotalElements(), page.getNumber(), page.getSize());
+        }
+    }
 
     public record Download(String uri) {}
 }
