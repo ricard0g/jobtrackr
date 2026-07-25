@@ -104,7 +104,6 @@ public class BaseCvService {
         }
     }
 
-    @Transactional(readOnly = true)
     public BaseCvPreviewDto preview(final UUID userId, final Long baseCvId) {
         final BaseCv baseCv = requireOwnedBaseCv(userId, baseCvId);
         final boolean previewSupported =
