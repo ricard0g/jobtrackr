@@ -7,10 +7,12 @@ import {
 	type DragEvent,
 	type KeyboardEvent,
 } from "react";
-import { useFetcher, useLoaderData } from "react-router";
+import { Link, useFetcher, useLoaderData } from "react-router";
 
 import { Button } from "@/components/ui/button";
+import { api } from "@/lib/api";
 import type { BaseCv } from "@/types/base-cv";
+import type { GeneratedCvSummary } from "@/types/generated-cv";
 import type { DocumentsActionData, DocumentsLoaderData } from "@/routes/documents-data";
 
 const MAX_BASE_CVS = 20;
@@ -109,8 +111,228 @@ function BaseCvRow({ baseCv }: { baseCv: BaseCv }) {
 	);
 }
 
+function GeneratedCvLibraryRow({ generatedCv }: { generatedCv: GeneratedCvSummary }) {
+	const deleteFetcher = useFetcher<DocumentsActionData>();
+	const downloadFetcher = useFetcher<DocumentsActionData>();
+	const openedDownloadRef = useRef<DocumentsActionData | null>(null);
+	const deleting = deleteFetcher.state !== "idle";
+	const downloading = downloadFetcher.state !== "idle";
+
+	useEffect(() => {
+		if (downloadFetcher.state !== "idle") return;
+		const data = downloadFetcher.data;
+		if (!data?.ok || data.intent !== "download-generated-cv" || !data.uri) return;
+		if (openedDownloadRef.current === data) return;
+		openedDownloadRef.current = data;
+		openSignedDownload(data.uri);
+	}, [downloadFetcher.state, downloadFetcher.data]);
+
+	const confirmDelete = (event: React.FormEvent<HTMLFormElement>) => {
+		if (!window.confirm(`Permanently delete ${generatedCv.originalFilename}?`)) {
+			event.preventDefault();
+		}
+	};
+
+	return (
+		<li className="rounded-xl border border-light-gray/80 bg-white/90 p-4">
+			<div className="flex items-start gap-3">
+				<div className="rounded-lg bg-light-gray/60 p-2 text-medium-gray">
+					<FileText aria-hidden="true" />
+				</div>
+				<div className="min-w-0 flex-1">
+					<p className="truncate font-semibold text-dark-gray">{generatedCv.originalFilename}</p>
+					<p className="mt-1 text-sm text-medium-gray">
+						{generatedCv.applicationTitle} · {generatedCv.companyName}
+					</p>
+					<p className="mt-0.5 text-sm text-medium-gray">
+						v{generatedCv.version} · {formatLabels[generatedCv.format]} ·{" "}
+						{formatBytes(generatedCv.byteSize)} · {formatDate(generatedCv.createdAt)}
+					</p>
+				</div>
+				<div className="flex gap-1">
+					<downloadFetcher.Form method="post" action="/documents">
+						<input type="hidden" name="intent" value="download-generated-cv" />
+						<input type="hidden" name="generatedCvId" value={generatedCv.generatedCvId} />
+						<Button
+							type="submit"
+							variant="ghost"
+							disabled={downloading}
+							aria-label={`Download ${generatedCv.originalFilename}`}
+						>
+							{downloading ? <LoaderCircle className="animate-spin" /> : <Download />}
+						</Button>
+					</downloadFetcher.Form>
+					<deleteFetcher.Form method="post" action="/documents" onSubmit={confirmDelete}>
+						<input type="hidden" name="intent" value="delete-generated-cv" />
+						<input type="hidden" name="generatedCvId" value={generatedCv.generatedCvId} />
+						<Button
+							type="submit"
+							variant="ghost"
+							disabled={deleting}
+							aria-label={`Delete ${generatedCv.originalFilename}`}
+						>
+							{deleting ? <LoaderCircle className="animate-spin" /> : <Trash2 />}
+						</Button>
+					</deleteFetcher.Form>
+				</div>
+			</div>
+			{downloadFetcher.data?.ok === false ? (
+				<p role="alert" className="mt-2 text-sm text-red-700">
+					{downloadFetcher.data.error}
+				</p>
+			) : null}
+			{deleteFetcher.data?.ok === false ? (
+				<p role="alert" className="mt-2 text-sm text-red-700">
+					{deleteFetcher.data.error}
+				</p>
+			) : null}
+		</li>
+	);
+}
+
+function GeneratedCvSection({
+	initialItems,
+	initialNextCursor,
+	initialError,
+}: {
+	initialItems: GeneratedCvSummary[];
+	initialNextCursor: string | null;
+	initialError: string | null;
+}) {
+	const [items, setItems] = useState(initialItems);
+	const [nextCursor, setNextCursor] = useState(initialNextCursor);
+	const [error, setError] = useState(initialError);
+	const [loadMoreError, setLoadMoreError] = useState<string | null>(null);
+	const [loadingMore, setLoadingMore] = useState(false);
+	const [retrying, setRetrying] = useState(false);
+
+	useEffect(() => {
+		setItems(initialItems);
+		setNextCursor(initialNextCursor);
+		setError(initialError);
+		setLoadMoreError(null);
+	}, [initialItems, initialNextCursor, initialError]);
+
+	const loadMore = async () => {
+		if (!nextCursor || loadingMore) return;
+		setLoadingMore(true);
+		setLoadMoreError(null);
+		try {
+			const page = await api.getGeneratedCvsPage(nextCursor);
+			setItems((previous) => {
+				const seen = new Set(previous.map((item) => item.generatedCvId));
+				const appended = page.items.filter((item) => !seen.has(item.generatedCvId));
+				return [...previous, ...appended];
+			});
+			setNextCursor(page.nextCursor ?? null);
+		} catch (loadError) {
+			setLoadMoreError(
+				loadError instanceof Error ? loadError.message : "Could not load more Generated CVs.",
+			);
+		} finally {
+			setLoadingMore(false);
+		}
+	};
+
+	const retry = async () => {
+		if (retrying) return;
+		setRetrying(true);
+		try {
+			const page = await api.getGeneratedCvsPage();
+			setItems(page.items);
+			setNextCursor(page.nextCursor ?? null);
+			setError(null);
+			setLoadMoreError(null);
+		} catch (loadError) {
+			setError(
+				loadError instanceof Error ? loadError.message : "Generated CVs could not be loaded.",
+			);
+		} finally {
+			setRetrying(false);
+		}
+	};
+
+	return (
+		<section
+			aria-labelledby="generated-cvs-heading"
+			className="mt-8 rounded-2xl border border-light-gray bg-light-gray/40 p-4 shadow-cool-light-inner sm:p-6"
+		>
+			<h2 id="generated-cvs-heading" className="text-lg font-semibold text-dark-gray">
+				Generated CVs
+			</h2>
+			<p className="mt-1 text-sm text-medium-gray">
+				Role-tailored outputs from Generate, newest first.
+			</p>
+
+			{error ? (
+				<div className="mt-6 rounded-xl border border-light-gray bg-white/70 px-4 py-5 text-center">
+					<p role="alert" className="text-sm text-medium-gray">
+						{error}
+					</p>
+					<Button
+						type="button"
+						variant="ghost"
+						size="sm"
+						className="mt-3"
+						disabled={retrying}
+						onClick={() => void retry()}
+					>
+						{retrying ? <LoaderCircle className="animate-spin" /> : null}
+						Retry
+					</Button>
+				</div>
+			) : items.length === 0 ? (
+				<div className="mt-6 flex flex-col items-center py-6 text-center text-medium-gray">
+					<File className="mb-2 opacity-70" size={28} />
+					<h3 className="text-sm font-semibold text-dark-gray">No Generated CVs yet</h3>
+					<p className="mt-1 max-w-md text-sm">
+						Create tailored documents from{" "}
+						<Link to="/generate" className="underline underline-offset-2">
+							Generate
+						</Link>
+						.
+					</p>
+				</div>
+			) : (
+				<>
+					<ul className="mt-5 space-y-3">
+						{items.map((generatedCv) => (
+							<GeneratedCvLibraryRow
+								key={generatedCv.generatedCvId}
+								generatedCv={generatedCv}
+							/>
+						))}
+					</ul>
+					{nextCursor ? (
+						<div className="mt-4 flex flex-col items-center gap-2">
+							{loadMoreError ? (
+								<p role="alert" className="text-sm text-medium-gray">
+									{loadMoreError}
+								</p>
+							) : null}
+							<Button
+								type="button"
+								variant="ghost"
+								size="sm"
+								disabled={loadingMore}
+								onClick={() => void loadMore()}
+							>
+								{loadingMore ? <LoaderCircle className="animate-spin" /> : null}
+								{loadMoreError ? "Retry" : "Load more"}
+							</Button>
+						</div>
+					) : (
+						<p className="mt-4 text-center text-xs text-medium-gray">All Generated CVs loaded</p>
+					)}
+				</>
+			)}
+		</section>
+	);
+}
+
 export function DocumentsRoute() {
-	const { baseCvs } = useLoaderData() as DocumentsLoaderData;
+	const { baseCvs, generatedCvs, generatedCvsNextCursor, generatedCvsError } =
+		useLoaderData() as DocumentsLoaderData;
 	const uploadFetcher = useFetcher<DocumentsActionData>();
 	const inputRef = useRef<HTMLInputElement>(null);
 	const [clientError, setClientError] = useState<string | null>(null);
@@ -240,6 +462,12 @@ export function DocumentsRoute() {
 						</ul>
 					)}
 				</div>
+
+				<GeneratedCvSection
+					initialItems={generatedCvs}
+					initialNextCursor={generatedCvsNextCursor}
+					initialError={generatedCvsError}
+				/>
 			</section>
 		</div>
 	);

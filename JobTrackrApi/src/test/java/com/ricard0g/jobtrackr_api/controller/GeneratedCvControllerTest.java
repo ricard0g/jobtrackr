@@ -60,6 +60,44 @@ class GeneratedCvControllerTest {
     }
 
     @Test
+    void listForUser_returnsPageWithApplicationContextAndCursor() throws Exception {
+        // given
+        when(applicationCvService.listForUser(USER_ID, null))
+                .thenReturn(new GeneratedCvDtos.Page(List.of(sampleSummary()), "next-cursor"));
+
+        // when / then
+        mockMvc.perform(get("/api/v1/generated-cvs").principal(principal()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.items[0].generatedCvId").value(GENERATED_CV_ID))
+                .andExpect(jsonPath("$.items[0].applicationId").value(APPLICATION_ID))
+                .andExpect(jsonPath("$.items[0].applicationTitle").value("Backend Engineer"))
+                .andExpect(jsonPath("$.items[0].companyName").value("Acme"))
+                .andExpect(jsonPath("$.items[0].version").value(2))
+                .andExpect(jsonPath("$.items[0].originalFilename").value("tailored.pdf"))
+                .andExpect(jsonPath("$.items[0].format").value("PDF"))
+                .andExpect(jsonPath("$.items[0].byteSize").value(2048))
+                .andExpect(jsonPath("$.items[0].createdAt").exists())
+                .andExpect(jsonPath("$.nextCursor").value("next-cursor"));
+        verify(applicationCvService).listForUser(USER_ID, null);
+    }
+
+    @Test
+    void listForUser_forwardsCursorQueryParam() throws Exception {
+        // given
+        when(applicationCvService.listForUser(USER_ID, "opaque-cursor"))
+                .thenReturn(new GeneratedCvDtos.Page(List.of(), null));
+
+        // when / then
+        mockMvc.perform(get("/api/v1/generated-cvs")
+                        .param("cursor", "opaque-cursor")
+                        .principal(principal()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.items").isEmpty())
+                .andExpect(jsonPath("$.nextCursor").doesNotExist());
+        verify(applicationCvService).listForUser(USER_ID, "opaque-cursor");
+    }
+
+    @Test
     void download_returnsSignedUri() throws Exception {
         // given
         when(applicationCvService.createDownload(USER_ID, GENERATED_CV_ID))
@@ -85,6 +123,21 @@ class GeneratedCvControllerTest {
         return new GeneratedCvDtos.Response(
                 GENERATED_CV_ID,
                 APPLICATION_ID,
+                2,
+                "tailored.pdf",
+                GeneratedCvFormat.PDF,
+                "application/pdf",
+                2048L,
+                11L,
+                OffsetDateTime.parse("2026-07-18T10:00:00Z"));
+    }
+
+    private GeneratedCvDtos.Summary sampleSummary() {
+        return new GeneratedCvDtos.Summary(
+                GENERATED_CV_ID,
+                APPLICATION_ID,
+                "Backend Engineer",
+                "Acme",
                 2,
                 "tailored.pdf",
                 GeneratedCvFormat.PDF,

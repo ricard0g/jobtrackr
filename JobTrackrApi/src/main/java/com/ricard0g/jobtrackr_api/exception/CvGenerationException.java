@@ -107,6 +107,13 @@ public class CvGenerationException extends RuntimeException {
                 "Generated CV not found");
     }
 
+    public static CvGenerationException invalidCursor() {
+        return new CvGenerationException(
+                "INVALID_CURSOR",
+                HttpStatus.BAD_REQUEST,
+                "Generated CV cursor is invalid");
+    }
+
     public static CvGenerationException storageUnavailable() {
         return new CvGenerationException(
                 "STORAGE_UNAVAILABLE",

@@ -1,9 +1,11 @@
 package com.ricard0g.jobtrackr_api.repository;
 
+import java.time.OffsetDateTime;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
+import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
@@ -28,4 +30,24 @@ public interface ApplicationCvRepository extends JpaRepository<ApplicationCv, Lo
     int findMaxVersion(@Param("applicationId") Long applicationId);
 
     List<ApplicationCv> findAllByApplication_ApplicationId(Long applicationId);
+
+    @Query(
+            """
+            SELECT cv
+            FROM ApplicationCv cv
+            JOIN FETCH cv.application application
+            JOIN FETCH application.company
+            WHERE application.user.userId = :userId
+              AND (
+                   (:cursorCreatedAt IS NULL AND :cursorId IS NULL)
+                   OR cv.createdAt < :cursorCreatedAt
+                   OR (cv.createdAt = :cursorCreatedAt AND cv.applicationCvId < :cursorId)
+              )
+            ORDER BY cv.createdAt DESC, cv.applicationCvId DESC
+            """)
+    List<ApplicationCv> findPageForUser(
+            @Param("userId") UUID userId,
+            @Param("cursorCreatedAt") OffsetDateTime cursorCreatedAt,
+            @Param("cursorId") Long cursorId,
+            Pageable pageable);
 }

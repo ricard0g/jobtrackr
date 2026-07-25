@@ -22,7 +22,7 @@ import { API_BASE_URL, AUTH_BASE_URL } from "@/lib/api-config";
 import type { Tag, TagWriteRequest } from "@/types/tag";
 import type { User } from "@/types/user";
 import type { BaseCv, BaseCvDownload } from "@/types/base-cv";
-import type { GeneratedCv, GeneratedCvDownload } from "@/types/generated-cv";
+import type { GeneratedCv, GeneratedCvDownload, GeneratedCvPage } from "@/types/generated-cv";
 import type {
 	AiConsent,
 	AiConsentRequest,
@@ -427,6 +427,10 @@ export const api = {
 		apiRequest<JobDescriptionResponse>(`/applications/${applicationId}/job-description`),
 	getGeneratedCvs: (applicationId: number) =>
 		apiRequest<GeneratedCv[]>(`/applications/${applicationId}/generated-cvs`),
+	getGeneratedCvsPage: (cursor?: string | null) => {
+		const params = cursor ? `?cursor=${encodeURIComponent(cursor)}` : "";
+		return apiRequest<GeneratedCvPage>(`/generated-cvs${params}`);
+	},
 	getGeneratedCvDownload: (generatedCvId: number) =>
 		apiRequest<GeneratedCvDownload>(`/generated-cvs/${generatedCvId}/download`),
 	deleteGeneratedCv: (generatedCvId: number) =>

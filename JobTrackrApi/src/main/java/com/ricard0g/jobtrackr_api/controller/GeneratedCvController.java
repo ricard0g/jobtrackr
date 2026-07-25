@@ -10,6 +10,7 @@ import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import com.ricard0g.jobtrackr_api.dto.GeneratedCvDto.GeneratedCvDtos;
@@ -25,6 +26,13 @@ import lombok.RequiredArgsConstructor;
 public class GeneratedCvController {
 
     private final ApplicationCvService applicationCvService;
+
+    @GetMapping("/generated-cvs")
+    public ResponseEntity<GeneratedCvDtos.Page> listForUser(
+            final Principal principal, @RequestParam(required = false) final String cursor) {
+        final UUID userId = AuthenticatedUserId.from(principal);
+        return ResponseEntity.ok(applicationCvService.listForUser(userId, cursor));
+    }
 
     @GetMapping("/applications/{applicationId}/generated-cvs")
     public ResponseEntity<List<GeneratedCvDtos.Response>> list(

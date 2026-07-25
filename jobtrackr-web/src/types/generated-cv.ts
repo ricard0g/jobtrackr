@@ -12,6 +12,16 @@ export type GeneratedCv = {
 	createdAt: string;
 };
 
+export type GeneratedCvSummary = GeneratedCv & {
+	applicationTitle: string;
+	companyName: string;
+};
+
+export type GeneratedCvPage = {
+	items: GeneratedCvSummary[];
+	nextCursor: string | null;
+};
+
 export type GeneratedCvDownload = {
 	uri: string;
 };
