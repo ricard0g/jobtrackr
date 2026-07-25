@@ -238,6 +238,31 @@ async function apiRequest<T>(path: string, init: RequestInit = {}, retry = true)
 	return readJson<T>(response);
 }
 
+async function apiRequestBlob(path: string, init: RequestInit = {}, retry = true): Promise<Blob> {
+	const headers = new Headers(init.headers);
+
+	if (!headers.has("Accept")) headers.set("Accept", "application/pdf");
+	if (accessToken) {
+		headers.set("Authorization", `Bearer ${accessToken}`);
+	}
+
+	const response = await fetch(`${API_BASE_URL}${path}`, {
+		...init,
+		headers,
+	});
+
+	if (response.status === 401 && retry) {
+		await refreshSession();
+		return apiRequestBlob(path, init, false);
+	}
+
+	if (!response.ok) {
+		throw await parseApiError(response, "Preview could not be loaded.");
+	}
+
+	return response.blob();
+}
+
 export async function requireSession() {
 	if (accessToken) {
 		return;
@@ -262,6 +287,8 @@ export const api = {
 		apiRequest<void>(`/base-cvs/${baseCvId}`, { method: "DELETE" }),
 	getBaseCvDownload: (baseCvId: number) =>
 		apiRequest<BaseCvDownload>(`/base-cvs/${baseCvId}/download`),
+	getBaseCvPreview: (baseCvId: number, signal?: AbortSignal) =>
+		apiRequestBlob(`/base-cvs/${baseCvId}/preview`, { signal }),
 	getApplications: () => apiRequest<Application[]>("/applications"),
 	getApplicationById: (applicationId: number) =>
 		apiRequest<Application>(`/applications/${applicationId}`),

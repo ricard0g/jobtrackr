@@ -9,6 +9,7 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
 
 import com.ricard0g.jobtrackr_api.dto.BaseCvDto.BaseCvDownloadDto;
+import com.ricard0g.jobtrackr_api.dto.BaseCvDto.BaseCvPreviewDto;
 import com.ricard0g.jobtrackr_api.dto.BaseCvDto.BaseCvResponseDto;
 import com.ricard0g.jobtrackr_api.exception.BaseCvException;
 import com.ricard0g.jobtrackr_api.exception.CvGenerationException;
@@ -16,6 +17,7 @@ import com.ricard0g.jobtrackr_api.exception.StorageUnavailableException;
 import com.ricard0g.jobtrackr_api.exception.UserNotFoundException;
 import com.ricard0g.jobtrackr_api.model.BaseCv;
 import com.ricard0g.jobtrackr_api.model.User;
+import com.ricard0g.jobtrackr_api.model.enums.BaseCvFormat;
 import com.ricard0g.jobtrackr_api.model.enums.CvGenerationStatus;
 import com.ricard0g.jobtrackr_api.repository.BaseCvRepository;
 import com.ricard0g.jobtrackr_api.repository.CvGenerationRepository;
@@ -98,6 +100,20 @@ public class BaseCvService {
                     baseCvStorage.createDownloadUri(baseCv.getObjectKey(), baseCv.getOriginalFilename()));
         } catch (final StorageUnavailableException exception) {
             throw BaseCvException.storageUnavailable();
+        }
+    }
+
+    @Transactional(readOnly = true)
+    public BaseCvPreviewDto preview(final UUID userId, final Long baseCvId) {
+        final BaseCv baseCv = requireOwnedBaseCv(userId, baseCvId);
+        if (baseCv.getFormat() != BaseCvFormat.PDF) {
+            throw BaseCvException.previewUnsupportedFormat();
+        }
+        try {
+            final byte[] bytes = baseCvStorage.download(baseCv.getObjectKey());
+            return new BaseCvPreviewDto(bytes, baseCv.getContentType(), baseCv.getOriginalFilename());
+        } catch (final StorageUnavailableException exception) {
+            throw BaseCvException.previewUnavailable();
         }
     }
 

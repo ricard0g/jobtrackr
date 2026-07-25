@@ -1,9 +1,12 @@
 package com.ricard0g.jobtrackr_api.controller;
 
+import java.net.URLEncoder;
+import java.nio.charset.StandardCharsets;
 import java.security.Principal;
 import java.util.List;
 import java.util.UUID;
 
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
@@ -19,6 +22,7 @@ import org.springframework.web.multipart.MultipartFile;
 import org.springframework.web.multipart.MultipartHttpServletRequest;
 
 import com.ricard0g.jobtrackr_api.dto.BaseCvDto.BaseCvDownloadDto;
+import com.ricard0g.jobtrackr_api.dto.BaseCvDto.BaseCvPreviewDto;
 import com.ricard0g.jobtrackr_api.dto.BaseCvDto.BaseCvResponseDto;
 import com.ricard0g.jobtrackr_api.exception.BaseCvException;
 import com.ricard0g.jobtrackr_api.service.BaseCvService;
@@ -31,6 +35,9 @@ import lombok.RequiredArgsConstructor;
 @RequiredArgsConstructor
 @Validated
 public class BaseCvController {
+
+    private static final String PREVIEW_CACHE_CONTROL = "private, no-store";
+    private static final String UNSAFE_FILENAME_CHARS = "[\\\\/\"\\r\\n]";
 
     private final BaseCvService baseCvService;
 
@@ -63,6 +70,19 @@ public class BaseCvController {
         return ResponseEntity.ok(baseCvService.createDownload(userId, baseCvId));
     }
 
+    @GetMapping("/{baseCvId}/preview")
+    public ResponseEntity<byte[]> preview(
+            final Principal principal,
+            @PathVariable @Positive final Long baseCvId) {
+        final UUID userId = AuthenticatedUserId.from(principal);
+        final BaseCvPreviewDto preview = baseCvService.preview(userId, baseCvId);
+        return ResponseEntity.ok()
+                .header(HttpHeaders.CACHE_CONTROL, PREVIEW_CACHE_CONTROL)
+                .header(HttpHeaders.CONTENT_DISPOSITION, inlineContentDisposition(preview.originalFilename()))
+                .contentType(MediaType.parseMediaType(preview.contentType()))
+                .body(preview.bytes());
+    }
+
     @DeleteMapping("/{baseCvId}")
     public ResponseEntity<Void> delete(
             final Principal principal,
@@ -70,5 +90,12 @@ public class BaseCvController {
         final UUID userId = AuthenticatedUserId.from(principal);
         baseCvService.delete(userId, baseCvId);
         return ResponseEntity.noContent().build();
+    }
+
+    private static String inlineContentDisposition(final String originalFilename) {
+        final String safeFilename = originalFilename.replaceAll(UNSAFE_FILENAME_CHARS, "_");
+        final String encodedFilename = URLEncoder.encode(originalFilename, StandardCharsets.UTF_8)
+                .replace("+", "%20");
+        return "inline; filename=\"" + safeFilename + "\"; filename*=UTF-8''" + encodedFilename;
     }
 }

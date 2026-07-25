@@ -1,5 +1,6 @@
 import { Download, File, FileText, LoaderCircle, Trash2, UploadCloud } from "lucide-react";
 import {
+    useCallback,
     useEffect,
     useRef,
     useState,
@@ -9,6 +10,10 @@ import {
 } from "react";
 import { Link, useFetcher, useLoaderData } from "react-router";
 
+import {
+    DocumentPreviewDialog,
+    type PreviewableDocument,
+} from "@/components/documents/DocumentPreviewDialog";
 import { Button } from "@/components/ui/button";
 import { api } from "@/lib/api";
 import type { BaseCv } from "@/types/base-cv";
@@ -42,7 +47,13 @@ const openSignedDownload = (uri: string) => {
     link.click();
 };
 
-function BaseCvRow({ baseCv }: { baseCv: BaseCv }) {
+function BaseCvRow({
+    baseCv,
+    onPreview,
+}: {
+    baseCv: BaseCv;
+    onPreview: (baseCv: BaseCv) => void;
+}) {
     const deleteFetcher = useFetcher<DocumentsActionData>();
     const downloadFetcher = useFetcher<DocumentsActionData>();
     const openedDownloadRef = useRef<DocumentsActionData | null>(null);
@@ -62,17 +73,35 @@ function BaseCvRow({ baseCv }: { baseCv: BaseCv }) {
         if (!window.confirm(`Permanently delete ${baseCv.originalFilename}?`)) event.preventDefault();
     };
 
+    const openPreview = () => onPreview(baseCv);
+    const onPreviewKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
+        if (event.key === "Enter" || event.key === " ") {
+            event.preventDefault();
+            openPreview();
+        }
+    };
+
     return (
         <li className="rounded-xl border border-light-gray bg-white p-4">
             <div className="flex items-start gap-3">
-                <div className="rounded-lg bg-lightest-accent p-2 text-dark-accent">
-                    <FileText aria-hidden="true" />
-                </div>
-                <div className="min-w-0 flex-1">
-                    <p className="truncate font-semibold text-dark-gray">{baseCv.originalFilename}</p>
-                    <p className="mt-1 text-sm text-medium-gray">
-                        {formatLabels[baseCv.format]} · {formatBytes(baseCv.byteSize)} · {formatDate(baseCv.createdAt)}
-                    </p>
+                <div
+                    role="button"
+                    tabIndex={0}
+                    aria-label={`Preview ${baseCv.originalFilename}`}
+                    onClick={openPreview}
+                    onKeyDown={onPreviewKeyDown}
+                    className="flex min-w-0 flex-1 cursor-pointer items-start gap-3 rounded-lg outline-none focus-visible:ring-2 focus-visible:ring-dark-accent"
+                >
+                    <div className="rounded-lg bg-lightest-accent p-2 text-dark-accent">
+                        <FileText aria-hidden="true" />
+                    </div>
+                    <div className="min-w-0 flex-1 text-left">
+                        <p className="truncate font-semibold text-dark-gray">{baseCv.originalFilename}</p>
+                        <p className="mt-1 text-sm text-medium-gray">
+                            {formatLabels[baseCv.format]} · {formatBytes(baseCv.byteSize)} ·{" "}
+                            {formatDate(baseCv.createdAt)}
+                        </p>
+                    </div>
                 </div>
                 <div className="flex gap-1">
                     <downloadFetcher.Form method="post" action="/documents">
@@ -366,10 +395,48 @@ export function DocumentsRoute() {
     const { baseCvs, generatedCvs, generatedCvsPage, generatedCvsTotal, generatedCvsError } =
         useLoaderData() as DocumentsLoaderData;
     const uploadFetcher = useFetcher<DocumentsActionData>();
+    const previewDownloadFetcher = useFetcher<DocumentsActionData>();
     const inputRef = useRef<HTMLInputElement>(null);
+    const openedPreviewDownloadRef = useRef<DocumentsActionData | null>(null);
     const [clientError, setClientError] = useState<string | null>(null);
+    const [previewDocument, setPreviewDocument] = useState<PreviewableDocument | null>(null);
     const uploading = uploadFetcher.state !== "idle";
     const atLimit = baseCvs.length >= MAX_BASE_CVS;
+
+    const loadBaseCvPreview = useCallback(
+        (signal: AbortSignal) => {
+            if (!previewDocument) {
+                return Promise.reject(new Error("No document selected."));
+            }
+            return api.getBaseCvPreview(previewDocument.id, signal);
+        },
+        [previewDocument],
+    );
+
+    useEffect(() => {
+        if (previewDownloadFetcher.state !== "idle") return;
+        const data = previewDownloadFetcher.data;
+        if (!data?.ok || data.intent !== "download" || !data.uri) return;
+        if (openedPreviewDownloadRef.current === data) return;
+        openedPreviewDownloadRef.current = data;
+        openSignedDownload(data.uri);
+    }, [previewDownloadFetcher.state, previewDownloadFetcher.data]);
+
+    const openBaseCvPreview = (baseCv: BaseCv) => {
+        setPreviewDocument({
+            id: baseCv.baseCvId,
+            filename: baseCv.originalFilename,
+            format: baseCv.format,
+        });
+    };
+
+    const downloadPreviewOriginal = () => {
+        if (!previewDocument) return;
+        const formData = new FormData();
+        formData.set("intent", "download");
+        formData.set("baseCvId", String(previewDocument.id));
+        previewDownloadFetcher.submit(formData, { method: "post", action: "/documents" });
+    };
 
     const upload = (file: File | undefined) => {
         setClientError(null);
@@ -491,7 +558,11 @@ export function DocumentsRoute() {
                     ) : (
                         <ul className="mt-6 space-y-3">
                             {baseCvs.map((baseCv) => (
-                                <BaseCvRow key={baseCv.baseCvId} baseCv={baseCv} />
+                                <BaseCvRow
+                                    key={baseCv.baseCvId}
+                                    baseCv={baseCv}
+                                    onPreview={openBaseCvPreview}
+                                />
                             ))}
                         </ul>
                     )}
@@ -504,6 +575,16 @@ export function DocumentsRoute() {
                     initialError={generatedCvsError}
                 />
             </section>
+
+            <DocumentPreviewDialog
+                document={previewDocument}
+                open={previewDocument != null}
+                onOpenChange={(open) => {
+                    if (!open) setPreviewDocument(null);
+                }}
+                loadPreview={loadBaseCvPreview}
+                onDownloadOriginal={downloadPreviewOriginal}
+            />
         </div>
     );
 }

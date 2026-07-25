@@ -6,6 +6,8 @@ public interface BaseCvStorage {
 
     void upload(String objectKey, byte[] bytes, String contentType);
 
+    byte[] download(String objectKey);
+
     URI createDownloadUri(String objectKey, String originalFilename);
 
     void delete(String objectKey);

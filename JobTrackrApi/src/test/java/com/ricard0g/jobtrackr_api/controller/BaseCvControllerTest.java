@@ -7,6 +7,8 @@ import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.multipart;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -22,11 +24,14 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.boot.webmvc.test.autoconfigure.WebMvcTest;
 import org.springframework.context.annotation.Import;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.MediaType;
 import org.springframework.mock.web.MockMultipartFile;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 
 import com.ricard0g.jobtrackr_api.dto.BaseCvDto.BaseCvDownloadDto;
+import com.ricard0g.jobtrackr_api.dto.BaseCvDto.BaseCvPreviewDto;
 import com.ricard0g.jobtrackr_api.dto.BaseCvDto.BaseCvResponseDto;
 import com.ricard0g.jobtrackr_api.exception.BaseCvException;
 import com.ricard0g.jobtrackr_api.exception.GlobalExceptionHandler;
@@ -115,6 +120,47 @@ class BaseCvControllerTest {
         mockMvc.perform(get(BASE_PATH + "/{baseCvId}/download", BASE_CV_ID).principal(principal()))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.uri").value(signedUri.toASCIIString()));
+    }
+
+    @Test
+    void preview_streamsOwnedPdfInlineWithPrivateNoStoreCaching() throws Exception {
+        // given
+        final byte[] pdfBytes = "%PDF-1.4 owned preview".getBytes(StandardCharsets.UTF_8);
+        when(baseCvService.preview(USER_ID, BASE_CV_ID)).thenReturn(
+                new BaseCvPreviewDto(pdfBytes, MediaType.APPLICATION_PDF_VALUE, "cv.pdf"));
+
+        // when / then
+        mockMvc.perform(get(BASE_PATH + "/{baseCvId}/preview", BASE_CV_ID).principal(principal()))
+                .andExpect(status().isOk())
+                .andExpect(content().contentType(MediaType.APPLICATION_PDF))
+                .andExpect(content().bytes(pdfBytes))
+                .andExpect(header().string(HttpHeaders.CACHE_CONTROL, "private, no-store"))
+                .andExpect(header().string(
+                        HttpHeaders.CONTENT_DISPOSITION,
+                        "inline; filename=\"cv.pdf\"; filename*=UTF-8''cv.pdf"));
+        verify(baseCvService).preview(USER_ID, BASE_CV_ID);
+    }
+
+    @Test
+    void preview_whenNotOwned_returnsNotFoundWithoutLeakingStorage() throws Exception {
+        // given
+        when(baseCvService.preview(USER_ID, BASE_CV_ID)).thenThrow(BaseCvException.notFound());
+
+        // when / then
+        mockMvc.perform(get(BASE_PATH + "/{baseCvId}/preview", BASE_CV_ID).principal(principal()))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.code").value("BASE_CV_NOT_FOUND"));
+    }
+
+    @Test
+    void preview_whenStorageUnavailable_returnsPreviewFailure() throws Exception {
+        // given
+        when(baseCvService.preview(USER_ID, BASE_CV_ID)).thenThrow(BaseCvException.previewUnavailable());
+
+        // when / then
+        mockMvc.perform(get(BASE_PATH + "/{baseCvId}/preview", BASE_CV_ID).principal(principal()))
+                .andExpect(status().isBadGateway())
+                .andExpect(jsonPath("$.code").value("BASE_CV_PREVIEW_UNAVAILABLE"));
     }
 
     @Test

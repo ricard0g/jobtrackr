@@ -8,6 +8,65 @@ import type { DocumentsLoaderData } from "@/routes/documents-data";
 import type { BaseCv } from "@/types/base-cv";
 import type { GeneratedCvSummary } from "@/types/generated-cv";
 
+vi.mock("react-pdf", async () => {
+	const React = await import("react");
+	return {
+		Document: ({
+			children,
+			onLoadSuccess,
+			loading,
+		}: {
+			children: React.ReactNode;
+			onLoadSuccess?: (info: { numPages: number }) => void;
+			loading?: React.ReactNode;
+		}) => {
+			const notified = React.useRef(false);
+			React.useEffect(() => {
+				if (notified.current) return;
+				notified.current = true;
+				onLoadSuccess?.({ numPages: 3 });
+			}, [onLoadSuccess]);
+			return (
+				<div data-testid="pdf-document">
+					{loading}
+					{children}
+				</div>
+			);
+		},
+		Page: ({
+			pageNumber,
+			scale,
+			onLoadSuccess,
+			onRenderAnnotationLayerSuccess,
+		}: {
+			pageNumber: number;
+			scale: number;
+			onLoadSuccess?: (page: { originalWidth: number }) => void;
+			onRenderAnnotationLayerSuccess?: () => void;
+		}) => {
+			const notified = React.useRef(false);
+			React.useEffect(() => {
+				if (notified.current) return;
+				notified.current = true;
+				onLoadSuccess?.({ originalWidth: 800 });
+				onRenderAnnotationLayerSuccess?.();
+			}, [onLoadSuccess, onRenderAnnotationLayerSuccess]);
+			return (
+				<div data-testid="pdf-page" data-page={pageNumber} data-scale={String(scale)}>
+					Page {pageNumber}
+				</div>
+			);
+		},
+		pdfjs: {
+			GlobalWorkerOptions: { workerSrc: "" },
+			version: "5.4.296",
+		},
+	};
+});
+
+vi.mock("react-pdf/dist/Page/AnnotationLayer.css", () => ({}));
+vi.mock("react-pdf/dist/Page/TextLayer.css", () => ({}));
+
 afterEach(() => {
 	cleanup();
 	vi.restoreAllMocks();
@@ -261,5 +320,128 @@ describe("DocumentsRoute", () => {
 		expect(confirmSpy).toHaveBeenCalledWith("Permanently delete acme-backend-v2.pdf?");
 		expect(action).not.toHaveBeenCalled();
 		confirmSpy.mockRestore();
+	});
+
+	it("opens the preview dialog with a loading state when selecting a Base CV row", async () => {
+		vi.spyOn(api, "getBaseCvPreview").mockImplementation(
+			() => new Promise(() => undefined),
+		);
+
+		renderDocuments({ baseCvs: [baseCv()] });
+
+		await screen.findByText("engineering-profile.pdf");
+		fireEvent.click(screen.getByRole("button", { name: "Preview engineering-profile.pdf" }));
+
+		expect(await screen.findByRole("dialog", { name: "engineering-profile.pdf" })).toBeTruthy();
+		expect(screen.getByText("Loading preview…")).toBeTruthy();
+		expect(api.getBaseCvPreview).toHaveBeenCalledWith(1, expect.any(AbortSignal));
+	});
+
+	it("renders PDF page controls after the preview loads", async () => {
+		vi.spyOn(api, "getBaseCvPreview").mockResolvedValue(new Blob(["%PDF"], { type: "application/pdf" }));
+		const createObjectURL = vi.spyOn(URL, "createObjectURL").mockReturnValue("blob:preview-1");
+		vi.spyOn(URL, "revokeObjectURL").mockImplementation(() => undefined);
+
+		renderDocuments({ baseCvs: [baseCv()] });
+		await screen.findByText("engineering-profile.pdf");
+		fireEvent.click(screen.getByRole("button", { name: "Preview engineering-profile.pdf" }));
+
+		expect(await screen.findByText("Page 1 of 3")).toBeTruthy();
+		expect(screen.getByRole("button", { name: "Previous page" }).hasAttribute("disabled")).toBe(
+			true,
+		);
+		expect(screen.getByRole("button", { name: "Next page" }).hasAttribute("disabled")).toBe(false);
+		expect(screen.getByRole("button", { name: "Zoom out" })).toBeTruthy();
+		expect(screen.getByRole("button", { name: "Zoom in" })).toBeTruthy();
+		expect(screen.getByRole("button", { name: "Fit to width" })).toBeTruthy();
+		expect(screen.getByRole("button", { name: "Download Original" })).toBeTruthy();
+		expect(screen.getByRole("button", { name: "Close" })).toBeTruthy();
+		expect(createObjectURL).toHaveBeenCalled();
+
+		fireEvent.click(screen.getByRole("button", { name: "Next page" }));
+		expect(await screen.findByText("Page 2 of 3")).toBeTruthy();
+		expect(screen.getByTestId("pdf-page").getAttribute("data-page")).toBe("2");
+	});
+
+	it("does not open preview when Download or Delete is used", async () => {
+		const previewSpy = vi.spyOn(api, "getBaseCvPreview");
+		const confirmSpy = vi.spyOn(window, "confirm").mockReturnValue(false);
+		const action = vi.fn(async () => ({ ok: true, intent: "download", uri: "https://signed.example/cv" }));
+
+		renderDocuments({ baseCvs: [baseCv()] }, action);
+		await screen.findByText("engineering-profile.pdf");
+
+		fireEvent.click(screen.getByRole("button", { name: "Download engineering-profile.pdf" }));
+		fireEvent.click(screen.getByRole("button", { name: "Delete engineering-profile.pdf" }));
+
+		await waitFor(() => {
+			expect(action).toHaveBeenCalled();
+		});
+		expect(screen.queryByRole("dialog")).toBeNull();
+		expect(previewSpy).not.toHaveBeenCalled();
+		expect(confirmSpy).toHaveBeenCalled();
+	});
+
+	it("keeps the dialog open with retry actions when preview fails", async () => {
+		vi.spyOn(api, "getBaseCvPreview")
+			.mockRejectedValueOnce(new Error("Preview could not be loaded."))
+			.mockImplementation(() => new Promise(() => undefined));
+
+		renderDocuments({ baseCvs: [baseCv()] });
+		await screen.findByText("engineering-profile.pdf");
+		fireEvent.click(screen.getByRole("button", { name: "Preview engineering-profile.pdf" }));
+
+		expect(await screen.findByText("Preview could not be loaded.")).toBeTruthy();
+		expect(screen.getByRole("button", { name: "Retry Preview" })).toBeTruthy();
+		expect(screen.getByRole("button", { name: "Download Original" })).toBeTruthy();
+		expect(screen.getByRole("button", { name: "Close" })).toBeTruthy();
+		expect(screen.getByRole("dialog")).toBeTruthy();
+
+		fireEvent.click(screen.getByRole("button", { name: "Retry Preview" }));
+		expect(await screen.findByText("Loading preview…")).toBeTruthy();
+		expect(api.getBaseCvPreview).toHaveBeenCalledTimes(2);
+	});
+
+	it("aborts the preview request and revokes the object URL on close", async () => {
+		let capturedSignal: AbortSignal | undefined;
+		vi.spyOn(api, "getBaseCvPreview").mockImplementation((_id, signal) => {
+			capturedSignal = signal;
+			return Promise.resolve(new Blob(["%PDF"], { type: "application/pdf" }));
+		});
+		vi.spyOn(URL, "createObjectURL").mockReturnValue("blob:preview-close");
+		const revokeObjectURL = vi.spyOn(URL, "revokeObjectURL").mockImplementation(() => undefined);
+
+		renderDocuments({ baseCvs: [baseCv()] });
+		await screen.findByText("engineering-profile.pdf");
+		fireEvent.click(screen.getByRole("button", { name: "Preview engineering-profile.pdf" }));
+		expect(await screen.findByText("Page 1 of 3")).toBeTruthy();
+
+		fireEvent.click(screen.getByRole("button", { name: "Close" }));
+		await waitFor(() => {
+			expect(screen.queryByRole("dialog")).toBeNull();
+		});
+		expect(capturedSignal?.aborted).toBe(true);
+		expect(revokeObjectURL).toHaveBeenCalledWith("blob:preview-close");
+	});
+
+	it("disables zoom controls at the lower and upper bounds", async () => {
+		vi.spyOn(api, "getBaseCvPreview").mockResolvedValue(new Blob(["%PDF"], { type: "application/pdf" }));
+		vi.spyOn(URL, "createObjectURL").mockReturnValue("blob:preview-zoom");
+		vi.spyOn(URL, "revokeObjectURL").mockImplementation(() => undefined);
+
+		renderDocuments({ baseCvs: [baseCv()] });
+		await screen.findByText("engineering-profile.pdf");
+		fireEvent.click(screen.getByRole("button", { name: "Preview engineering-profile.pdf" }));
+		expect(await screen.findByText("Page 1 of 3")).toBeTruthy();
+
+		const zoomOut = screen.getByRole("button", { name: "Zoom out" });
+		const zoomIn = screen.getByRole("button", { name: "Zoom in" });
+
+		for (let i = 0; i < 12; i += 1) fireEvent.click(zoomOut);
+		expect(zoomOut.hasAttribute("disabled")).toBe(true);
+
+		for (let i = 0; i < 20; i += 1) fireEvent.click(zoomIn);
+		expect(zoomIn.hasAttribute("disabled")).toBe(true);
+		expect(zoomOut.hasAttribute("disabled")).toBe(false);
 	});
 });

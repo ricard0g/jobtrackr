@@ -559,6 +559,34 @@ export const handlers = [
 		return HttpResponse.json({ uri });
 	}),
 
+	http.get(`${API_BASE_URL}/base-cvs/:baseCvId/preview`, ({ request, params }) => {
+		const state = loadState();
+		const auth = requireAuth(request, state);
+		if (auth instanceof Response) return auth;
+		const baseCvId = getPositiveId(params, "baseCvId");
+		const baseCv = state.baseCvs.find(
+			(candidate) => candidate.baseCvId === baseCvId && candidate.userId === auth.user.userId,
+		);
+		if (!baseCv) return errorJson(404, "BASE_CV_NOT_FOUND", "Base CV not found");
+		if (baseCv.format !== "PDF") {
+			return errorJson(
+				415,
+				"BASE_CV_PREVIEW_UNSUPPORTED_FORMAT",
+				"Preview is not available for this Base CV format",
+			);
+		}
+		const safeFilename = baseCv.originalFilename.replaceAll(/[\\/"\r\n]/g, "_");
+		const encodedFilename = encodeURIComponent(baseCv.originalFilename).replaceAll("+", "%20");
+		return new HttpResponse("%PDF-1.4 mock preview", {
+			status: 200,
+			headers: {
+				"Content-Type": "application/pdf",
+				"Cache-Control": "private, no-store",
+				"Content-Disposition": `inline; filename="${safeFilename}"; filename*=UTF-8''${encodedFilename}`,
+			},
+		});
+	}),
+
 	http.delete(`${API_BASE_URL}/base-cvs/:baseCvId`, ({ request, params }) => {
 		const state = loadState();
 		const auth = requireAuth(request, state);

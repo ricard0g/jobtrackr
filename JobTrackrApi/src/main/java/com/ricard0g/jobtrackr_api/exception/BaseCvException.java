@@ -71,4 +71,19 @@ public class BaseCvException extends RuntimeException {
                 HttpStatus.BAD_GATEWAY,
                 "Base CV storage is temporarily unavailable");
     }
+
+    public static BaseCvException previewUnavailable() {
+        return new BaseCvException(
+                "BASE_CV_PREVIEW_UNAVAILABLE",
+                HttpStatus.BAD_GATEWAY,
+                "Base CV preview is temporarily unavailable");
+    }
+
+    public static BaseCvException previewUnsupportedFormat() {
+        return new BaseCvException(
+                "BASE_CV_PREVIEW_UNSUPPORTED_FORMAT",
+                HttpStatus.UNSUPPORTED_MEDIA_TYPE,
+                "Preview is not available for this Base CV format");
+    }
 }
+
