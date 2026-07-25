@@ -337,6 +337,31 @@ describe("DocumentsRoute", () => {
 		expect(api.getBaseCvPreview).toHaveBeenCalledWith(1, expect.any(AbortSignal));
 	});
 
+	it("shows that only PDF is previewable for non-PDF Base CVs", async () => {
+		const previewSpy = vi.spyOn(api, "getBaseCvPreview");
+
+		renderDocuments({
+			baseCvs: [
+				baseCv({
+					baseCvId: 2,
+					originalFilename: "notes.md",
+					format: "MARKDOWN",
+					contentType: "text/markdown",
+					byteSize: 1024,
+				}),
+			],
+		});
+
+		await screen.findByText("notes.md");
+		fireEvent.click(screen.getByRole("button", { name: "Preview notes.md" }));
+
+		expect(await screen.findByRole("dialog", { name: "notes.md" })).toBeTruthy();
+		expect(screen.getByText("Only PDF format is previewable right now.")).toBeTruthy();
+		expect(screen.getByRole("button", { name: "Download Original" })).toBeTruthy();
+		expect(screen.getByRole("button", { name: "Close" })).toBeTruthy();
+		expect(previewSpy).not.toHaveBeenCalled();
+	});
+
 	it("renders PDF page controls after the preview loads", async () => {
 		vi.spyOn(api, "getBaseCvPreview").mockResolvedValue(new Blob(["%PDF"], { type: "application/pdf" }));
 		const createObjectURL = vi.spyOn(URL, "createObjectURL").mockReturnValue("blob:preview-1");

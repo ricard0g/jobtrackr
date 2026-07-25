@@ -30,7 +30,8 @@ type PreviewState =
 	| { status: "idle" }
 	| { status: "loading" }
 	| { status: "ready"; objectUrl: string }
-	| { status: "error"; message: string };
+	| { status: "error"; message: string }
+	| { status: "unsupported" };
 
 export function DocumentPreviewDialog({
 	document: previewDocument,
@@ -54,6 +55,12 @@ export function DocumentPreviewDialog({
 		if (!open || !previewDocument) {
 			releaseObjectUrl();
 			setPreview({ status: "idle" });
+			return;
+		}
+
+		if (previewDocument.format !== "PDF") {
+			releaseObjectUrl();
+			setPreview({ status: "unsupported" });
 			return;
 		}
 
@@ -103,6 +110,23 @@ export function DocumentPreviewDialog({
 						<Button type="button" variant="ghost" onClick={() => onOpenChange(false)}>
 							Close
 						</Button>
+					</div>
+				) : null}
+
+				{preview.status === "unsupported" ? (
+					<div className="flex flex-1 flex-col items-center justify-center gap-3 p-6 text-center">
+						<p className="text-sm text-medium-gray">
+							Only PDF format is previewable right now.
+						</p>
+						<div className="flex flex-wrap justify-center gap-2">
+							<Button type="button" variant="outline" onClick={onDownloadOriginal}>
+								<Download />
+								Download Original
+							</Button>
+							<Button type="button" variant="ghost" onClick={() => onOpenChange(false)}>
+								Close
+							</Button>
+						</div>
 					</div>
 				) : null}
 

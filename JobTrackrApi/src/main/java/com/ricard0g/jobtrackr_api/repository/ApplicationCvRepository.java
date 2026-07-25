@@ -36,7 +36,10 @@ public interface ApplicationCvRepository extends JpaRepository<ApplicationCv, Lo
                     """
                     SELECT cv
                     FROM ApplicationCv cv
-                    WHERE cv.application.user.userId = :userId
+                    JOIN FETCH cv.application application
+                    JOIN FETCH application.company
+                    LEFT JOIN FETCH cv.generation
+                    WHERE application.user.userId = :userId
                     """,
             countQuery =
                     """
