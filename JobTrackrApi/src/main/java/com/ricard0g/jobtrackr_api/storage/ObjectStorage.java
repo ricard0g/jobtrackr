@@ -8,6 +8,8 @@ public interface ObjectStorage {
 
     byte[] download(String objectKey);
 
+    boolean exists(String objectKey);
+
     URI createDownloadUri(String objectKey, String originalFilename);
 
     void delete(String objectKey);

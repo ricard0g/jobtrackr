@@ -161,6 +161,25 @@ class BaseCvControllerTest {
     }
 
     @Test
+    void preview_streamsConvertedDocxPdfInlineWithPrivateNoStoreCaching() throws Exception {
+        // given
+        final byte[] pdfBytes = "%PDF-1.4 converted docx".getBytes(StandardCharsets.UTF_8);
+        when(baseCvService.preview(USER_ID, BASE_CV_ID)).thenReturn(
+                new BaseCvPreviewDto(pdfBytes, MediaType.APPLICATION_PDF_VALUE, "resume.pdf"));
+
+        // when / then
+        mockMvc.perform(get(BASE_PATH + "/{baseCvId}/preview", BASE_CV_ID).principal(principal()))
+                .andExpect(status().isOk())
+                .andExpect(content().contentType(MediaType.APPLICATION_PDF))
+                .andExpect(content().bytes(pdfBytes))
+                .andExpect(header().string(HttpHeaders.CACHE_CONTROL, "private, no-store"))
+                .andExpect(header().string(
+                        HttpHeaders.CONTENT_DISPOSITION,
+                        "inline; filename=\"resume.pdf\"; filename*=UTF-8''resume.pdf"));
+        verify(baseCvService).preview(USER_ID, BASE_CV_ID);
+    }
+
+    @Test
     void preview_whenNotOwned_returnsNotFoundWithoutLeakingStorage() throws Exception {
         // given
         when(baseCvService.preview(USER_ID, BASE_CV_ID)).thenThrow(BaseCvException.notFound());

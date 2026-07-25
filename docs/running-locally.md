@@ -50,6 +50,8 @@ Start Postgres:
 
 This also starts the FastAPI CV generation service on `http://localhost:8081`. User-facing CV generation requires the Gemini provider and a configured Google AI API key.
 
+DOCX preview conversion uses the pinned Gotenberg LibreOffice service on `http://localhost:3000`.
+
 Start the API:
 
 ```bash
@@ -67,6 +69,7 @@ Health check:
 ```bash
 curl http://localhost:8080/actuator/health
 curl http://localhost:8081/health/live
+curl http://localhost:3000/health
 ```
 
 Flyway runs automatically when the API starts against a fresh database.

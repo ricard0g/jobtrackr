@@ -337,8 +337,10 @@ describe("DocumentsRoute", () => {
 		expect(api.getBaseCvPreview).toHaveBeenCalledWith(1, expect.any(AbortSignal));
 	});
 
-	it("shows that only PDF and Markdown are previewable for DOCX Base CVs", async () => {
-		const previewSpy = vi.spyOn(api, "getBaseCvPreview");
+	it("previews DOCX Base CVs through the PDF viewer after conversion", async () => {
+		vi.spyOn(api, "getBaseCvPreview").mockResolvedValue(
+			new Blob(["%PDF-1.4 converted"], { type: "application/pdf" }),
+		);
 
 		renderDocuments({
 			baseCvs: [
@@ -357,10 +359,34 @@ describe("DocumentsRoute", () => {
 		fireEvent.click(screen.getByRole("button", { name: "Preview resume.docx" }));
 
 		expect(await screen.findByRole("dialog", { name: "resume.docx" })).toBeTruthy();
-		expect(screen.getByText("Only PDF and Markdown formats are previewable right now.")).toBeTruthy();
+		expect(await screen.findByTestId("pdf-document")).toBeTruthy();
+		expect(api.getBaseCvPreview).toHaveBeenCalledWith(3, expect.any(AbortSignal));
+		expect(screen.getByRole("button", { name: "Download Original" })).toBeTruthy();
+	});
+
+	it("keeps Retry Preview and Download Original available when DOCX conversion fails", async () => {
+		vi.spyOn(api, "getBaseCvPreview").mockRejectedValue(new Error("Preview could not be loaded."));
+
+		renderDocuments({
+			baseCvs: [
+				baseCv({
+					baseCvId: 3,
+					originalFilename: "resume.docx",
+					format: "DOCX",
+					contentType:
+						"application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+					byteSize: 2048,
+				}),
+			],
+		});
+
+		await screen.findByText("resume.docx");
+		fireEvent.click(screen.getByRole("button", { name: "Preview resume.docx" }));
+
+		expect(await screen.findByText("Preview could not be loaded.")).toBeTruthy();
+		expect(screen.getByRole("button", { name: "Retry Preview" })).toBeTruthy();
 		expect(screen.getByRole("button", { name: "Download Original" })).toBeTruthy();
 		expect(screen.getByRole("button", { name: "Close" })).toBeTruthy();
-		expect(previewSpy).not.toHaveBeenCalled();
 	});
 
 	it("renders Markdown with GFM structures, safe links, and no PDF controls", async () => {

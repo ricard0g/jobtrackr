@@ -26,9 +26,11 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.web.multipart.MultipartFile;
 
+import com.ricard0g.jobtrackr_api.conversion.GotenbergClient;
 import com.ricard0g.jobtrackr_api.dto.BaseCvDto.BaseCvDownloadDto;
 import com.ricard0g.jobtrackr_api.dto.BaseCvDto.BaseCvPreviewDto;
 import com.ricard0g.jobtrackr_api.exception.BaseCvException;
+import com.ricard0g.jobtrackr_api.exception.DocumentConversionException;
 import com.ricard0g.jobtrackr_api.model.BaseCv;
 import com.ricard0g.jobtrackr_api.model.User;
 import com.ricard0g.jobtrackr_api.model.enums.BaseCvFormat;
@@ -59,6 +61,9 @@ class BaseCvServiceTest {
 
     @Mock
     private BaseCvStorage baseCvStorage;
+
+    @Mock
+    private GotenbergClient gotenbergClient;
 
     @InjectMocks
     private BaseCvService service;
@@ -158,17 +163,73 @@ class BaseCvServiceTest {
     }
 
     @Test
-    void preview_whenDocx_throwsUnsupportedFormatWithoutReadingStorage() {
+    void preview_whenDocxCacheMiss_convertsUploadsAndStreamsPdf() {
         // given
         final BaseCv baseCv = mock(BaseCv.class);
+        final byte[] docxBytes = "docx-bytes".getBytes(StandardCharsets.UTF_8);
+        final byte[] pdfBytes = "%PDF-1.4 preview".getBytes(StandardCharsets.UTF_8);
+        final String previewKey = "users/" + USER_ID + "/previews/base-cvs/" + BASE_CV_ID + ".pdf";
+        when(baseCv.getBaseCvId()).thenReturn(BASE_CV_ID);
         when(baseCv.getFormat()).thenReturn(BaseCvFormat.DOCX);
+        when(baseCv.getObjectKey()).thenReturn("opaque-key");
+        when(baseCv.getOriginalFilename()).thenReturn("resume.docx");
         when(baseCvRepository.findByBaseCvIdAndUser_UserId(BASE_CV_ID, USER_ID)).thenReturn(Optional.of(baseCv));
+        when(baseCvStorage.exists(previewKey)).thenReturn(false);
+        when(baseCvStorage.download("opaque-key")).thenReturn(docxBytes);
+        when(gotenbergClient.convertDocxToPdf(docxBytes, "resume.docx")).thenReturn(pdfBytes);
+
+        // when
+        final BaseCvPreviewDto preview = service.preview(USER_ID, BASE_CV_ID);
+
+        // then
+        assertThat(preview.bytes()).isEqualTo(pdfBytes);
+        assertThat(preview.contentType()).isEqualTo("application/pdf");
+        assertThat(preview.originalFilename()).isEqualTo("resume.pdf");
+        verify(baseCvStorage).upload(previewKey, pdfBytes, "application/pdf");
+    }
+
+    @Test
+    void preview_whenDocxCacheHit_streamsCachedPdfWithoutConversion() {
+        // given
+        final BaseCv baseCv = mock(BaseCv.class);
+        final byte[] pdfBytes = "%PDF-1.4 cached".getBytes(StandardCharsets.UTF_8);
+        final String previewKey = "users/" + USER_ID + "/previews/base-cvs/" + BASE_CV_ID + ".pdf";
+        when(baseCv.getBaseCvId()).thenReturn(BASE_CV_ID);
+        when(baseCv.getFormat()).thenReturn(BaseCvFormat.DOCX);
+        when(baseCv.getOriginalFilename()).thenReturn("resume.docx");
+        when(baseCvRepository.findByBaseCvIdAndUser_UserId(BASE_CV_ID, USER_ID)).thenReturn(Optional.of(baseCv));
+        when(baseCvStorage.exists(previewKey)).thenReturn(true);
+        when(baseCvStorage.download(previewKey)).thenReturn(pdfBytes);
+
+        // when
+        final BaseCvPreviewDto preview = service.preview(USER_ID, BASE_CV_ID);
+
+        // then
+        assertThat(preview.bytes()).isEqualTo(pdfBytes);
+        assertThat(preview.contentType()).isEqualTo("application/pdf");
+        verify(gotenbergClient, never()).convertDocxToPdf(any(), any());
+        verify(baseCvStorage, never()).download("opaque-key");
+    }
+
+    @Test
+    void preview_whenDocxConversionFails_mapsToPreviewUnavailable() {
+        // given
+        final BaseCv baseCv = mock(BaseCv.class);
+        final String previewKey = "users/" + USER_ID + "/previews/base-cvs/" + BASE_CV_ID + ".pdf";
+        when(baseCv.getBaseCvId()).thenReturn(BASE_CV_ID);
+        when(baseCv.getFormat()).thenReturn(BaseCvFormat.DOCX);
+        when(baseCv.getObjectKey()).thenReturn("opaque-key");
+        when(baseCv.getOriginalFilename()).thenReturn("resume.docx");
+        when(baseCvRepository.findByBaseCvIdAndUser_UserId(BASE_CV_ID, USER_ID)).thenReturn(Optional.of(baseCv));
+        when(baseCvStorage.exists(previewKey)).thenReturn(false);
+        when(baseCvStorage.download("opaque-key")).thenReturn("docx".getBytes(StandardCharsets.UTF_8));
+        when(gotenbergClient.convertDocxToPdf(any(), any())).thenThrow(DocumentConversionException.timeout());
 
         // when / then
         assertThatThrownBy(() -> service.preview(USER_ID, BASE_CV_ID))
                 .isInstanceOfSatisfying(BaseCvException.class,
-                        exception -> assertThat(exception.getCode()).isEqualTo("BASE_CV_PREVIEW_UNSUPPORTED_FORMAT"));
-        verify(baseCvStorage, never()).download(any());
+                        exception -> assertThat(exception.getCode()).isEqualTo("BASE_CV_PREVIEW_UNAVAILABLE"));
+        verify(baseCvStorage, never()).upload(any(), any(), any());
     }
 
     @Test

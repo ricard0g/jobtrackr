@@ -45,5 +45,22 @@ services:
       timeout: 5s
       retries: 10
 
+  gotenberg:
+    image: gotenberg/gotenberg:8.34.0-libreoffice
+    container_name: jobtrackr-gotenberg
+    ports:
+      - "${GOTENBERG_PORT:-3000}:3000"
+    environment:
+      API_TIMEOUT: ${GOTENBERG_API_TIMEOUT:-30s}
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "curl -f http://127.0.0.1:3000/health || exit 1",
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
 volumes:
   jobtrackr_pgdata:

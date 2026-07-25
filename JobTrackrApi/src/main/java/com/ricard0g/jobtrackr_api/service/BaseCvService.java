@@ -2,17 +2,21 @@ package com.ricard0g.jobtrackr_api.service;
 
 import java.util.List;
 import java.util.UUID;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ConcurrentHashMap;
 
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
 
+import com.ricard0g.jobtrackr_api.conversion.GotenbergClient;
 import com.ricard0g.jobtrackr_api.dto.BaseCvDto.BaseCvDownloadDto;
 import com.ricard0g.jobtrackr_api.dto.BaseCvDto.BaseCvPreviewDto;
 import com.ricard0g.jobtrackr_api.dto.BaseCvDto.BaseCvResponseDto;
 import com.ricard0g.jobtrackr_api.exception.BaseCvException;
 import com.ricard0g.jobtrackr_api.exception.CvGenerationException;
+import com.ricard0g.jobtrackr_api.exception.DocumentConversionException;
 import com.ricard0g.jobtrackr_api.exception.StorageUnavailableException;
 import com.ricard0g.jobtrackr_api.exception.UserNotFoundException;
 import com.ricard0g.jobtrackr_api.model.BaseCv;
@@ -36,12 +40,16 @@ public class BaseCvService {
 
     public static final int MAX_BASE_CVS = 20;
     private static final String MARKDOWN_PREVIEW_CONTENT_TYPE = "text/markdown; charset=UTF-8";
+    private static final String APPLICATION_PDF = "application/pdf";
 
     private final UserRepository userRepository;
     private final BaseCvRepository baseCvRepository;
     private final CvGenerationRepository cvGenerationRepository;
     private final BaseCvValidator baseCvValidator;
     private final BaseCvStorage baseCvStorage;
+    private final GotenbergClient gotenbergClient;
+    private final ConcurrentHashMap<Long, CompletableFuture<byte[]>> inFlightDocxConversions =
+            new ConcurrentHashMap<>();
 
     @Transactional(readOnly = true)
     public List<BaseCvResponseDto> list(final UUID userId) {
@@ -106,6 +114,9 @@ public class BaseCvService {
 
     public BaseCvPreviewDto preview(final UUID userId, final Long baseCvId) {
         final BaseCv baseCv = requireOwnedBaseCv(userId, baseCvId);
+        if (baseCv.getFormat() == BaseCvFormat.DOCX) {
+            return previewDocx(userId, baseCv);
+        }
         final boolean previewSupported =
                 baseCv.getFormat() == BaseCvFormat.PDF || baseCv.getFormat() == BaseCvFormat.MARKDOWN;
         if (!previewSupported) {
@@ -120,6 +131,66 @@ public class BaseCvService {
         } catch (final StorageUnavailableException exception) {
             throw BaseCvException.previewUnavailable();
         }
+    }
+
+    private BaseCvPreviewDto previewDocx(final UUID userId, final BaseCv baseCv) {
+        final String previewKey = previewObjectKey(userId, baseCv.getBaseCvId());
+        final String previewFilename = previewPdfFilename(baseCv.getOriginalFilename());
+        try {
+            if (baseCvStorage.exists(previewKey)) {
+                final byte[] cached = baseCvStorage.download(previewKey);
+                return new BaseCvPreviewDto(cached, APPLICATION_PDF, previewFilename);
+            }
+            final byte[] pdfBytes = convertAndCacheDocx(baseCv, previewKey);
+            return new BaseCvPreviewDto(pdfBytes, APPLICATION_PDF, previewFilename);
+        } catch (final StorageUnavailableException | DocumentConversionException exception) {
+            throw BaseCvException.previewUnavailable();
+        }
+    }
+
+    private byte[] convertAndCacheDocx(final BaseCv baseCv, final String previewKey) {
+        final Long baseCvId = baseCv.getBaseCvId();
+        final CompletableFuture<byte[]> conversion = new CompletableFuture<>();
+        final CompletableFuture<byte[]> existing = inFlightDocxConversions.putIfAbsent(baseCvId, conversion);
+        if (existing != null) {
+            return awaitConversion(existing);
+        }
+        try {
+            final byte[] docxBytes = baseCvStorage.download(baseCv.getObjectKey());
+            final byte[] pdfBytes = gotenbergClient.convertDocxToPdf(docxBytes, baseCv.getOriginalFilename());
+            baseCvStorage.upload(previewKey, pdfBytes, APPLICATION_PDF);
+            conversion.complete(pdfBytes);
+            return pdfBytes;
+        } catch (final RuntimeException exception) {
+            conversion.completeExceptionally(exception);
+            throw exception;
+        } finally {
+            inFlightDocxConversions.remove(baseCvId, conversion);
+        }
+    }
+
+    private static byte[] awaitConversion(final CompletableFuture<byte[]> conversion) {
+        try {
+            return conversion.join();
+        } catch (final java.util.concurrent.CompletionException exception) {
+            final Throwable cause = exception.getCause();
+            if (cause instanceof RuntimeException runtimeException) {
+                throw runtimeException;
+            }
+            throw exception;
+        }
+    }
+
+    static String previewObjectKey(final UUID userId, final Long baseCvId) {
+        return "users/" + userId + "/previews/base-cvs/" + baseCvId + ".pdf";
+    }
+
+    private static String previewPdfFilename(final String originalFilename) {
+        final int extensionIndex = originalFilename.lastIndexOf('.');
+        if (extensionIndex <= 0) {
+            return originalFilename + ".pdf";
+        }
+        return originalFilename.substring(0, extensionIndex) + ".pdf";
     }
 
     @Transactional

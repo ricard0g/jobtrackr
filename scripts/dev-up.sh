@@ -9,5 +9,5 @@ if [ ! -f "$ROOT_DIR/.env" ]; then
 fi
 
 cd "$ROOT_DIR"
-docker compose up -d postgres cv-generation
-docker compose ps postgres cv-generation
+docker compose up -d postgres cv-generation gotenberg
+docker compose ps postgres cv-generation gotenberg

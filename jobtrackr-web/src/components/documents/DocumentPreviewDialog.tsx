@@ -35,7 +35,7 @@ type PreviewState =
 	| { status: "error"; message: string }
 	| { status: "unsupported" };
 
-const PREVIEWABLE_FORMATS = new Set<BaseCvFormat>(["PDF", "MARKDOWN"]);
+const PREVIEWABLE_FORMATS = new Set<BaseCvFormat>(["PDF", "DOCX", "MARKDOWN"]);
 
 function isMarkdownPreviewBlob(blob: Blob): boolean {
 	const contentType = blob.type.toLowerCase();
@@ -131,7 +131,7 @@ export function DocumentPreviewDialog({
 				{preview.status === "unsupported" ? (
 					<div className="flex flex-1 flex-col items-center justify-center gap-3 p-6 text-center">
 						<p className="text-sm text-medium-gray">
-							Only PDF and Markdown formats are previewable right now.
+							This document format cannot be previewed.
 						</p>
 						<div className="flex flex-wrap justify-center gap-2">
 							<Button type="button" variant="outline" onClick={onDownloadOriginal}>

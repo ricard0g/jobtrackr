@@ -568,15 +568,19 @@ export const handlers = [
 			(candidate) => candidate.baseCvId === baseCvId && candidate.userId === auth.user.userId,
 		);
 		if (!baseCv) return errorJson(404, "BASE_CV_NOT_FOUND", "Base CV not found");
-		if (baseCv.format !== "PDF" && baseCv.format !== "MARKDOWN") {
+		if (baseCv.format !== "PDF" && baseCv.format !== "MARKDOWN" && baseCv.format !== "DOCX") {
 			return errorJson(
 				415,
 				"BASE_CV_PREVIEW_UNSUPPORTED_FORMAT",
 				"Preview is not available for this Base CV format",
 			);
 		}
-		const safeFilename = baseCv.originalFilename.replaceAll(/[\\/"\r\n]/g, "_");
-		const encodedFilename = encodeURIComponent(baseCv.originalFilename).replaceAll("+", "%20");
+		const previewFilename =
+			baseCv.format === "DOCX"
+				? baseCv.originalFilename.replace(/\.docx$/i, ".pdf")
+				: baseCv.originalFilename;
+		const safeFilename = previewFilename.replaceAll(/[\\/"\r\n]/g, "_");
+		const encodedFilename = encodeURIComponent(previewFilename).replaceAll("+", "%20");
 		const contentDisposition = `inline; filename="${safeFilename}"; filename*=UTF-8''${encodedFilename}`;
 		if (baseCv.format === "MARKDOWN") {
 			return new HttpResponse(`# Mock preview\n\n${baseCv.originalFilename}`, {
