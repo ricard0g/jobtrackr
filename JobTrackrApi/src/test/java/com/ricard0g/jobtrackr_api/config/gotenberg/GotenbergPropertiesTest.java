@@ -10,11 +10,13 @@ import org.junit.jupiter.api.Test;
 
 class GotenbergPropertiesTest {
 
+    private static final long FIFTEEN_MB = 15L * 1024 * 1024;
+
     @Test
-    void validate_acceptsConfiguredBaseUrlAndTimeout() {
+    void validate_acceptsConfiguredBaseUrlTimeoutAndMaxResponseBytes() {
         // given
         final GotenbergProperties properties =
-                new GotenbergProperties("http://localhost:3000", Duration.ofSeconds(35));
+                new GotenbergProperties("http://localhost:3000", Duration.ofSeconds(35), FIFTEEN_MB);
 
         // when / then
         assertThatCode(properties::validate).doesNotThrowAnyException();
@@ -23,7 +25,8 @@ class GotenbergPropertiesTest {
     @Test
     void validate_whenBaseUrlMissing_failsFast() {
         // given
-        final GotenbergProperties properties = new GotenbergProperties(" ", Duration.ofSeconds(35));
+        final GotenbergProperties properties =
+                new GotenbergProperties(" ", Duration.ofSeconds(35), FIFTEEN_MB);
 
         // when / then
         assertThatThrownBy(properties::validate)
@@ -32,11 +35,12 @@ class GotenbergPropertiesTest {
     }
 
     @Test
-    void defaultsRequestTimeoutToThirtyFiveSeconds() {
+    void defaultsRequestTimeoutAndMaxResponseBytes() {
         // given / when
-        final GotenbergProperties properties = new GotenbergProperties("http://localhost:3000", null);
+        final GotenbergProperties properties = new GotenbergProperties("http://localhost:3000", null, 0);
 
         // then
         assertThat(properties.requestTimeout()).isEqualTo(Duration.ofSeconds(35));
+        assertThat(properties.maxResponseBytes()).isEqualTo(FIFTEEN_MB);
     }
 }

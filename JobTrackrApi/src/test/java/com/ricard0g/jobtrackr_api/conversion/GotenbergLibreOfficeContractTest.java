@@ -42,7 +42,7 @@ class GotenbergLibreOfficeContractTest {
         final byte[] docxBytes = representativeGeneratedCvDocx();
         final GotenbergClient client = new GotenbergHttpClient(
                 HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(10)).build(),
-                new GotenbergProperties(gotenbergBaseUrl(), Duration.ofSeconds(35)));
+                new GotenbergProperties(gotenbergBaseUrl(), Duration.ofSeconds(35), 0));
 
         // when
         final byte[] pdfBytes = client.convertDocxToPdf(docxBytes, "generated-cv.docx");

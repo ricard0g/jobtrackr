@@ -18,7 +18,7 @@ public class GotenbergConfig {
     }
 
     @Bean
-    public HttpClient gotenbergHttpClient() {
+    public HttpClient gotenbergJdkHttpClient() {
         return HttpClient.newBuilder()
                 .version(HttpClient.Version.HTTP_1_1)
                 .connectTimeout(CONNECT_TIMEOUT)

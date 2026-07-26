@@ -9,6 +9,7 @@ import java.net.InetSocketAddress;
 import java.net.http.HttpClient;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
+import java.util.Arrays;
 import java.util.concurrent.Executors;
 import java.util.concurrent.atomic.AtomicReference;
 
@@ -24,6 +25,7 @@ class GotenbergHttpClientTest {
 
     private static final byte[] DOCX_BYTES = "fake-docx".getBytes(StandardCharsets.UTF_8);
     private static final byte[] PDF_BYTES = "%PDF-1.4 converted".getBytes(StandardCharsets.UTF_8);
+    private static final long DEFAULT_MAX_RESPONSE_BYTES = 15L * 1024 * 1024;
 
     private HttpServer server;
     private String baseUrl;
@@ -55,7 +57,7 @@ class GotenbergHttpClientTest {
                 output.write(PDF_BYTES);
             }
         });
-        final GotenbergClient client = client();
+        final GotenbergClient client = client(DEFAULT_MAX_RESPONSE_BYTES);
 
         // when
         final byte[] pdf = client.convertDocxToPdf(DOCX_BYTES, "resume.docx");
@@ -70,6 +72,52 @@ class GotenbergHttpClientTest {
     }
 
     @Test
+    void convertDocxToPdf_whenResponseExceedsMaxBytes_throwsMalformedResponse() {
+        // given
+        final byte[] oversized = new byte[64];
+        Arrays.fill(oversized, (byte) 'A');
+        System.arraycopy("%PDF-".getBytes(StandardCharsets.US_ASCII), 0, oversized, 0, 5);
+        server.createContext("/forms/libreoffice/convert", exchange -> {
+            exchange.getResponseHeaders().add("Content-Type", "application/pdf");
+            exchange.sendResponseHeaders(200, oversized.length);
+            try (OutputStream output = exchange.getResponseBody()) {
+                output.write(oversized);
+            }
+        });
+
+        // when / then
+        assertThatThrownBy(() -> client(32).convertDocxToPdf(DOCX_BYTES, "resume.docx"))
+                .isInstanceOfSatisfying(DocumentConversionException.class, exception -> {
+                    assertThat(exception.getKind()).isEqualTo(DocumentConversionException.Kind.MALFORMED_RESPONSE);
+                    assertThat(exception.getMessage()).contains("exceeded the allowed size");
+                });
+    }
+
+    @Test
+    void convertDocxToPdf_whenContentLengthExceedsMax_throwsWithoutBufferingBody() {
+        // given
+        server.createContext("/forms/libreoffice/convert", exchange -> {
+            exchange.getResponseHeaders().add("Content-Type", "application/pdf");
+            exchange.sendResponseHeaders(200, 1_000_000);
+            try (OutputStream output = exchange.getResponseBody()) {
+                output.write("%PDF-".getBytes(StandardCharsets.US_ASCII));
+                final byte[] chunk = new byte[8192];
+                Arrays.fill(chunk, (byte) 'X');
+                for (int i = 0; i < 100; i++) {
+                    output.write(chunk);
+                }
+            }
+        });
+
+        // when / then
+        assertThatThrownBy(() -> client(100).convertDocxToPdf(DOCX_BYTES, "resume.docx"))
+                .isInstanceOfSatisfying(DocumentConversionException.class, exception -> {
+                    assertThat(exception.getKind()).isEqualTo(DocumentConversionException.Kind.MALFORMED_RESPONSE);
+                    assertThat(exception.getMessage()).contains("exceeded the allowed size");
+                });
+    }
+
+    @Test
     void convertDocxToPdf_whenResponseIsEmpty_throwsMalformedResponse() {
         // given
         server.createContext("/forms/libreoffice/convert", exchange -> {
@@ -78,7 +126,7 @@ class GotenbergHttpClientTest {
         });
 
         // when / then
-        assertThatThrownBy(() -> client().convertDocxToPdf(DOCX_BYTES, "resume.docx"))
+        assertThatThrownBy(() -> client(DEFAULT_MAX_RESPONSE_BYTES).convertDocxToPdf(DOCX_BYTES, "resume.docx"))
                 .isInstanceOfSatisfying(DocumentConversionException.class, exception -> {
                     assertThat(exception.getKind()).isEqualTo(DocumentConversionException.Kind.MALFORMED_RESPONSE);
                 });
@@ -96,7 +144,7 @@ class GotenbergHttpClientTest {
         });
 
         // when / then
-        assertThatThrownBy(() -> client().convertDocxToPdf(DOCX_BYTES, "resume.docx"))
+        assertThatThrownBy(() -> client(DEFAULT_MAX_RESPONSE_BYTES).convertDocxToPdf(DOCX_BYTES, "resume.docx"))
                 .isInstanceOfSatisfying(DocumentConversionException.class, exception -> {
                     assertThat(exception.getKind()).isEqualTo(DocumentConversionException.Kind.MALFORMED_RESPONSE);
                 });
@@ -114,7 +162,7 @@ class GotenbergHttpClientTest {
         });
 
         // when / then
-        assertThatThrownBy(() -> client().convertDocxToPdf(DOCX_BYTES, "resume.docx"))
+        assertThatThrownBy(() -> client(DEFAULT_MAX_RESPONSE_BYTES).convertDocxToPdf(DOCX_BYTES, "resume.docx"))
                 .isInstanceOfSatisfying(DocumentConversionException.class, exception -> {
                     assertThat(exception.getKind()).isEqualTo(DocumentConversionException.Kind.SERVICE_UNAVAILABLE);
                 });
@@ -136,7 +184,7 @@ class GotenbergHttpClientTest {
         });
         final GotenbergClient client = new GotenbergHttpClient(
                 HttpClient.newBuilder().connectTimeout(Duration.ofMillis(100)).build(),
-                new GotenbergProperties(baseUrl, Duration.ofMillis(50)));
+                new GotenbergProperties(baseUrl, Duration.ofMillis(50), DEFAULT_MAX_RESPONSE_BYTES));
 
         // when / then
         assertThatThrownBy(() -> client.convertDocxToPdf(DOCX_BYTES, "resume.docx"))
@@ -145,9 +193,9 @@ class GotenbergHttpClientTest {
                 });
     }
 
-    private GotenbergClient client() {
+    private GotenbergClient client(final long maxResponseBytes) {
         return new GotenbergHttpClient(
                 HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(2)).build(),
-                new GotenbergProperties(baseUrl, Duration.ofSeconds(5)));
+                new GotenbergProperties(baseUrl, Duration.ofSeconds(5), maxResponseBytes));
     }
 }

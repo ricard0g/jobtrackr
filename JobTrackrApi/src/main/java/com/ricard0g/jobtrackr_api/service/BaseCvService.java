@@ -20,11 +20,13 @@ import com.ricard0g.jobtrackr_api.exception.DocumentConversionException;
 import com.ricard0g.jobtrackr_api.exception.StorageUnavailableException;
 import com.ricard0g.jobtrackr_api.exception.UserNotFoundException;
 import com.ricard0g.jobtrackr_api.model.BaseCv;
+import com.ricard0g.jobtrackr_api.model.StorageCleanupJob;
 import com.ricard0g.jobtrackr_api.model.User;
 import com.ricard0g.jobtrackr_api.model.enums.BaseCvFormat;
 import com.ricard0g.jobtrackr_api.model.enums.CvGenerationStatus;
 import com.ricard0g.jobtrackr_api.repository.BaseCvRepository;
 import com.ricard0g.jobtrackr_api.repository.CvGenerationRepository;
+import com.ricard0g.jobtrackr_api.repository.StorageCleanupJobRepository;
 import com.ricard0g.jobtrackr_api.repository.UserRepository;
 import com.ricard0g.jobtrackr_api.storage.BaseCvStorage;
 import com.ricard0g.jobtrackr_api.validation.BaseCvValidator;
@@ -48,6 +50,7 @@ public class BaseCvService {
     private final BaseCvValidator baseCvValidator;
     private final BaseCvStorage baseCvStorage;
     private final GotenbergClient gotenbergClient;
+    private final StorageCleanupJobRepository storageCleanupJobRepository;
     private final ConcurrentHashMap<Long, CompletableFuture<byte[]>> inFlightDocxConversions =
             new ConcurrentHashMap<>();
 
@@ -207,7 +210,19 @@ public class BaseCvService {
         }
         baseCvRepository.delete(baseCv);
         baseCvRepository.flush();
+        schedulePreviewCleanup(previewObjectKey(userId, baseCvId));
         log.info("[BaseCvService] - DELETE: baseCvId: {}, userId: {}", baseCvId, userId);
+    }
+
+    private void schedulePreviewCleanup(final String previewObjectKey) {
+        if (!storageCleanupJobRepository.findByObjectKeyAndCompletedAtIsNull(previewObjectKey).isEmpty()) {
+            return;
+        }
+        try {
+            storageCleanupJobRepository.save(StorageCleanupJob.create(previewObjectKey));
+        } catch (final DataIntegrityViolationException ignored) {
+            // concurrent schedule
+        }
     }
 
     private User requireUser(final UUID userId) {

@@ -1,6 +1,8 @@
 package com.ricard0g.jobtrackr_api.conversion;
 
+import java.io.ByteArrayOutputStream;
 import java.io.IOException;
+import java.io.InputStream;
 import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
@@ -8,6 +10,7 @@ import java.net.http.HttpResponse;
 import java.net.http.HttpTimeoutException;
 import java.nio.charset.StandardCharsets;
 import java.util.Arrays;
+import java.util.Optional;
 import java.util.UUID;
 
 import org.springframework.beans.factory.annotation.Qualifier;
@@ -29,9 +32,10 @@ public class GotenbergHttpClient implements GotenbergClient {
     private static final String PDF_SIGNATURE = "%PDF-";
     private static final String DOCX_CONTENT_TYPE =
             "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
+    private static final int READ_BUFFER_SIZE = 8192;
 
-    @Qualifier("gotenbergHttpClient")
-    private final HttpClient gotenbergHttpClient;
+    @Qualifier("gotenbergJdkHttpClient")
+    private final HttpClient gotenbergJdkHttpClient;
     private final GotenbergProperties properties;
 
     @Override
@@ -49,19 +53,26 @@ public class GotenbergHttpClient implements GotenbergClient {
 
         final long started = System.currentTimeMillis();
         try {
-            final HttpResponse<byte[]> response =
-                    gotenbergHttpClient.send(request, HttpResponse.BodyHandlers.ofByteArray());
-            final long elapsedMs = System.currentTimeMillis() - started;
-            log.info(
-                    "[GotenbergHttpClient] - CONVERT: status: {}, elapsedMs: {}, bytes: {}",
-                    response.statusCode(),
-                    elapsedMs,
-                    response.body() == null ? 0 : response.body().length);
-
-            if (response.statusCode() < 200 || response.statusCode() >= 300) {
-                throw DocumentConversionException.serviceUnavailable();
+            final HttpResponse<InputStream> response =
+                    gotenbergJdkHttpClient.send(request, HttpResponse.BodyHandlers.ofInputStream());
+            try (InputStream responseBody = response.body()) {
+                final long elapsedMs = System.currentTimeMillis() - started;
+                if (response.statusCode() < 200 || response.statusCode() >= 300) {
+                    log.info(
+                            "[GotenbergHttpClient] - CONVERT: status: {}, elapsedMs: {}",
+                            response.statusCode(),
+                            elapsedMs);
+                    throw DocumentConversionException.serviceUnavailable();
+                }
+                rejectIfDeclaredLengthTooLarge(response);
+                final byte[] pdfBytes = readBounded(responseBody, properties.maxResponseBytes());
+                log.info(
+                        "[GotenbergHttpClient] - CONVERT: status: {}, elapsedMs: {}, bytes: {}",
+                        response.statusCode(),
+                        elapsedMs,
+                        pdfBytes.length);
+                return requireValidPdf(pdfBytes);
             }
-            return requireValidPdf(response.body());
         } catch (final DocumentConversionException exception) {
             throw exception;
         } catch (final HttpTimeoutException exception) {
@@ -80,8 +91,38 @@ public class GotenbergHttpClient implements GotenbergClient {
         }
     }
 
+    private void rejectIfDeclaredLengthTooLarge(final HttpResponse<?> response) {
+        final Optional<String> contentLength = response.headers().firstValue("Content-Length");
+        if (contentLength.isEmpty()) {
+            return;
+        }
+        try {
+            final long declaredLength = Long.parseLong(contentLength.get());
+            if (declaredLength > properties.maxResponseBytes()) {
+                throw DocumentConversionException.responseTooLarge();
+            }
+        } catch (final NumberFormatException ignored) {
+            // Fall through to bounded stream read.
+        }
+    }
+
+    private static byte[] readBounded(final InputStream input, final long maxBytes) throws IOException {
+        final ByteArrayOutputStream output = new ByteArrayOutputStream();
+        final byte[] buffer = new byte[READ_BUFFER_SIZE];
+        long total = 0;
+        int read;
+        while ((read = input.read(buffer)) != -1) {
+            total += read;
+            if (total > maxBytes) {
+                throw DocumentConversionException.responseTooLarge();
+            }
+            output.write(buffer, 0, read);
+        }
+        return output.toByteArray();
+    }
+
     private static byte[] requireValidPdf(final byte[] body) {
-        if (body == null || body.length == 0 || !startsWithPdfSignature(body)) {
+        if (body.length == 0 || !startsWithPdfSignature(body)) {
             throw DocumentConversionException.malformedResponse();
         }
         return body;

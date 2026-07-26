@@ -3,6 +3,7 @@ package com.ricard0g.jobtrackr_api.service;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.ArgumentMatchers.startsWith;
 import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.mock;
@@ -32,9 +33,11 @@ import com.ricard0g.jobtrackr_api.dto.BaseCvDto.BaseCvPreviewDto;
 import com.ricard0g.jobtrackr_api.exception.BaseCvException;
 import com.ricard0g.jobtrackr_api.exception.DocumentConversionException;
 import com.ricard0g.jobtrackr_api.model.BaseCv;
+import com.ricard0g.jobtrackr_api.model.StorageCleanupJob;
 import com.ricard0g.jobtrackr_api.model.User;
 import com.ricard0g.jobtrackr_api.model.enums.BaseCvFormat;
 import com.ricard0g.jobtrackr_api.repository.BaseCvRepository;
+import com.ricard0g.jobtrackr_api.repository.StorageCleanupJobRepository;
 import com.ricard0g.jobtrackr_api.repository.UserRepository;
 import com.ricard0g.jobtrackr_api.storage.BaseCvStorage;
 import com.ricard0g.jobtrackr_api.validation.BaseCvValidator;
@@ -64,6 +67,9 @@ class BaseCvServiceTest {
 
     @Mock
     private GotenbergClient gotenbergClient;
+
+    @Mock
+    private StorageCleanupJobRepository storageCleanupJobRepository;
 
     @InjectMocks
     private BaseCvService service;
@@ -233,9 +239,10 @@ class BaseCvServiceTest {
     }
 
     @Test
-    void delete_removesStorageObjectBeforeDatabaseRecord() {
+    void delete_removesStorageObjectBeforeDatabaseRecordAndSchedulesPreviewCleanup() {
         // given
         final BaseCv baseCv = mock(BaseCv.class);
+        final String previewKey = "users/" + USER_ID + "/previews/base-cvs/" + BASE_CV_ID + ".pdf";
         when(baseCv.getObjectKey()).thenReturn("opaque-key");
         when(baseCvRepository.findByBaseCvIdAndUser_UserId(BASE_CV_ID, USER_ID)).thenReturn(Optional.of(baseCv));
         when(cvGenerationRepository.existsByBaseCv_BaseCvIdAndStatusIn(any(), any())).thenReturn(false);
@@ -244,10 +251,12 @@ class BaseCvServiceTest {
         service.delete(USER_ID, BASE_CV_ID);
 
         // then
-        final InOrder order = inOrder(baseCvStorage, baseCvRepository);
+        final InOrder order = inOrder(baseCvStorage, baseCvRepository, storageCleanupJobRepository);
         order.verify(baseCvStorage).delete("opaque-key");
         order.verify(baseCvRepository).delete(baseCv);
         order.verify(baseCvRepository).flush();
+        order.verify(storageCleanupJobRepository)
+                .save(argThat((StorageCleanupJob job) -> previewKey.equals(job.getObjectKey())));
     }
 
     @Test
@@ -264,6 +273,7 @@ class BaseCvServiceTest {
         // when / then
         assertThatThrownBy(() -> service.delete(USER_ID, BASE_CV_ID)).isInstanceOf(BaseCvException.class);
         verify(baseCvRepository, never()).delete(any());
+        verify(storageCleanupJobRepository, never()).save(any());
     }
 
     private ValidatedBaseCv validated() {

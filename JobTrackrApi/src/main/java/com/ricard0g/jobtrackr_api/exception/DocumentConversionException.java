@@ -45,4 +45,9 @@ public class DocumentConversionException extends RuntimeException {
         return new DocumentConversionException(
                 Kind.MALFORMED_RESPONSE, "Document conversion returned an invalid PDF response");
     }
+
+    public static DocumentConversionException responseTooLarge() {
+        return new DocumentConversionException(
+                Kind.MALFORMED_RESPONSE, "Document conversion response exceeded the allowed size");
+    }
 }
