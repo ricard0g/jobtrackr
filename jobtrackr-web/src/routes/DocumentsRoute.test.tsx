@@ -183,6 +183,7 @@ describe("DocumentsRoute", () => {
 		expect(await screen.findByText("acme-backend-v2.pdf")).toBeTruthy();
 		expect(screen.getByText(/Backend Engineer · Acme/)).toBeTruthy();
 		expect(screen.getByText(/v2 · PDF/)).toBeTruthy();
+		expect(screen.getByRole("button", { name: "Preview acme-backend-v2.pdf" })).toBeTruthy();
 		expect(screen.getByRole("button", { name: "Download acme-backend-v2.pdf" })).toBeTruthy();
 		expect(screen.getByRole("button", { name: "Delete acme-backend-v2.pdf" })).toBeTruthy();
 		expect(screen.getByText("All Generated CVs loaded")).toBeTruthy();
@@ -589,5 +590,137 @@ describe("DocumentsRoute", () => {
 		for (let i = 0; i < 20; i += 1) fireEvent.click(zoomIn);
 		expect(zoomIn.hasAttribute("disabled")).toBe(true);
 		expect(zoomOut.hasAttribute("disabled")).toBe(false);
+	});
+
+	it("opens the preview dialog when selecting a Generated CV row without triggering Download", async () => {
+		vi.spyOn(api, "getGeneratedCvPreview").mockImplementation(
+			() => new Promise(() => undefined),
+		);
+		vi.spyOn(api, "getBaseCvPreview");
+		const action = vi.fn();
+
+		renderDocuments(
+			{
+				generatedCvs: [generatedCv()],
+				generatedCvsTotal: 1,
+			},
+			action,
+		);
+
+		await screen.findByText("acme-backend-v2.pdf");
+		fireEvent.click(screen.getByRole("button", { name: "Preview acme-backend-v2.pdf" }));
+
+		expect(await screen.findByRole("dialog", { name: "acme-backend-v2.pdf" })).toBeTruthy();
+		expect(screen.getByText("Loading preview…")).toBeTruthy();
+		expect(api.getGeneratedCvPreview).toHaveBeenCalledWith(101, expect.any(AbortSignal));
+		expect(api.getBaseCvPreview).not.toHaveBeenCalled();
+		expect(action).not.toHaveBeenCalled();
+	});
+
+	it("previews Generated CV Markdown through the shared safe viewer", async () => {
+		vi.spyOn(api, "getGeneratedCvPreview").mockResolvedValue(
+			new Blob(["# Tailored CV\n\nSee [profile](https://example.com/p)."], {
+				type: "text/markdown; charset=UTF-8",
+			}),
+		);
+
+		renderDocuments({
+			generatedCvs: [
+				generatedCv({
+					generatedCvId: 202,
+					originalFilename: "acme-backend-v2.md",
+					format: "MARKDOWN",
+					contentType: "text/markdown",
+				}),
+			],
+			generatedCvsTotal: 1,
+		});
+
+		await screen.findByText("acme-backend-v2.md");
+		fireEvent.click(screen.getByRole("button", { name: "Preview acme-backend-v2.md" }));
+
+		expect(await screen.findByRole("heading", { name: "Tailored CV" })).toBeTruthy();
+		expect(api.getGeneratedCvPreview).toHaveBeenCalledWith(202, expect.any(AbortSignal));
+		expect(screen.queryByRole("button", { name: "Previous page" })).toBeNull();
+		expect(screen.getByRole("button", { name: "Download Original" })).toBeTruthy();
+	});
+
+	it("previews Generated CV DOCX through the shared PDF viewer", async () => {
+		vi.spyOn(api, "getGeneratedCvPreview").mockResolvedValue(
+			new Blob(["%PDF-1.4 generated docx"], { type: "application/pdf" }),
+		);
+
+		renderDocuments({
+			generatedCvs: [
+				generatedCv({
+					generatedCvId: 303,
+					originalFilename: "acme-backend-v2.docx",
+					format: "DOCX",
+					contentType:
+						"application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+				}),
+			],
+			generatedCvsTotal: 1,
+		});
+
+		await screen.findByText("acme-backend-v2.docx");
+		fireEvent.click(screen.getByRole("button", { name: "Preview acme-backend-v2.docx" }));
+
+		expect(await screen.findByRole("dialog", { name: "acme-backend-v2.docx" })).toBeTruthy();
+		expect(await screen.findByTestId("pdf-document")).toBeTruthy();
+		expect(api.getGeneratedCvPreview).toHaveBeenCalledWith(303, expect.any(AbortSignal));
+		expect(screen.getByRole("button", { name: "Download Original" })).toBeTruthy();
+	});
+
+	it("keeps Retry Preview and Download Original when Generated CV preview fails", async () => {
+		vi.spyOn(api, "getGeneratedCvPreview").mockRejectedValue(
+			new Error("Preview could not be loaded."),
+		);
+
+		renderDocuments({
+			generatedCvs: [generatedCv()],
+			generatedCvsTotal: 1,
+		});
+
+		await screen.findByText("acme-backend-v2.pdf");
+		fireEvent.click(screen.getByRole("button", { name: "Preview acme-backend-v2.pdf" }));
+
+		expect(await screen.findByText("Preview could not be loaded.")).toBeTruthy();
+		expect(screen.getByRole("button", { name: "Retry Preview" })).toBeTruthy();
+		expect(screen.getByRole("button", { name: "Download Original" })).toBeTruthy();
+		expect(screen.getByRole("button", { name: "Close" })).toBeTruthy();
+	});
+
+	it("downloads the original Generated CV from the preview dialog via download-generated-cv", async () => {
+		vi.spyOn(api, "getGeneratedCvPreview").mockResolvedValue(
+			new Blob(["%PDF"], { type: "application/pdf" }),
+		);
+		const action = vi.fn(async ({ request }: { request: Request }) => {
+			const formData = await request.formData();
+			expect(formData.get("intent")).toBe("download-generated-cv");
+			expect(formData.get("generatedCvId")).toBe("101");
+			return {
+				ok: true,
+				intent: "download-generated-cv",
+				uri: "https://signed.example/original.pdf",
+			};
+		});
+
+		renderDocuments(
+			{
+				generatedCvs: [generatedCv()],
+				generatedCvsTotal: 1,
+			},
+			action,
+		);
+
+		await screen.findByText("acme-backend-v2.pdf");
+		fireEvent.click(screen.getByRole("button", { name: "Preview acme-backend-v2.pdf" }));
+		expect(await screen.findByText("Page 1 of 3")).toBeTruthy();
+
+		fireEvent.click(screen.getByRole("button", { name: "Download Original" }));
+		await waitFor(() => {
+			expect(action).toHaveBeenCalled();
+		});
 	});
 });

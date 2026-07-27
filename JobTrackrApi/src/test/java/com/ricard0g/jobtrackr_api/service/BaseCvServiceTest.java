@@ -310,6 +310,7 @@ class BaseCvServiceTest {
             final Future<BaseCvPreviewDto> first = executor.submit(() -> service.preview(USER_ID, BASE_CV_ID));
             final Future<BaseCvPreviewDto> second = executor.submit(() -> service.preview(USER_ID, BASE_CV_ID));
             assertThat(conversionStarted.await(5, TimeUnit.SECONDS)).isTrue();
+            Thread.sleep(200);
             allowConversion.countDown();
 
             // then

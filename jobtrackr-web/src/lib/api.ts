@@ -289,6 +289,8 @@ export const api = {
 		apiRequest<BaseCvDownload>(`/base-cvs/${baseCvId}/download`),
 	getBaseCvPreview: (baseCvId: number, signal?: AbortSignal) =>
 		apiRequestBlob(`/base-cvs/${baseCvId}/preview`, { signal }),
+	getGeneratedCvPreview: (generatedCvId: number, signal?: AbortSignal) =>
+		apiRequestBlob(`/generated-cvs/${generatedCvId}/preview`, { signal }),
 	getApplications: () => apiRequest<Application[]>("/applications"),
 	getApplicationById: (applicationId: number) =>
 		apiRequest<Application>(`/applications/${applicationId}`),

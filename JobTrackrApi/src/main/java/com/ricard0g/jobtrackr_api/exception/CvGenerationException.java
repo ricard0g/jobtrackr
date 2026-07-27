@@ -113,4 +113,18 @@ public class CvGenerationException extends RuntimeException {
                 HttpStatus.BAD_GATEWAY,
                 "Document storage is temporarily unavailable");
     }
+
+    public static CvGenerationException previewUnavailable() {
+        return new CvGenerationException(
+                "GENERATED_CV_PREVIEW_UNAVAILABLE",
+                HttpStatus.BAD_GATEWAY,
+                "Generated CV preview is temporarily unavailable");
+    }
+
+    public static CvGenerationException previewUnsupportedFormat() {
+        return new CvGenerationException(
+                "GENERATED_CV_PREVIEW_UNSUPPORTED_FORMAT",
+                HttpStatus.UNSUPPORTED_MEDIA_TYPE,
+                "Preview is not available for this Generated CV format");
+    }
 }

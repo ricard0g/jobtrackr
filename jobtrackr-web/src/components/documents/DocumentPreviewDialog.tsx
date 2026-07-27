@@ -11,12 +11,15 @@ import {
 	DialogHeader,
 	DialogTitle,
 } from "@/components/ui/dialog";
-import type { BaseCvFormat } from "@/types/base-cv";
+import type { GeneratedCvFormat } from "@/types/cv-generation";
+
+export type PreviewDocumentFormat = GeneratedCvFormat;
 
 export type PreviewableDocument = {
 	id: number;
 	filename: string;
-	format: BaseCvFormat;
+	format: PreviewDocumentFormat;
+	source: "base-cv" | "generated-cv";
 };
 
 type DocumentPreviewDialogProps = {
@@ -35,7 +38,7 @@ type PreviewState =
 	| { status: "error"; message: string }
 	| { status: "unsupported" };
 
-const PREVIEWABLE_FORMATS = new Set<BaseCvFormat>(["PDF", "DOCX", "MARKDOWN"]);
+const PREVIEWABLE_FORMATS = new Set<PreviewDocumentFormat>(["PDF", "DOCX", "MARKDOWN"]);
 
 function isMarkdownPreviewBlob(blob: Blob): boolean {
 	const contentType = blob.type.toLowerCase();

@@ -1751,6 +1751,56 @@ export const handlers = [
 		return HttpResponse.json({ uri });
 	}),
 
+	http.get(`${API_BASE_URL}/generated-cvs/:generatedCvId/preview`, ({ request, params }) => {
+		const state = loadState();
+		const auth = requireAuth(request, state);
+		if (auth instanceof Response) return auth;
+		const generatedCvId = getPositiveId(params, "generatedCvId");
+		const generatedCv = state.generatedCvs.find(
+			(candidate) =>
+				candidate.generatedCvId === generatedCvId && candidate.userId === auth.user.userId,
+		);
+		if (!generatedCv) {
+			return errorJson(404, "GENERATED_CV_NOT_FOUND", "Generated CV not found");
+		}
+		if (
+			generatedCv.format !== "PDF" &&
+			generatedCv.format !== "MARKDOWN" &&
+			generatedCv.format !== "DOCX"
+		) {
+			return errorJson(
+				415,
+				"GENERATED_CV_PREVIEW_UNSUPPORTED_FORMAT",
+				"Preview is not available for this Generated CV format",
+			);
+		}
+		const previewFilename =
+			generatedCv.format === "DOCX"
+				? generatedCv.originalFilename.replace(/\.docx$/i, ".pdf")
+				: generatedCv.originalFilename;
+		const safeFilename = previewFilename.replaceAll(/[\\/"\r\n]/g, "_");
+		const encodedFilename = encodeURIComponent(previewFilename).replaceAll("+", "%20");
+		const contentDisposition = `inline; filename="${safeFilename}"; filename*=UTF-8''${encodedFilename}`;
+		if (generatedCv.format === "MARKDOWN") {
+			return new HttpResponse(`# Mock preview\n\n${generatedCv.originalFilename}`, {
+				status: 200,
+				headers: {
+					"Content-Type": "text/markdown; charset=UTF-8",
+					"Cache-Control": "private, no-store",
+					"Content-Disposition": contentDisposition,
+				},
+			});
+		}
+		return new HttpResponse("%PDF-1.4 mock generated preview", {
+			status: 200,
+			headers: {
+				"Content-Type": "application/pdf",
+				"Cache-Control": "private, no-store",
+				"Content-Disposition": contentDisposition,
+			},
+		});
+	}),
+
 	http.delete(`${API_BASE_URL}/generated-cvs/:generatedCvId`, ({ request, params }) => {
 		const state = loadState();
 		const auth = requireAuth(request, state);

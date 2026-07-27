@@ -146,9 +146,11 @@ function BaseCvRow({
 
 function GeneratedCvLibraryRow({
     generatedCv,
+    onPreview,
     onDeleted,
 }: {
     generatedCv: GeneratedCvSummary;
+    onPreview: (generatedCv: GeneratedCvSummary) => void;
     onDeleted: (generatedCvId: number) => void;
 }) {
     const deleteFetcher = useFetcher<DocumentsActionData>();
@@ -182,21 +184,38 @@ function GeneratedCvLibraryRow({
         }
     };
 
+    const openPreview = () => onPreview(generatedCv);
+    const onPreviewKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
+        if (event.key === "Enter" || event.key === " ") {
+            event.preventDefault();
+            openPreview();
+        }
+    };
+
     return (
         <li className="rounded-xl border border-light-gray/80 bg-white/90 p-4">
             <div className="flex items-start gap-3">
-                <div className="rounded-lg bg-light-gray/60 p-2 text-medium-gray">
-                    <FileText aria-hidden="true" />
-                </div>
-                <div className="min-w-0 flex-1">
-                    <p className="truncate font-semibold text-dark-gray">{generatedCv.originalFilename}</p>
-                    <p className="mt-1 text-sm text-medium-gray">
-                        {generatedCv.applicationTitle} · {generatedCv.companyName}
-                    </p>
-                    <p className="mt-0.5 text-sm text-medium-gray">
-                        v{generatedCv.version} · {formatLabels[generatedCv.format]} ·{" "}
-                        {formatBytes(generatedCv.byteSize)} · {formatDate(generatedCv.createdAt)}
-                    </p>
+                <div
+                    role="button"
+                    tabIndex={0}
+                    aria-label={`Preview ${generatedCv.originalFilename}`}
+                    onClick={openPreview}
+                    onKeyDown={onPreviewKeyDown}
+                    className="flex min-w-0 flex-1 cursor-pointer items-start gap-3 rounded-lg outline-none focus-visible:ring-2 focus-visible:ring-dark-accent"
+                >
+                    <div className="rounded-lg bg-light-gray/60 p-2 text-medium-gray">
+                        <FileText aria-hidden="true" />
+                    </div>
+                    <div className="min-w-0 flex-1 text-left">
+                        <p className="truncate font-semibold text-dark-gray">{generatedCv.originalFilename}</p>
+                        <p className="mt-1 text-sm text-medium-gray">
+                            {generatedCv.applicationTitle} · {generatedCv.companyName}
+                        </p>
+                        <p className="mt-0.5 text-sm text-medium-gray">
+                            v{generatedCv.version} · {formatLabels[generatedCv.format]} ·{" "}
+                            {formatBytes(generatedCv.byteSize)} · {formatDate(generatedCv.createdAt)}
+                        </p>
+                    </div>
                 </div>
                 <div className="flex gap-1">
                     <downloadFetcher.Form method="post" action="/documents">
@@ -244,11 +263,13 @@ function GeneratedCvSection({
     initialPage,
     initialTotal,
     initialError,
+    onPreview,
 }: {
     initialItems: GeneratedCvSummary[];
     initialPage: number;
     initialTotal: number;
     initialError: string | null;
+    onPreview: (generatedCv: GeneratedCvSummary) => void;
 }) {
     const [items, setItems] = useState(initialItems);
     const [page, setPage] = useState(initialPage);
@@ -360,6 +381,7 @@ function GeneratedCvSection({
                             <GeneratedCvLibraryRow
                                 key={generatedCv.generatedCvId}
                                 generatedCv={generatedCv}
+                                onPreview={onPreview}
                                 onDeleted={removeGeneratedCv}
                             />
                         ))}
@@ -403,10 +425,13 @@ export function DocumentsRoute() {
     const uploading = uploadFetcher.state !== "idle";
     const atLimit = baseCvs.length >= MAX_BASE_CVS;
 
-    const loadBaseCvPreview = useCallback(
+    const loadPreview = useCallback(
         (signal: AbortSignal) => {
             if (!previewDocument) {
                 return Promise.reject(new Error("No document selected."));
+            }
+            if (previewDocument.source === "generated-cv") {
+                return api.getGeneratedCvPreview(previewDocument.id, signal);
             }
             return api.getBaseCvPreview(previewDocument.id, signal);
         },
@@ -416,7 +441,8 @@ export function DocumentsRoute() {
     useEffect(() => {
         if (previewDownloadFetcher.state !== "idle") return;
         const data = previewDownloadFetcher.data;
-        if (!data?.ok || data.intent !== "download" || !data.uri) return;
+        if (!data?.ok || !data.uri) return;
+        if (data.intent !== "download" && data.intent !== "download-generated-cv") return;
         if (openedPreviewDownloadRef.current === data) return;
         openedPreviewDownloadRef.current = data;
         openSignedDownload(data.uri);
@@ -427,14 +453,29 @@ export function DocumentsRoute() {
             id: baseCv.baseCvId,
             filename: baseCv.originalFilename,
             format: baseCv.format,
+            source: "base-cv",
+        });
+    };
+
+    const openGeneratedCvPreview = (generatedCv: GeneratedCvSummary) => {
+        setPreviewDocument({
+            id: generatedCv.generatedCvId,
+            filename: generatedCv.originalFilename,
+            format: generatedCv.format,
+            source: "generated-cv",
         });
     };
 
     const downloadPreviewOriginal = () => {
         if (!previewDocument) return;
         const formData = new FormData();
-        formData.set("intent", "download");
-        formData.set("baseCvId", String(previewDocument.id));
+        if (previewDocument.source === "generated-cv") {
+            formData.set("intent", "download-generated-cv");
+            formData.set("generatedCvId", String(previewDocument.id));
+        } else {
+            formData.set("intent", "download");
+            formData.set("baseCvId", String(previewDocument.id));
+        }
         previewDownloadFetcher.submit(formData, { method: "post", action: "/documents" });
     };
 
@@ -573,6 +614,7 @@ export function DocumentsRoute() {
                     initialPage={generatedCvsPage}
                     initialTotal={generatedCvsTotal}
                     initialError={generatedCvsError}
+                    onPreview={openGeneratedCvPreview}
                 />
             </section>
 
@@ -582,7 +624,7 @@ export function DocumentsRoute() {
                 onOpenChange={(open) => {
                     if (!open) setPreviewDocument(null);
                 }}
-                loadPreview={loadBaseCvPreview}
+                loadPreview={loadPreview}
                 onDownloadOriginal={downloadPreviewOriginal}
             />
         </div>

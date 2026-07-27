@@ -81,4 +81,6 @@ public final class GeneratedCvDtos {
     }
 
     public record Download(String uri) {}
+
+    public record Preview(byte[] bytes, String contentType, String originalFilename) {}
 }

@@ -1,7 +1,5 @@
 package com.ricard0g.jobtrackr_api.controller;
 
-import java.net.URLEncoder;
-import java.nio.charset.StandardCharsets;
 import java.security.Principal;
 import java.util.List;
 import java.util.UUID;
@@ -26,6 +24,7 @@ import com.ricard0g.jobtrackr_api.dto.BaseCvDto.BaseCvPreviewDto;
 import com.ricard0g.jobtrackr_api.dto.BaseCvDto.BaseCvResponseDto;
 import com.ricard0g.jobtrackr_api.exception.BaseCvException;
 import com.ricard0g.jobtrackr_api.service.BaseCvService;
+import com.ricard0g.jobtrackr_api.util.PreviewHttpHeaders;
 
 import jakarta.validation.constraints.Positive;
 import lombok.RequiredArgsConstructor;
@@ -35,9 +34,6 @@ import lombok.RequiredArgsConstructor;
 @RequiredArgsConstructor
 @Validated
 public class BaseCvController {
-
-    private static final String PREVIEW_CACHE_CONTROL = "private, no-store";
-    private static final String UNSAFE_FILENAME_CHARS = "[\\\\/\"\\r\\n]";
 
     private final BaseCvService baseCvService;
 
@@ -77,8 +73,10 @@ public class BaseCvController {
         final UUID userId = AuthenticatedUserId.from(principal);
         final BaseCvPreviewDto preview = baseCvService.preview(userId, baseCvId);
         return ResponseEntity.ok()
-                .header(HttpHeaders.CACHE_CONTROL, PREVIEW_CACHE_CONTROL)
-                .header(HttpHeaders.CONTENT_DISPOSITION, inlineContentDisposition(preview.originalFilename()))
+                .header(HttpHeaders.CACHE_CONTROL, PreviewHttpHeaders.CACHE_CONTROL)
+                .header(
+                        HttpHeaders.CONTENT_DISPOSITION,
+                        PreviewHttpHeaders.inlineContentDisposition(preview.originalFilename()))
                 .contentType(MediaType.parseMediaType(preview.contentType()))
                 .body(preview.bytes());
     }
@@ -90,12 +88,5 @@ public class BaseCvController {
         final UUID userId = AuthenticatedUserId.from(principal);
         baseCvService.delete(userId, baseCvId);
         return ResponseEntity.noContent().build();
-    }
-
-    private static String inlineContentDisposition(final String originalFilename) {
-        final String safeFilename = originalFilename.replaceAll(UNSAFE_FILENAME_CHARS, "_");
-        final String encodedFilename = URLEncoder.encode(originalFilename, StandardCharsets.UTF_8)
-                .replace("+", "%20");
-        return "inline; filename=\"" + safeFilename + "\"; filename*=UTF-8''" + encodedFilename;
     }
 }
