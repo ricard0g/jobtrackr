@@ -64,7 +64,7 @@ class ApplicationServiceDeleteCvGenerationTest {
 
         applicationService.deleteApplication(USER_ID, 3L);
 
-        verify(applicationCvService).scheduleCleanupForApplication(3L);
+        verify(applicationCvService).scheduleCleanupForApplication(USER_ID, 3L);
         verify(pending).setStatus(CvGenerationStatus.CANCELLED);
         verify(cvGenerationRepository, never())
                 .findAllByApplication_ApplicationIdAndStatusIn(

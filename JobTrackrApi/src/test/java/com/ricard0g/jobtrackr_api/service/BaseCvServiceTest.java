@@ -4,12 +4,15 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.argThat;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.ArgumentMatchers.startsWith;
 import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
+import static org.mockito.Mockito.timeout;
 
 import java.net.URI;
 import java.nio.charset.StandardCharsets;
@@ -17,6 +20,11 @@ import java.time.OffsetDateTime;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
 
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -31,11 +39,13 @@ import com.ricard0g.jobtrackr_api.conversion.GotenbergClient;
 import com.ricard0g.jobtrackr_api.dto.BaseCvDto.BaseCvDownloadDto;
 import com.ricard0g.jobtrackr_api.dto.BaseCvDto.BaseCvPreviewDto;
 import com.ricard0g.jobtrackr_api.exception.BaseCvException;
+import com.ricard0g.jobtrackr_api.exception.CvGenerationException;
 import com.ricard0g.jobtrackr_api.exception.DocumentConversionException;
 import com.ricard0g.jobtrackr_api.model.BaseCv;
 import com.ricard0g.jobtrackr_api.model.StorageCleanupJob;
 import com.ricard0g.jobtrackr_api.model.User;
 import com.ricard0g.jobtrackr_api.model.enums.BaseCvFormat;
+import com.ricard0g.jobtrackr_api.model.enums.CvGenerationStatus;
 import com.ricard0g.jobtrackr_api.repository.BaseCvRepository;
 import com.ricard0g.jobtrackr_api.repository.StorageCleanupJobRepository;
 import com.ricard0g.jobtrackr_api.repository.UserRepository;
@@ -274,6 +284,150 @@ class BaseCvServiceTest {
         assertThatThrownBy(() -> service.delete(USER_ID, BASE_CV_ID)).isInstanceOf(BaseCvException.class);
         verify(baseCvRepository, never()).delete(any());
         verify(storageCleanupJobRepository, never()).save(any());
+    }
+
+    @Test
+    void preview_whenConcurrentDocxCacheMisses_coalescesToOneConversion() throws Exception {
+        // given
+        final BaseCv baseCv = docxBaseCv();
+        final byte[] docxBytes = "docx-bytes".getBytes(StandardCharsets.UTF_8);
+        final byte[] pdfBytes = "%PDF-1.4 coalesced".getBytes(StandardCharsets.UTF_8);
+        final String previewKey = "users/" + USER_ID + "/previews/base-cvs/" + BASE_CV_ID + ".pdf";
+        final CountDownLatch conversionStarted = new CountDownLatch(1);
+        final CountDownLatch allowConversion = new CountDownLatch(1);
+        when(baseCvRepository.findByBaseCvIdAndUser_UserId(BASE_CV_ID, USER_ID)).thenReturn(Optional.of(baseCv));
+        when(baseCvStorage.exists(previewKey)).thenReturn(false);
+        when(baseCvStorage.download("opaque-key")).thenReturn(docxBytes);
+        when(gotenbergClient.convertDocxToPdf(docxBytes, "resume.docx")).thenAnswer(invocation -> {
+            conversionStarted.countDown();
+            assertThat(allowConversion.await(5, TimeUnit.SECONDS)).isTrue();
+            return pdfBytes;
+        });
+
+        final ExecutorService executor = Executors.newFixedThreadPool(2);
+        try {
+            // when
+            final Future<BaseCvPreviewDto> first = executor.submit(() -> service.preview(USER_ID, BASE_CV_ID));
+            final Future<BaseCvPreviewDto> second = executor.submit(() -> service.preview(USER_ID, BASE_CV_ID));
+            assertThat(conversionStarted.await(5, TimeUnit.SECONDS)).isTrue();
+            allowConversion.countDown();
+
+            // then
+            assertThat(first.get(5, TimeUnit.SECONDS).bytes()).isEqualTo(pdfBytes);
+            assertThat(second.get(5, TimeUnit.SECONDS).bytes()).isEqualTo(pdfBytes);
+            verify(gotenbergClient, times(1)).convertDocxToPdf(docxBytes, "resume.docx");
+            verify(baseCvStorage, times(1)).upload(previewKey, pdfBytes, "application/pdf");
+        } finally {
+            executor.shutdownNow();
+        }
+    }
+
+    @Test
+    void preview_afterFailedDocxConversion_clearsInFlightAndAllowsRetry() {
+        // given
+        final BaseCv baseCv = docxBaseCv();
+        final byte[] docxBytes = "docx-bytes".getBytes(StandardCharsets.UTF_8);
+        final byte[] pdfBytes = "%PDF-1.4 retry".getBytes(StandardCharsets.UTF_8);
+        final String previewKey = "users/" + USER_ID + "/previews/base-cvs/" + BASE_CV_ID + ".pdf";
+        when(baseCvRepository.findByBaseCvIdAndUser_UserId(BASE_CV_ID, USER_ID)).thenReturn(Optional.of(baseCv));
+        when(baseCvStorage.exists(previewKey)).thenReturn(false);
+        when(baseCvStorage.download("opaque-key")).thenReturn(docxBytes);
+        when(gotenbergClient.convertDocxToPdf(docxBytes, "resume.docx"))
+                .thenThrow(DocumentConversionException.timeout())
+                .thenReturn(pdfBytes);
+
+        // when / then
+        assertThatThrownBy(() -> service.preview(USER_ID, BASE_CV_ID))
+                .isInstanceOfSatisfying(BaseCvException.class,
+                        exception -> assertThat(exception.getCode()).isEqualTo("BASE_CV_PREVIEW_UNAVAILABLE"));
+
+        final BaseCvPreviewDto retry = service.preview(USER_ID, BASE_CV_ID);
+
+        assertThat(retry.bytes()).isEqualTo(pdfBytes);
+        verify(gotenbergClient, times(2)).convertDocxToPdf(docxBytes, "resume.docx");
+        verify(baseCvStorage).upload(previewKey, pdfBytes, "application/pdf");
+    }
+
+    @Test
+    void preview_whenCallerAbandonsWaiting_stillWarmsCachedPreview() throws Exception {
+        // given
+        final BaseCv baseCv = docxBaseCv();
+        final byte[] docxBytes = "docx-bytes".getBytes(StandardCharsets.UTF_8);
+        final byte[] pdfBytes = "%PDF-1.4 warmed".getBytes(StandardCharsets.UTF_8);
+        final String previewKey = "users/" + USER_ID + "/previews/base-cvs/" + BASE_CV_ID + ".pdf";
+        final CountDownLatch conversionStarted = new CountDownLatch(1);
+        final CountDownLatch allowConversion = new CountDownLatch(1);
+        when(baseCvRepository.findByBaseCvIdAndUser_UserId(BASE_CV_ID, USER_ID)).thenReturn(Optional.of(baseCv));
+        when(baseCvStorage.exists(previewKey)).thenReturn(false);
+        when(baseCvStorage.download("opaque-key")).thenReturn(docxBytes);
+        when(gotenbergClient.convertDocxToPdf(docxBytes, "resume.docx")).thenAnswer(invocation -> {
+            conversionStarted.countDown();
+            assertThat(allowConversion.await(5, TimeUnit.SECONDS)).isTrue();
+            return pdfBytes;
+        });
+
+        final ExecutorService executor = Executors.newSingleThreadExecutor();
+        try {
+            // when
+            executor.submit(() -> service.preview(USER_ID, BASE_CV_ID));
+            assertThat(conversionStarted.await(5, TimeUnit.SECONDS)).isTrue();
+            allowConversion.countDown();
+
+            // then
+            verify(baseCvStorage, timeout(5_000)).upload(previewKey, pdfBytes, "application/pdf");
+            verify(gotenbergClient, times(1)).convertDocxToPdf(docxBytes, "resume.docx");
+        } finally {
+            executor.shutdownNow();
+        }
+    }
+
+    @Test
+    void delete_whenActiveCvGeneration_throwsBaseCvInUseAndLeavesSourceIntact() {
+        // given
+        final BaseCv baseCv = mock(BaseCv.class);
+        when(baseCvRepository.findByBaseCvIdAndUser_UserId(BASE_CV_ID, USER_ID)).thenReturn(Optional.of(baseCv));
+        when(cvGenerationRepository.existsByBaseCv_BaseCvIdAndStatusIn(
+                        eq(BASE_CV_ID),
+                        eq(List.of(CvGenerationStatus.PENDING, CvGenerationStatus.PROCESSING))))
+                .thenReturn(true);
+
+        // when / then
+        assertThatThrownBy(() -> service.delete(USER_ID, BASE_CV_ID))
+                .isInstanceOfSatisfying(CvGenerationException.class,
+                        exception -> assertThat(exception.getCode()).isEqualTo("BASE_CV_IN_USE"));
+        verify(baseCvStorage, never()).delete(any());
+        verify(baseCvRepository, never()).delete(any());
+        verify(storageCleanupJobRepository, never()).save(any());
+    }
+
+    @Test
+    void preview_whenSourceDeletedDuringConversion_skipsCacheWarmAndFailsClosed() {
+        // given
+        final BaseCv baseCv = docxBaseCv();
+        final byte[] docxBytes = "docx-bytes".getBytes(StandardCharsets.UTF_8);
+        final byte[] pdfBytes = "%PDF-1.4 orphan-guard".getBytes(StandardCharsets.UTF_8);
+        final String previewKey = "users/" + USER_ID + "/previews/base-cvs/" + BASE_CV_ID + ".pdf";
+        when(baseCvRepository.findByBaseCvIdAndUser_UserId(BASE_CV_ID, USER_ID))
+                .thenReturn(Optional.of(baseCv))
+                .thenReturn(Optional.empty());
+        when(baseCvStorage.exists(previewKey)).thenReturn(false);
+        when(baseCvStorage.download("opaque-key")).thenReturn(docxBytes);
+        when(gotenbergClient.convertDocxToPdf(docxBytes, "resume.docx")).thenReturn(pdfBytes);
+
+        // when / then
+        assertThatThrownBy(() -> service.preview(USER_ID, BASE_CV_ID))
+                .isInstanceOfSatisfying(BaseCvException.class,
+                        exception -> assertThat(exception.getCode()).isEqualTo("BASE_CV_NOT_FOUND"));
+        verify(baseCvStorage, never()).upload(any(), any(), any());
+    }
+
+    private BaseCv docxBaseCv() {
+        final BaseCv baseCv = mock(BaseCv.class);
+        when(baseCv.getBaseCvId()).thenReturn(BASE_CV_ID);
+        when(baseCv.getFormat()).thenReturn(BaseCvFormat.DOCX);
+        when(baseCv.getObjectKey()).thenReturn("opaque-key");
+        when(baseCv.getOriginalFilename()).thenReturn("resume.docx");
+        return baseCv;
     }
 
     private ValidatedBaseCv validated() {

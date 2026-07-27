@@ -547,10 +547,11 @@ describe("DocumentsRoute", () => {
 
 	it("aborts the preview request and revokes the object URL on close", async () => {
 		let capturedSignal: AbortSignal | undefined;
-		vi.spyOn(api, "getBaseCvPreview").mockImplementation((_id, signal) => {
+		const getBaseCvPreview = vi.spyOn(api, "getBaseCvPreview").mockImplementation((_id, signal) => {
 			capturedSignal = signal;
 			return Promise.resolve(new Blob(["%PDF"], { type: "application/pdf" }));
 		});
+		const cancelCvGeneration = vi.spyOn(api, "cancelCvGeneration");
 		vi.spyOn(URL, "createObjectURL").mockReturnValue("blob:preview-close");
 		const revokeObjectURL = vi.spyOn(URL, "revokeObjectURL").mockImplementation(() => undefined);
 
@@ -565,6 +566,8 @@ describe("DocumentsRoute", () => {
 		});
 		expect(capturedSignal?.aborted).toBe(true);
 		expect(revokeObjectURL).toHaveBeenCalledWith("blob:preview-close");
+		expect(getBaseCvPreview).toHaveBeenCalledTimes(1);
+		expect(cancelCvGeneration).not.toHaveBeenCalled();
 	});
 
 	it("disables zoom controls at the lower and upper bounds", async () => {

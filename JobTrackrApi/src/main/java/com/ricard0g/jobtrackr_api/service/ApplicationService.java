@@ -233,7 +233,7 @@ public class ApplicationService {
                 .findForUserWithLock(applicationId, userId)
                 .orElseThrow(() -> new ApplicationNotFoundException(userId, applicationId));
         // Collect R2 keys under the application lock before cascade delete.
-        applicationCvService.scheduleCleanupForApplication(applicationId);
+        applicationCvService.scheduleCleanupForApplication(userId, applicationId);
         // Only PENDING may transition to CANCELLED. PROCESSING rows are cascade-deleted;
         // the worker re-checks lease/status and compensates any orphan upload.
         final List<CvGeneration> pending = cvGenerationRepository.findAllByApplication_ApplicationIdAndStatusIn(

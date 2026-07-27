@@ -34,6 +34,7 @@ import com.ricard0g.jobtrackr_api.dto.BaseCvDto.BaseCvDownloadDto;
 import com.ricard0g.jobtrackr_api.dto.BaseCvDto.BaseCvPreviewDto;
 import com.ricard0g.jobtrackr_api.dto.BaseCvDto.BaseCvResponseDto;
 import com.ricard0g.jobtrackr_api.exception.BaseCvException;
+import com.ricard0g.jobtrackr_api.exception.CvGenerationException;
 import com.ricard0g.jobtrackr_api.exception.GlobalExceptionHandler;
 import com.ricard0g.jobtrackr_api.model.enums.BaseCvFormat;
 import com.ricard0g.jobtrackr_api.service.BaseCvService;
@@ -207,6 +208,19 @@ class BaseCvControllerTest {
         mockMvc.perform(delete(BASE_PATH + "/{baseCvId}", BASE_CV_ID).principal(principal()))
                 .andExpect(status().isNoContent());
         verify(baseCvService).delete(USER_ID, BASE_CV_ID);
+    }
+
+    @Test
+    void delete_whenActiveCvGeneration_returnsConflict() throws Exception {
+        // given
+        org.mockito.Mockito.doThrow(CvGenerationException.baseCvInUse())
+                .when(baseCvService)
+                .delete(USER_ID, BASE_CV_ID);
+
+        // when / then
+        mockMvc.perform(delete(BASE_PATH + "/{baseCvId}", BASE_CV_ID).principal(principal()))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.code").value("BASE_CV_IN_USE"));
     }
 
     private BaseCvResponseDto sampleBaseCv() {

@@ -144,14 +144,14 @@ public class BaseCvService {
                 final byte[] cached = baseCvStorage.download(previewKey);
                 return new BaseCvPreviewDto(cached, APPLICATION_PDF, previewFilename);
             }
-            final byte[] pdfBytes = convertAndCacheDocx(baseCv, previewKey);
+            final byte[] pdfBytes = convertAndCacheDocx(userId, baseCv, previewKey);
             return new BaseCvPreviewDto(pdfBytes, APPLICATION_PDF, previewFilename);
         } catch (final StorageUnavailableException | DocumentConversionException exception) {
             throw BaseCvException.previewUnavailable();
         }
     }
 
-    private byte[] convertAndCacheDocx(final BaseCv baseCv, final String previewKey) {
+    private byte[] convertAndCacheDocx(final UUID userId, final BaseCv baseCv, final String previewKey) {
         final Long baseCvId = baseCv.getBaseCvId();
         final CompletableFuture<byte[]> conversion = new CompletableFuture<>();
         final CompletableFuture<byte[]> existing = inFlightDocxConversions.putIfAbsent(baseCvId, conversion);
@@ -161,6 +161,11 @@ public class BaseCvService {
         try {
             final byte[] docxBytes = baseCvStorage.download(baseCv.getObjectKey());
             final byte[] pdfBytes = gotenbergClient.convertDocxToPdf(docxBytes, baseCv.getOriginalFilename());
+            if (baseCvRepository.findByBaseCvIdAndUser_UserId(baseCvId, userId).isEmpty()) {
+                final BaseCvException notFound = BaseCvException.notFound();
+                conversion.completeExceptionally(notFound);
+                throw notFound;
+            }
             baseCvStorage.upload(previewKey, pdfBytes, APPLICATION_PDF);
             conversion.complete(pdfBytes);
             return pdfBytes;

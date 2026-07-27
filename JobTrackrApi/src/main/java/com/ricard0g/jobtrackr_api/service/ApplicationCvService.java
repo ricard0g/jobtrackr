@@ -31,6 +31,10 @@ import lombok.extern.slf4j.Slf4j;
 @Slf4j
 public class ApplicationCvService {
 
+    private static final String USERS_PREFIX = "users/";
+    private static final String GENERATED_CV_PREVIEW_PREFIX = "/previews/generated-cvs/";
+    private static final String PDF_SUFFIX = ".pdf";
+
     private final UserRepository userRepository;
     private final ApplicationRepository applicationRepository;
     private final ApplicationCvRepository applicationCvRepository;
@@ -74,9 +78,11 @@ public class ApplicationCvService {
     public void delete(final UUID userId, final Long applicationCvId) {
         final ApplicationCv applicationCv = requireOwned(userId, applicationCvId);
         final String objectKey = applicationCv.getObjectKey();
+        final Long generatedCvId = applicationCv.getApplicationCvId();
         applicationCvRepository.delete(applicationCv);
         applicationCvRepository.flush();
         scheduleCleanup(objectKey);
+        scheduleCleanup(previewObjectKey(userId, generatedCvId));
         log.info(
                 "[ApplicationCvService] - DELETE: applicationCvId: {}, userId: {}",
                 applicationCvId,
@@ -84,10 +90,11 @@ public class ApplicationCvService {
     }
 
     @Transactional
-    public void scheduleCleanupForApplication(final Long applicationId) {
+    public void scheduleCleanupForApplication(final UUID userId, final Long applicationId) {
         final List<ApplicationCv> cvs = applicationCvRepository.findAllByApplication_ApplicationId(applicationId);
         for (final ApplicationCv cv : cvs) {
             scheduleCleanup(cv.getObjectKey());
+            scheduleCleanup(previewObjectKey(userId, cv.getApplicationCvId()));
         }
     }
 
@@ -103,6 +110,10 @@ public class ApplicationCvService {
         } catch (final DataIntegrityViolationException ignored) {
             // concurrent schedule
         }
+    }
+
+    static String previewObjectKey(final UUID userId, final Long generatedCvId) {
+        return USERS_PREFIX + userId + GENERATED_CV_PREVIEW_PREFIX + generatedCvId + PDF_SUFFIX;
     }
 
     public boolean hasCapacity(final Long applicationId) {
