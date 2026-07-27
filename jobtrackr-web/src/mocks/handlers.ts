@@ -1694,7 +1694,7 @@ export const handlers = [
 
 		const url = new URL(request.url);
 		const page = Math.max(0, Number(url.searchParams.get("page") ?? "0") || 0);
-		const size = Math.min(100, Math.max(1, Number(url.searchParams.get("size") ?? "20") || 20));
+		const size = Math.min(100, Math.max(1, Number(url.searchParams.get("size") ?? "10") || 10));
 
 		const companyNameById = new Map(
 			state.companies.map((company) => [company.companyId, company.companyName]),

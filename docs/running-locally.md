@@ -173,6 +173,16 @@ To restore the existing local snapshot:
 
 Do not commit raw files in `db/dumps/`; they may contain personal data.
 
+## Documents Real-Stack Acceptance
+
+To prove Documents against the live API, Postgres, R2, and pinned Gotenberg:
+
+```bash
+./scripts/acceptance/documents-real-stack.sh
+```
+
+See `docs/acceptance/documents-real-stack.md` for prerequisites, the automated HTTP path, and the manual UI checklist.
+
 ## Stopping Services
 
 Stop the API and frontend with `Ctrl+C` in their terminals.

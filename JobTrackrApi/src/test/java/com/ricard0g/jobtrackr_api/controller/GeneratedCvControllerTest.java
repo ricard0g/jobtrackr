@@ -2,6 +2,7 @@ package com.ricard0g.jobtrackr_api.controller;
 
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
@@ -72,7 +73,7 @@ class GeneratedCvControllerTest {
     void listForUser_returnsSpringDataPageWithApplicationContext() throws Exception {
         // given
         when(applicationCvService.listForUser(eq(USER_ID), any(Pageable.class)))
-                .thenReturn(new GeneratedCvDtos.PageResponse(List.of(sampleSummary()), 21, 0, 20));
+                .thenReturn(new GeneratedCvDtos.PageResponse(List.of(sampleSummary()), 21, 0, 10));
 
         // when / then
         mockMvc.perform(get("/api/v1/generated-cvs").principal(principal()))
@@ -88,25 +89,41 @@ class GeneratedCvControllerTest {
                 .andExpect(jsonPath("$.items[0].createdAt").exists())
                 .andExpect(jsonPath("$.total").value(21))
                 .andExpect(jsonPath("$.page").value(0))
-                .andExpect(jsonPath("$.size").value(20));
+                .andExpect(jsonPath("$.size").value(10));
         verify(applicationCvService).listForUser(eq(USER_ID), any(Pageable.class));
+    }
+
+    @Test
+    void listForUser_defaultsToTenItemsPerPage() throws Exception {
+        // given
+        when(applicationCvService.listForUser(eq(USER_ID), any(Pageable.class)))
+                .thenReturn(new GeneratedCvDtos.PageResponse(List.of(), 0, 0, 10));
+
+        // when
+        mockMvc.perform(get("/api/v1/generated-cvs").principal(principal())).andExpect(status().isOk());
+
+        // then
+        verify(applicationCvService)
+                .listForUser(
+                        eq(USER_ID),
+                        argThat(pageable -> pageable.getPageSize() == 10 && pageable.getPageNumber() == 0));
     }
 
     @Test
     void listForUser_forwardsPageAndSizeQueryParams() throws Exception {
         // given
         when(applicationCvService.listForUser(eq(USER_ID), any(Pageable.class)))
-                .thenReturn(new GeneratedCvDtos.PageResponse(List.of(), 0, 1, 20));
+                .thenReturn(new GeneratedCvDtos.PageResponse(List.of(), 0, 1, 10));
 
         // when / then
         mockMvc.perform(get("/api/v1/generated-cvs")
                         .param("page", "1")
-                        .param("size", "20")
+                        .param("size", "10")
                         .principal(principal()))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.items").isEmpty())
                 .andExpect(jsonPath("$.page").value(1))
-                .andExpect(jsonPath("$.size").value(20));
+                .andExpect(jsonPath("$.size").value(10));
         verify(applicationCvService).listForUser(eq(USER_ID), any(Pageable.class));
     }
 

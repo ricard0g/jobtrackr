@@ -99,7 +99,7 @@ const generatedCv = (overrides: Partial<GeneratedCvSummary> = {}): GeneratedCvSu
 
 const renderDocuments = (
 	data: Partial<DocumentsLoaderData> = {},
-	action?: () => Promise<unknown>,
+	action?: (args: { request: Request }) => Promise<unknown>,
 ) => {
 	const loaderData: DocumentsLoaderData = {
 		baseCvs: [],
@@ -220,7 +220,7 @@ describe("DocumentsRoute", () => {
 			],
 			total: 2,
 			page: 1,
-			size: 20,
+			size: 10,
 		});
 
 		renderDocuments({
@@ -238,7 +238,7 @@ describe("DocumentsRoute", () => {
 		});
 		expect(screen.getByText("acme-backend-v2.pdf")).toBeTruthy();
 		expect(screen.getByText("All Generated CVs loaded")).toBeTruthy();
-		expect(api.getGeneratedCvsPage).toHaveBeenCalledWith({ page: 1, size: 20 });
+		expect(api.getGeneratedCvsPage).toHaveBeenCalledWith({ page: 1, size: 10 });
 	});
 
 	it("keeps appended Generated CVs after a Documents action revalidates the loader", async () => {
@@ -254,7 +254,7 @@ describe("DocumentsRoute", () => {
 			],
 			total: 2,
 			page: 1,
-			size: 20,
+			size: 10,
 		});
 
 		let loaderData: DocumentsLoaderData = {
@@ -722,5 +722,53 @@ describe("DocumentsRoute", () => {
 		await waitFor(() => {
 			expect(action).toHaveBeenCalled();
 		});
+	});
+
+	it("closes the preview dialog with Escape and keeps focus management inside the dialog", async () => {
+		vi.spyOn(api, "getBaseCvPreview").mockResolvedValue(new Blob(["%PDF"], { type: "application/pdf" }));
+		vi.spyOn(URL, "createObjectURL").mockReturnValue("blob:preview-a11y");
+		vi.spyOn(URL, "revokeObjectURL").mockImplementation(() => undefined);
+
+		renderDocuments({ baseCvs: [baseCv()] });
+		await screen.findByText("engineering-profile.pdf");
+		fireEvent.click(screen.getByRole("button", { name: "Preview engineering-profile.pdf" }));
+
+		const dialog = await screen.findByRole("dialog", { name: "engineering-profile.pdf" });
+		expect(dialog.contains(document.activeElement)).toBe(true);
+
+		fireEvent.keyDown(dialog, { key: "Escape", code: "Escape" });
+		await waitFor(() => {
+			expect(screen.queryByRole("dialog")).toBeNull();
+		});
+	});
+
+	it("keeps preview controls usable at a reduced mobile viewport width", async () => {
+		vi.spyOn(api, "getBaseCvPreview").mockResolvedValue(new Blob(["%PDF"], { type: "application/pdf" }));
+		vi.spyOn(URL, "createObjectURL").mockReturnValue("blob:preview-mobile");
+		vi.spyOn(URL, "revokeObjectURL").mockImplementation(() => undefined);
+
+		const originalInnerWidth = window.innerWidth;
+		Object.defineProperty(window, "innerWidth", { configurable: true, value: 375 });
+		window.dispatchEvent(new Event("resize"));
+
+		try {
+			renderDocuments({ baseCvs: [baseCv()] });
+			await screen.findByText("engineering-profile.pdf");
+			fireEvent.click(screen.getByRole("button", { name: "Preview engineering-profile.pdf" }));
+
+			expect(await screen.findByRole("dialog", { name: "engineering-profile.pdf" })).toBeTruthy();
+			expect(screen.getByRole("button", { name: "Previous page" })).toBeTruthy();
+			expect(screen.getByRole("button", { name: "Next page" })).toBeTruthy();
+			expect(screen.getByRole("button", { name: "Zoom out" })).toBeTruthy();
+			expect(screen.getByRole("button", { name: "Zoom in" })).toBeTruthy();
+			expect(screen.getByRole("button", { name: "Download Original" })).toBeTruthy();
+			expect(screen.getByRole("button", { name: "Close" })).toBeTruthy();
+
+			fireEvent.click(screen.getByRole("button", { name: "Next page" }));
+			expect(await screen.findByText("Page 2 of 3")).toBeTruthy();
+		} finally {
+			Object.defineProperty(window, "innerWidth", { configurable: true, value: originalInnerWidth });
+			window.dispatchEvent(new Event("resize"));
+		}
 	});
 });

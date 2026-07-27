@@ -30,13 +30,15 @@ import lombok.RequiredArgsConstructor;
 @Validated
 public class GeneratedCvController {
 
+    private static final int DEFAULT_PAGE_SIZE = 10;
+
     private final ApplicationCvService applicationCvService;
 
     @GetMapping("/generated-cvs")
     public ResponseEntity<GeneratedCvDtos.PageResponse> listForUser(
             final Principal principal,
             @PageableDefault(
-                            size = 20,
+                            size = DEFAULT_PAGE_SIZE,
                             sort = {"createdAt", "applicationCvId"},
                             direction = Sort.Direction.DESC)
                     final Pageable pageable) {
