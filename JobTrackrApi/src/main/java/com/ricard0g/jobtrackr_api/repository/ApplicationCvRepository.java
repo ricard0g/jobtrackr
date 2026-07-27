@@ -1,5 +1,6 @@
 package com.ricard0g.jobtrackr_api.repository;
 
+import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -34,12 +35,9 @@ public interface ApplicationCvRepository extends JpaRepository<ApplicationCv, Lo
     @Query(
             value =
                     """
-                    SELECT cv
+                    SELECT cv.applicationCvId
                     FROM ApplicationCv cv
-                    JOIN FETCH cv.application application
-                    JOIN FETCH application.company
-                    LEFT JOIN FETCH cv.generation
-                    WHERE application.user.userId = :userId
+                    WHERE cv.application.user.userId = :userId
                     """,
             countQuery =
                     """
@@ -47,6 +45,16 @@ public interface ApplicationCvRepository extends JpaRepository<ApplicationCv, Lo
                     FROM ApplicationCv cv
                     WHERE cv.application.user.userId = :userId
                     """)
-    Page<ApplicationCv> findAllByApplication_User_UserId(
-            @Param("userId") UUID userId, Pageable pageable);
+    Page<Long> findIdsByApplication_User_UserId(@Param("userId") UUID userId, Pageable pageable);
+
+    @Query(
+            """
+            SELECT cv
+            FROM ApplicationCv cv
+            JOIN FETCH cv.application application
+            JOIN FETCH application.company
+            LEFT JOIN FETCH cv.generation
+            WHERE cv.applicationCvId IN :ids
+            """)
+    List<ApplicationCv> findAllByIdInWithAssociations(@Param("ids") Collection<Long> ids);
 }

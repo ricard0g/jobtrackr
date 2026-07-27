@@ -167,6 +167,12 @@ public class BaseCvService {
                 throw notFound;
             }
             baseCvStorage.upload(previewKey, pdfBytes, APPLICATION_PDF);
+            if (baseCvRepository.findByBaseCvIdAndUser_UserId(baseCvId, userId).isEmpty()) {
+                schedulePreviewCleanup(previewKey);
+                final BaseCvException notFound = BaseCvException.notFound();
+                conversion.completeExceptionally(notFound);
+                throw notFound;
+            }
             conversion.complete(pdfBytes);
             return pdfBytes;
         } catch (final RuntimeException exception) {

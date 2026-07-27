@@ -3,6 +3,7 @@ package com.ricard0g.jobtrackr_api.service;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
@@ -10,6 +11,7 @@ import static org.mockito.Mockito.when;
 import static org.mockito.Mockito.timeout;
 
 import java.nio.charset.StandardCharsets;
+import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 import java.util.concurrent.CountDownLatch;
@@ -31,6 +33,7 @@ import com.ricard0g.jobtrackr_api.exception.CvGenerationException;
 import com.ricard0g.jobtrackr_api.exception.DocumentConversionException;
 import com.ricard0g.jobtrackr_api.exception.StorageUnavailableException;
 import com.ricard0g.jobtrackr_api.model.ApplicationCv;
+import com.ricard0g.jobtrackr_api.model.StorageCleanupJob;
 import com.ricard0g.jobtrackr_api.model.enums.GeneratedCvFormat;
 import com.ricard0g.jobtrackr_api.repository.ApplicationCvRepository;
 import com.ricard0g.jobtrackr_api.repository.ApplicationRepository;
@@ -314,6 +317,32 @@ class ApplicationCvServiceTest {
                         CvGenerationException.class,
                         exception -> assertThat(exception.getCode()).isEqualTo("GENERATED_CV_NOT_FOUND"));
         verify(objectStorage, never()).upload(any(), any(), any());
+    }
+
+    @Test
+    void preview_whenSourceDeletedAfterCacheWarm_schedulesPreviewCleanupAndFailsClosed() {
+        // given
+        final ApplicationCv generatedCv = docxGeneratedCv();
+        final byte[] docxBytes = "docx-bytes".getBytes(StandardCharsets.UTF_8);
+        final byte[] pdfBytes = "%PDF-1.4 race".getBytes(StandardCharsets.UTF_8);
+        final String previewKey = "users/" + USER_ID + "/previews/generated-cvs/" + GENERATED_CV_ID + ".pdf";
+        when(applicationCvRepository.findByApplicationCvIdAndApplication_User_UserId(GENERATED_CV_ID, USER_ID))
+                .thenReturn(Optional.of(generatedCv))
+                .thenReturn(Optional.of(generatedCv))
+                .thenReturn(Optional.empty());
+        when(objectStorage.exists(previewKey)).thenReturn(false);
+        when(objectStorage.download("opaque-key")).thenReturn(docxBytes);
+        when(gotenbergClient.convertDocxToPdf(docxBytes, "tailored.docx")).thenReturn(pdfBytes);
+        when(storageCleanupJobRepository.findByObjectKeyAndCompletedAtIsNull(previewKey)).thenReturn(List.of());
+
+        // when / then
+        assertThatThrownBy(() -> service.preview(USER_ID, GENERATED_CV_ID))
+                .isInstanceOfSatisfying(
+                        CvGenerationException.class,
+                        exception -> assertThat(exception.getCode()).isEqualTo("GENERATED_CV_NOT_FOUND"));
+        verify(objectStorage).upload(previewKey, pdfBytes, "application/pdf");
+        verify(storageCleanupJobRepository)
+                .save(argThat((StorageCleanupJob job) -> previewKey.equals(job.getObjectKey())));
     }
 
     private ApplicationCv docxGeneratedCv() {

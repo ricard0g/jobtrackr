@@ -1,9 +1,12 @@
 package com.ricard0g.jobtrackr_api.service;
 
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.function.Function;
+import java.util.stream.Collectors;
 
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.data.domain.Page;
@@ -67,10 +70,20 @@ public class ApplicationCvService {
     @Transactional(readOnly = true)
     public GeneratedCvDtos.PageResponse listForUser(final UUID userId, final Pageable pageable) {
         requireUser(userId);
-        final Page<GeneratedCvDtos.Summary> page = applicationCvRepository
-                .findAllByApplication_User_UserId(userId, pageable)
-                .map(GeneratedCvDtos.Summary::from);
-        return GeneratedCvDtos.PageResponse.from(page);
+        final Page<Long> idPage = applicationCvRepository.findIdsByApplication_User_UserId(userId, pageable);
+        if (idPage.isEmpty()) {
+            return new GeneratedCvDtos.PageResponse(List.of(), 0, pageable.getPageNumber(), pageable.getPageSize());
+        }
+        final List<Long> ids = idPage.getContent();
+        final Map<Long, ApplicationCv> byId = applicationCvRepository.findAllByIdInWithAssociations(ids).stream()
+                .collect(Collectors.toMap(ApplicationCv::getApplicationCvId, Function.identity()));
+        final List<GeneratedCvDtos.Summary> items = ids.stream()
+                .map(byId::get)
+                .filter(cv -> cv != null)
+                .map(GeneratedCvDtos.Summary::from)
+                .toList();
+        return new GeneratedCvDtos.PageResponse(
+                items, idPage.getTotalElements(), idPage.getNumber(), idPage.getSize());
     }
 
     @Transactional(readOnly = true)
@@ -141,6 +154,14 @@ public class ApplicationCvService {
                 throw notFound;
             }
             objectStorage.upload(previewKey, pdfBytes, APPLICATION_PDF);
+            if (applicationCvRepository
+                    .findByApplicationCvIdAndApplication_User_UserId(generatedCvId, userId)
+                    .isEmpty()) {
+                scheduleCleanup(previewKey);
+                final CvGenerationException notFound = CvGenerationException.generatedCvNotFound();
+                conversion.completeExceptionally(notFound);
+                throw notFound;
+            }
             conversion.complete(pdfBytes);
             return pdfBytes;
         } catch (final RuntimeException exception) {

@@ -23,6 +23,7 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
 
 import com.ricard0g.jobtrackr_api.config.cvgeneration.CvGenerationProperties;
+import com.ricard0g.jobtrackr_api.conversion.GotenbergClient;
 import com.ricard0g.jobtrackr_api.dto.GeneratedCvDto.GeneratedCvDtos;
 import com.ricard0g.jobtrackr_api.model.Application;
 import com.ricard0g.jobtrackr_api.model.ApplicationCv;
@@ -61,6 +62,9 @@ class ApplicationCvServiceListForUserTest {
     @Mock
     private CvGenerationProperties properties;
 
+    @Mock
+    private GotenbergClient gotenbergClient;
+
     @InjectMocks
     private ApplicationCvService service;
 
@@ -70,13 +74,14 @@ class ApplicationCvServiceListForUserTest {
     }
 
     @Test
-    void listForUser_returnsSpringDataPageMappedToResponse() {
+    void listForUser_pagesIdsThenFetchesAssociationsPreservingOrder() {
         // given
-        final List<ApplicationCv> content = List.of(
-                cv(30L, "Backend Engineer", "Acme", TIE_TIME),
-                cv(20L, "Platform Engineer", "Acme", TIE_TIME.minusHours(1)));
-        when(applicationCvRepository.findAllByApplication_User_UserId(eq(USER_ID), eq(PAGEABLE)))
-                .thenReturn(new PageImpl<>(content, PAGEABLE, 42));
+        final ApplicationCv first = cv(30L, "Backend Engineer", "Acme", TIE_TIME);
+        final ApplicationCv second = cv(20L, "Platform Engineer", "Acme", TIE_TIME.minusHours(1));
+        when(applicationCvRepository.findIdsByApplication_User_UserId(eq(USER_ID), eq(PAGEABLE)))
+                .thenReturn(new PageImpl<>(List.of(30L, 20L), PAGEABLE, 42));
+        when(applicationCvRepository.findAllByIdInWithAssociations(List.of(30L, 20L)))
+                .thenReturn(List.of(second, first));
 
         // when
         final GeneratedCvDtos.PageResponse page = service.listForUser(USER_ID, PAGEABLE);
@@ -89,18 +94,20 @@ class ApplicationCvServiceListForUserTest {
         assertThat(page.total()).isEqualTo(42);
         assertThat(page.page()).isZero();
         assertThat(page.size()).isEqualTo(20);
-        verify(applicationCvRepository).findAllByApplication_User_UserId(USER_ID, PAGEABLE);
+        verify(applicationCvRepository).findIdsByApplication_User_UserId(USER_ID, PAGEABLE);
+        verify(applicationCvRepository).findAllByIdInWithAssociations(List.of(30L, 20L));
     }
 
     @Test
-    void listForUser_equalTimestamps_preserveIdDescendingOrderFromRepository() {
+    void listForUser_equalTimestamps_preserveIdDescendingOrderFromIdPage() {
         // given
-        final List<ApplicationCv> content = List.of(
-                cv(30L, "Role A", "Co A", TIE_TIME),
-                cv(20L, "Role B", "Co B", TIE_TIME),
-                cv(10L, "Role C", "Co C", TIE_TIME));
-        when(applicationCvRepository.findAllByApplication_User_UserId(eq(USER_ID), eq(PAGEABLE)))
-                .thenReturn(new PageImpl<>(content, PAGEABLE, 3));
+        final ApplicationCv first = cv(30L, "Role A", "Co A", TIE_TIME);
+        final ApplicationCv second = cv(20L, "Role B", "Co B", TIE_TIME);
+        final ApplicationCv third = cv(10L, "Role C", "Co C", TIE_TIME);
+        when(applicationCvRepository.findIdsByApplication_User_UserId(eq(USER_ID), eq(PAGEABLE)))
+                .thenReturn(new PageImpl<>(List.of(30L, 20L, 10L), PAGEABLE, 3));
+        when(applicationCvRepository.findAllByIdInWithAssociations(List.of(30L, 20L, 10L)))
+                .thenReturn(List.of(third, first, second));
 
         // when
         final GeneratedCvDtos.PageResponse page = service.listForUser(USER_ID, PAGEABLE);
@@ -109,6 +116,23 @@ class ApplicationCvServiceListForUserTest {
         assertThat(page.items())
                 .extracting(GeneratedCvDtos.Summary::generatedCvId)
                 .containsExactly(30L, 20L, 10L);
+    }
+
+    @Test
+    void listForUser_whenNoIds_returnsEmptyPageWithoutAssociationFetch() {
+        // given
+        when(applicationCvRepository.findIdsByApplication_User_UserId(eq(USER_ID), eq(PAGEABLE)))
+                .thenReturn(new PageImpl<>(List.of(), PAGEABLE, 0));
+
+        // when
+        final GeneratedCvDtos.PageResponse page = service.listForUser(USER_ID, PAGEABLE);
+
+        // then
+        assertThat(page.items()).isEmpty();
+        assertThat(page.total()).isZero();
+        verify(applicationCvRepository).findIdsByApplication_User_UserId(USER_ID, PAGEABLE);
+        org.mockito.Mockito.verify(applicationCvRepository, org.mockito.Mockito.never())
+                .findAllByIdInWithAssociations(org.mockito.ArgumentMatchers.any());
     }
 
     private ApplicationCv cv(

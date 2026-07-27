@@ -422,6 +422,31 @@ class BaseCvServiceTest {
         verify(baseCvStorage, never()).upload(any(), any(), any());
     }
 
+    @Test
+    void preview_whenSourceDeletedAfterCacheWarm_schedulesPreviewCleanupAndFailsClosed() {
+        // given
+        final BaseCv baseCv = docxBaseCv();
+        final byte[] docxBytes = "docx-bytes".getBytes(StandardCharsets.UTF_8);
+        final byte[] pdfBytes = "%PDF-1.4 race".getBytes(StandardCharsets.UTF_8);
+        final String previewKey = "users/" + USER_ID + "/previews/base-cvs/" + BASE_CV_ID + ".pdf";
+        when(baseCvRepository.findByBaseCvIdAndUser_UserId(BASE_CV_ID, USER_ID))
+                .thenReturn(Optional.of(baseCv))
+                .thenReturn(Optional.of(baseCv))
+                .thenReturn(Optional.empty());
+        when(baseCvStorage.exists(previewKey)).thenReturn(false);
+        when(baseCvStorage.download("opaque-key")).thenReturn(docxBytes);
+        when(gotenbergClient.convertDocxToPdf(docxBytes, "resume.docx")).thenReturn(pdfBytes);
+        when(storageCleanupJobRepository.findByObjectKeyAndCompletedAtIsNull(previewKey)).thenReturn(List.of());
+
+        // when / then
+        assertThatThrownBy(() -> service.preview(USER_ID, BASE_CV_ID))
+                .isInstanceOfSatisfying(BaseCvException.class,
+                        exception -> assertThat(exception.getCode()).isEqualTo("BASE_CV_NOT_FOUND"));
+        verify(baseCvStorage).upload(previewKey, pdfBytes, "application/pdf");
+        verify(storageCleanupJobRepository)
+                .save(argThat((StorageCleanupJob job) -> previewKey.equals(job.getObjectKey())));
+    }
+
     private BaseCv docxBaseCv() {
         final BaseCv baseCv = mock(BaseCv.class);
         when(baseCv.getBaseCvId()).thenReturn(BASE_CV_ID);
