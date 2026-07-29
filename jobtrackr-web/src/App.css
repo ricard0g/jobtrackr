@@ -41,7 +41,8 @@
 
 	--shadow-cool-light:
 		inset 0px 4px 4px rgba(255, 255, 255, 1),
-		inset 0px -2px 4px rgba(0, 0, 0, 0.05);
+		inset 0px -2px 4px rgba(0, 0, 0, 0.05),
+        2px 4px 8px rgba(0,0,0,0.15);
 	--shadow-cool-strong:
 		inset 0px 8px 8px rgba(255, 255, 255, 1),
 		inset 0px -6px 6px rgba(0, 0, 0, 0.1),

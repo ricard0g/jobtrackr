@@ -13,7 +13,7 @@ Structured, inspectable candidate facts interpreted from a Base CV and any user-
 _Avoid_: Parsed CV, raw text
 
 **Generated CV**:
-A role-tailored CV whose content has been drafted from Candidate Evidence for a specific Application.
+A role-tailored CV whose content has been drafted from Candidate Evidence for a specific Application. Once created, it is an independent artifact from its source Base CV.
 _Avoid_: Application CV, output CV
 
 **CV Generation**:

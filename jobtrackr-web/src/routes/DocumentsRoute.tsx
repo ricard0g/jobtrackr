@@ -550,7 +550,7 @@ export function DocumentsRoute() {
                 className="mx-auto w-full max-w-[1150px] rounded-[10px] border border-light-gray bg-[#e8e8e8] p-3 shadow-cool-light-inner sm:p-6"
             >
                 <div className="mb-4 flex w-fit max-w-full items-center gap-2 rounded-[10px] border border-light-gray bg-[#f1f2f4] p-1.5 shadow-cool-light sm:mb-6">
-                    <span className="shrink-0 px-2 font-display text-sm text-dark-gray">
+                    <span className="shrink-0 px-2 font-display text-base text-dark-gray">
                         Your Documents
                     </span>
                     <span aria-hidden="true" className="h-7 w-px shrink-0 bg-light-gray" />
@@ -560,14 +560,14 @@ export function DocumentsRoute() {
                     >
                         <Tabs.Trigger
                             value="generated"
-                            className="flex h-7 min-w-0 items-center gap-1.5 rounded px-2 font-display text-xs text-medium-gray outline-none transition-colors hover:text-dark-gray focus-visible:ring-2 focus-visible:ring-dark-accent data-[state=active]:bg-[#f1f2f4] data-[state=active]:text-darkest-accent data-[state=active]:shadow-light sm:px-3"
+                            className="flex h-7 min-w-0 items-center gap-1.5 rounded px-2 font-display text-base text-medium-gray outline-none transition-colors hover:text-dark-gray focus-visible:ring-2 focus-visible:ring-dark-accent data-[state=active]:bg-[#f1f2f4] data-[state=active]:text-darkest-accent data-[state=active]:shadow-light sm:px-3"
                         >
                             <Files aria-hidden="true" size={14} className="shrink-0" />
                             <span className="truncate">Generated CVs</span>
                         </Tabs.Trigger>
                         <Tabs.Trigger
                             value="base"
-                            className="flex h-7 min-w-0 items-center gap-1.5 rounded px-2 font-display text-xs text-medium-gray outline-none transition-colors hover:text-dark-gray focus-visible:ring-2 focus-visible:ring-dark-accent data-[state=active]:bg-[#f1f2f4] data-[state=active]:text-darkest-accent data-[state=active]:shadow-light sm:px-3"
+                            className="flex h-7 min-w-0 items-center gap-1.5 rounded px-2 font-display text-base text-medium-gray outline-none transition-colors hover:text-dark-gray focus-visible:ring-2 focus-visible:ring-dark-accent data-[state=active]:bg-[#f1f2f4] data-[state=active]:text-darkest-accent data-[state=active]:shadow-light sm:px-3"
                         >
                             <FileText aria-hidden="true" size={14} className="shrink-0" />
                             <span className="truncate">Base CVs</span>
