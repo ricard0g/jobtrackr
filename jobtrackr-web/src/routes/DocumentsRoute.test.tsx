@@ -1,10 +1,14 @@
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { createMemoryRouter, RouterProvider } from "react-router";
 
 import { api } from "@/lib/api";
 import { DocumentsRoute } from "@/routes/DocumentsRoute";
-import { GENERATED_CV_PAGE_SIZE, type DocumentsLoaderData } from "@/routes/documents-data";
+import {
+	ensureCanonicalDocumentsUrl,
+	GENERATED_CV_PAGE_SIZE,
+	type DocumentsLoaderData,
+} from "@/routes/documents-data";
 import type { BaseCv } from "@/types/base-cv";
 import type { GeneratedCvSummary } from "@/types/generated-cv";
 
@@ -100,6 +104,7 @@ const generatedCv = (overrides: Partial<GeneratedCvSummary> = {}): GeneratedCvSu
 const renderDocuments = (
 	data: Partial<DocumentsLoaderData> = {},
 	action?: (args: { request: Request }) => Promise<unknown>,
+	initialEntry = "/documents",
 ) => {
 	const loaderData: DocumentsLoaderData = {
 		baseCvs: [],
@@ -114,34 +119,158 @@ const renderDocuments = (
 			{
 				path: "/documents",
 				Component: DocumentsRoute,
-				loader: () => loaderData,
+				loader: ({ request }) => {
+					ensureCanonicalDocumentsUrl(request);
+					return loaderData;
+				},
 				action,
 			},
 			{ path: "/generate", element: <div>Generate route</div> },
 		],
-		{ initialEntries: ["/documents"] },
+		{ initialEntries: [initialEntry] },
 	);
 	render(<RouterProvider router={router} />);
 	return router;
 };
 
+const renderBaseDocuments = (
+	data: Partial<DocumentsLoaderData> = {},
+	action?: (args: { request: Request }) => Promise<unknown>,
+) => renderDocuments(data, action, "/documents?tab=base");
+
 describe("DocumentsRoute", () => {
+	it("opens Generated CVs by default in an accessible tab shell", async () => {
+		const router = renderDocuments();
+
+		const heading = await screen.findByRole("heading", { name: "Documents" });
+		expect(heading.className).toContain("sr-only");
+
+		expect(screen.getByRole("tablist", { name: "Your Documents" })).toBeTruthy();
+		expect(screen.getByRole("tab", { name: "Generated CVs" }).getAttribute("aria-selected")).toBe(
+			"true",
+		);
+		expect(screen.getByRole("tab", { name: "Base CVs" }).getAttribute("aria-selected")).toBe(
+			"false",
+		);
+		expect(screen.getByRole("tabpanel", { name: "Generated CVs" })).toBeTruthy();
+		expect(screen.getByText("No Generated CVs yet")).toBeTruthy();
+		expect(screen.queryByText("No Base CVs yet")).toBeNull();
+
+		await waitFor(() => {
+			expect(router.state.location.search).toBe(
+				"?tab=generated&page=1&sort=created&direction=desc",
+			);
+			expect(router.state.historyAction).toBe("REPLACE");
+		});
+	});
+
+	it("opens the Base CVs panel from a direct URL and fills in its default table state", async () => {
+		const router = renderDocuments({}, undefined, "/documents?tab=base");
+
+		expect(
+			(await screen.findByRole("tab", { name: "Base CVs" })).getAttribute("aria-selected"),
+		).toBe("true");
+		expect(screen.getByRole("tabpanel", { name: "Base CVs" })).toBeTruthy();
+		expect(screen.getByText("No Base CVs yet")).toBeTruthy();
+		expect(screen.queryByText("No Generated CVs yet")).toBeNull();
+
+		await waitFor(() => {
+			expect(router.state.location.search).toBe(
+				"?tab=base&page=1&sort=uploaded&direction=desc",
+			);
+		});
+	});
+
+	it("replaces invalid Documents query state with safe defaults", async () => {
+		const router = renderDocuments(
+			{},
+			undefined,
+			"/documents?tab=unknown&page=zero&sort=application&direction=sideways",
+		);
+
+		expect(
+			(await screen.findByRole("tab", { name: "Generated CVs" })).getAttribute("aria-selected"),
+		).toBe("true");
+		await waitFor(() => {
+			expect(router.state.location.search).toBe(
+				"?tab=generated&page=1&sort=created&direction=desc",
+			);
+			expect(router.state.historyAction).toBe("REPLACE");
+		});
+	});
+
+	it("pushes tab changes, resets destination state, and restores history with keyboard controls", async () => {
+		const router = renderDocuments(
+			{},
+			undefined,
+			"/documents?tab=generated&page=4&sort=name&direction=asc",
+		);
+		const generatedTab = await screen.findByRole("tab", { name: "Generated CVs" });
+		const baseTab = screen.getByRole("tab", { name: "Base CVs" });
+
+		act(() => generatedTab.focus());
+		fireEvent.keyDown(generatedTab, { key: "ArrowRight" });
+		await waitFor(() => {
+			expect(document.activeElement).toBe(baseTab);
+		});
+		expect(generatedTab.getAttribute("aria-selected")).toBe("true");
+
+		fireEvent.keyDown(baseTab, { key: "Enter" });
+		await waitFor(() => {
+			expect(router.state.location.search).toBe(
+				"?tab=base&page=1&sort=uploaded&direction=desc",
+			);
+		});
+		expect(baseTab.getAttribute("aria-selected")).toBe("true");
+
+		await act(async () => {
+			await router.navigate(-1);
+		});
+		await waitFor(() => {
+			expect(router.state.location.search).toBe(
+				"?tab=generated&page=4&sort=name&direction=asc",
+			);
+			expect(generatedTab.getAttribute("aria-selected")).toBe("true");
+		});
+
+		act(() => baseTab.focus());
+		fireEvent.keyDown(baseTab, { key: "ArrowLeft" });
+		await waitFor(() => {
+			expect(document.activeElement).toBe(generatedTab);
+		});
+		expect(generatedTab.getAttribute("aria-selected")).toBe("true");
+
+		fireEvent.keyDown(generatedTab, { key: "ArrowRight" });
+		await waitFor(() => {
+			expect(document.activeElement).toBe(baseTab);
+		});
+		fireEvent.keyDown(baseTab, { key: " " });
+		await waitFor(() => {
+			expect(baseTab.getAttribute("aria-selected")).toBe("true");
+		});
+	});
+
 	it("shows the upload guidance and empty state", async () => {
 		renderDocuments();
 
 		expect(await screen.findByRole("heading", { name: "Documents" })).toBeTruthy();
-		expect(screen.getByText("No Base CVs yet")).toBeTruthy();
+		expect(screen.getByRole("heading", { name: "Generated CVs" })).toBeTruthy();
+		expect(screen.getByText("No Generated CVs yet")).toBeTruthy();
+		expect(screen.getByRole("link", { name: "Generate" })).toBeTruthy();
+
+		fireEvent.mouseDown(screen.getByRole("tab", { name: "Base CVs" }), {
+			button: 0,
+			ctrlKey: false,
+		});
+		expect(await screen.findByText("No Base CVs yet")).toBeTruthy();
 		expect(screen.getByText("PDF, DOCX, or Markdown · 10 MB maximum")).toBeTruthy();
 		expect(screen.getByRole("button", { name: "Upload a Base CV" }).getAttribute("tabindex")).toBe(
 			"0",
 		);
-		expect(screen.getByRole("heading", { name: "Generated CVs" })).toBeTruthy();
-		expect(screen.getByText("No Generated CVs yet")).toBeTruthy();
-		expect(screen.getByRole("link", { name: "Generate" })).toBeTruthy();
 	});
 
 	it("renders document metadata and accessible actions", async () => {
-		renderDocuments({ baseCvs: [baseCv()] });
+		renderBaseDocuments({ baseCvs: [baseCv()] });
 
 		expect(await screen.findByText("engineering-profile.pdf")).toBeTruthy();
 		expect(screen.getByText(/PDF · 1.5 MB/)).toBeTruthy();
@@ -159,7 +288,7 @@ describe("DocumentsRoute", () => {
 				byteSize: 1024,
 			}),
 		);
-		renderDocuments({
+		renderBaseDocuments({
 			baseCvs: documents,
 			generatedCvs: Array.from({ length: 5 }, (_, index) =>
 				generatedCv({ generatedCvId: index + 1 }),
@@ -200,11 +329,14 @@ describe("DocumentsRoute", () => {
 			generatedCvsError: "Generated CVs could not be loaded.",
 		});
 
+		expect(await screen.findByText("Generated CVs could not be loaded.")).toBeTruthy();
+		fireEvent.mouseDown(screen.getByRole("tab", { name: "Base CVs" }), {
+			button: 0,
+			ctrlKey: false,
+		});
 		expect(await screen.findByText("engineering-profile.pdf")).toBeTruthy();
 		expect(screen.getByRole("button", { name: "Upload a Base CV" })).toBeTruthy();
 		expect(screen.getByRole("button", { name: "Download engineering-profile.pdf" })).toBeTruthy();
-		expect(screen.getByText("Generated CVs could not be loaded.")).toBeTruthy();
-		expect(screen.getByRole("button", { name: "Retry" })).toBeTruthy();
 	});
 
 	it("appends the next Generated CV page through Load more", async () => {
@@ -273,16 +405,19 @@ describe("DocumentsRoute", () => {
 				{
 					path: "/documents",
 					Component: DocumentsRoute,
-					loader: () => loaderData,
+					loader: ({ request }) => {
+						ensureCanonicalDocumentsUrl(request);
+						return loaderData;
+					},
 					action: async () => {
 						loaderData = {
-							baseCvs: [],
+							baseCvs: [baseCv()],
 							generatedCvs: [generatedCv()],
 							generatedCvsPage: 0,
 							generatedCvsTotal: 2,
 							generatedCvsError: null,
 						};
-						return { ok: true, intent: "delete" };
+						return { ok: true, intent: "delete-generated-cv" };
 					},
 				},
 			],
@@ -297,12 +432,11 @@ describe("DocumentsRoute", () => {
 		});
 
 		vi.spyOn(window, "confirm").mockReturnValue(true);
-		fireEvent.click(screen.getByRole("button", { name: "Delete engineering-profile.pdf" }));
+		fireEvent.click(screen.getByRole("button", { name: "Delete acme-backend-v2.pdf" }));
 
 		await waitFor(() => {
-			expect(screen.queryByText("engineering-profile.pdf")).toBeNull();
+			expect(screen.queryByText("acme-backend-v2.pdf")).toBeNull();
 		});
-		expect(screen.getByText("acme-backend-v2.pdf")).toBeTruthy();
 		expect(screen.getByText("older-acme.pdf")).toBeTruthy();
 	});
 
@@ -331,7 +465,7 @@ describe("DocumentsRoute", () => {
 			() => new Promise(() => undefined),
 		);
 
-		renderDocuments({ baseCvs: [baseCv()] });
+		renderBaseDocuments({ baseCvs: [baseCv()] });
 
 		await screen.findByText("engineering-profile.pdf");
 		fireEvent.click(screen.getByRole("button", { name: "Preview engineering-profile.pdf" }));
@@ -346,7 +480,7 @@ describe("DocumentsRoute", () => {
 			new Blob(["%PDF-1.4 converted"], { type: "application/pdf" }),
 		);
 
-		renderDocuments({
+		renderBaseDocuments({
 			baseCvs: [
 				baseCv({
 					baseCvId: 3,
@@ -371,7 +505,7 @@ describe("DocumentsRoute", () => {
 	it("keeps Retry Preview and Download Original available when DOCX conversion fails", async () => {
 		vi.spyOn(api, "getBaseCvPreview").mockRejectedValue(new Error("Preview could not be loaded."));
 
-		renderDocuments({
+		renderBaseDocuments({
 			baseCvs: [
 				baseCv({
 					baseCvId: 3,
@@ -414,7 +548,7 @@ describe("DocumentsRoute", () => {
 			new Blob([markdown], { type: "text/markdown; charset=UTF-8" }),
 		);
 
-		renderDocuments({
+		renderBaseDocuments({
 			baseCvs: [
 				baseCv({
 					baseCvId: 2,
@@ -457,7 +591,7 @@ describe("DocumentsRoute", () => {
 				new Blob(["# Recovered"], { type: "text/markdown; charset=UTF-8" }),
 			);
 
-		renderDocuments({
+		renderBaseDocuments({
 			baseCvs: [
 				baseCv({
 					baseCvId: 2,
@@ -489,7 +623,7 @@ describe("DocumentsRoute", () => {
 		const createObjectURL = vi.spyOn(URL, "createObjectURL").mockReturnValue("blob:preview-1");
 		vi.spyOn(URL, "revokeObjectURL").mockImplementation(() => undefined);
 
-		renderDocuments({ baseCvs: [baseCv()] });
+		renderBaseDocuments({ baseCvs: [baseCv()] });
 		await screen.findByText("engineering-profile.pdf");
 		fireEvent.click(screen.getByRole("button", { name: "Preview engineering-profile.pdf" }));
 
@@ -515,7 +649,7 @@ describe("DocumentsRoute", () => {
 		const confirmSpy = vi.spyOn(window, "confirm").mockReturnValue(false);
 		const action = vi.fn(async () => ({ ok: true, intent: "download", uri: "https://signed.example/cv" }));
 
-		renderDocuments({ baseCvs: [baseCv()] }, action);
+		renderBaseDocuments({ baseCvs: [baseCv()] }, action);
 		await screen.findByText("engineering-profile.pdf");
 
 		fireEvent.click(screen.getByRole("button", { name: "Download engineering-profile.pdf" }));
@@ -534,7 +668,7 @@ describe("DocumentsRoute", () => {
 			.mockRejectedValueOnce(new Error("Preview could not be loaded."))
 			.mockImplementation(() => new Promise(() => undefined));
 
-		renderDocuments({ baseCvs: [baseCv()] });
+		renderBaseDocuments({ baseCvs: [baseCv()] });
 		await screen.findByText("engineering-profile.pdf");
 		fireEvent.click(screen.getByRole("button", { name: "Preview engineering-profile.pdf" }));
 
@@ -559,7 +693,7 @@ describe("DocumentsRoute", () => {
 		vi.spyOn(URL, "createObjectURL").mockReturnValue("blob:preview-close");
 		const revokeObjectURL = vi.spyOn(URL, "revokeObjectURL").mockImplementation(() => undefined);
 
-		renderDocuments({ baseCvs: [baseCv()] });
+		renderBaseDocuments({ baseCvs: [baseCv()] });
 		await screen.findByText("engineering-profile.pdf");
 		fireEvent.click(screen.getByRole("button", { name: "Preview engineering-profile.pdf" }));
 		expect(await screen.findByText("Page 1 of 3")).toBeTruthy();
@@ -579,7 +713,7 @@ describe("DocumentsRoute", () => {
 		vi.spyOn(URL, "createObjectURL").mockReturnValue("blob:preview-zoom");
 		vi.spyOn(URL, "revokeObjectURL").mockImplementation(() => undefined);
 
-		renderDocuments({ baseCvs: [baseCv()] });
+		renderBaseDocuments({ baseCvs: [baseCv()] });
 		await screen.findByText("engineering-profile.pdf");
 		fireEvent.click(screen.getByRole("button", { name: "Preview engineering-profile.pdf" }));
 		expect(await screen.findByText("Page 1 of 3")).toBeTruthy();
@@ -732,7 +866,7 @@ describe("DocumentsRoute", () => {
 		vi.spyOn(URL, "createObjectURL").mockReturnValue("blob:preview-a11y");
 		vi.spyOn(URL, "revokeObjectURL").mockImplementation(() => undefined);
 
-		renderDocuments({ baseCvs: [baseCv()] });
+		renderBaseDocuments({ baseCvs: [baseCv()] });
 		await screen.findByText("engineering-profile.pdf");
 		fireEvent.click(screen.getByRole("button", { name: "Preview engineering-profile.pdf" }));
 
@@ -755,7 +889,7 @@ describe("DocumentsRoute", () => {
 		window.dispatchEvent(new Event("resize"));
 
 		try {
-			renderDocuments({ baseCvs: [baseCv()] });
+			renderBaseDocuments({ baseCvs: [baseCv()] });
 			await screen.findByText("engineering-profile.pdf");
 			fireEvent.click(screen.getByRole("button", { name: "Preview engineering-profile.pdf" }));
 

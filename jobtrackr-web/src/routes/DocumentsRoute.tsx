@@ -1,4 +1,5 @@
-import { Download, File, FileText, LoaderCircle, Trash2, UploadCloud } from "lucide-react";
+import { Download, File, Files, FileText, LoaderCircle, Trash2, UploadCloud } from "lucide-react";
+import { Tabs } from "radix-ui";
 import {
     useCallback,
     useEffect,
@@ -8,7 +9,7 @@ import {
     type DragEvent,
     type KeyboardEvent,
 } from "react";
-import { Link, useFetcher, useLoaderData } from "react-router";
+import { Link, useFetcher, useLoaderData, useLocation, useNavigate } from "react-router";
 
 import {
     DocumentPreviewDialog,
@@ -19,7 +20,10 @@ import { api } from "@/lib/api";
 import type { BaseCv } from "@/types/base-cv";
 import type { GeneratedCvSummary } from "@/types/generated-cv";
 import {
+    defaultDocumentsState,
     GENERATED_CV_PAGE_SIZE,
+    normalizeDocumentsState,
+    serializeDocumentsState,
     type DocumentsActionData,
     type DocumentsLoaderData,
 } from "@/routes/documents-data";
@@ -336,12 +340,12 @@ function GeneratedCvSection({
     return (
         <section
             aria-labelledby="generated-cvs-heading"
-            className="mt-8 rounded-2xl border border-light-gray bg-light-gray/25 p-4 shadow-cool-light-inner sm:p-6"
+            className="rounded-[10px] border border-light-gray bg-light-gray/25 p-4 shadow-cool-light-inner sm:p-6"
         >
-            <h2 id="generated-cvs-heading" className="text-lg font-semibold text-dark-gray">
+            <h2 id="generated-cvs-heading" className="sr-only">
                 Generated CVs
             </h2>
-            <p className="mt-1 text-sm text-medium-gray">
+            <p className="text-sm text-medium-gray">
                 Role-tailored outputs from Generate, newest first.
             </p>
 
@@ -418,12 +422,15 @@ export function DocumentsRoute() {
         useLoaderData() as DocumentsLoaderData;
     const uploadFetcher = useFetcher<DocumentsActionData>();
     const previewDownloadFetcher = useFetcher<DocumentsActionData>();
+    const location = useLocation();
+    const navigate = useNavigate();
     const inputRef = useRef<HTMLInputElement>(null);
     const openedPreviewDownloadRef = useRef<DocumentsActionData | null>(null);
     const [clientError, setClientError] = useState<string | null>(null);
     const [previewDocument, setPreviewDocument] = useState<PreviewableDocument | null>(null);
     const uploading = uploadFetcher.state !== "idle";
     const atLimit = baseCvs.length >= MAX_BASE_CVS;
+    const urlState = normalizeDocumentsState(location.search);
 
     const loadPreview = useCallback(
         (signal: AbortSignal) => {
@@ -519,22 +526,75 @@ export function DocumentsRoute() {
             inputRef.current?.click();
         }
     };
+    const changeTab = (value: string) => {
+        if (value !== "generated" && value !== "base") return;
+        if (value === urlState.tab) return;
+        void navigate(
+            {
+                pathname: location.pathname,
+                search: serializeDocumentsState(defaultDocumentsState(value)),
+                hash: location.hash,
+            },
+            { replace: false },
+        );
+    };
 
     return (
-        <div className="h-full overflow-y-auto px-4 pb-12">
-            <section className="mx-auto max-w-4xl">
-                <div className="mb-6 flex items-end justify-between gap-4">
-                    <div>
-                        <h1 className="text-2xl font-bold text-darkest-accent sm:text-3xl">Documents</h1>
-                        <p className="mt-1 text-medium-gray">
-                            Manage the source documents used to tailor future applications.
-                        </p>
-                    </div>
+        <div className="h-full overflow-y-auto px-3 pb-12 pt-2 sm:px-4 sm:pt-5">
+            <h1 className="sr-only">Documents</h1>
+            <Tabs.Root
+                value={urlState.tab}
+                onValueChange={changeTab}
+                orientation="horizontal"
+                activationMode="manual"
+                className="mx-auto w-full max-w-[1150px] rounded-[10px] border border-light-gray bg-[#e8e8e8] p-3 shadow-cool-light-inner sm:p-6"
+            >
+                <div className="mb-4 flex w-fit max-w-full items-center gap-2 rounded-[10px] border border-light-gray bg-[#f1f2f4] p-1.5 shadow-cool-light sm:mb-6">
+                    <span className="shrink-0 px-2 font-display text-sm text-dark-gray">
+                        Your Documents
+                    </span>
+                    <span aria-hidden="true" className="h-7 w-px shrink-0 bg-light-gray" />
+                    <Tabs.List
+                        aria-label="Your Documents"
+                        className="flex min-w-0 items-center rounded-md bg-[#d9d9d9] p-1 shadow-inner"
+                    >
+                        <Tabs.Trigger
+                            value="generated"
+                            className="flex h-7 min-w-0 items-center gap-1.5 rounded px-2 font-display text-xs text-medium-gray outline-none transition-colors hover:text-dark-gray focus-visible:ring-2 focus-visible:ring-dark-accent data-[state=active]:bg-[#f1f2f4] data-[state=active]:text-darkest-accent data-[state=active]:shadow-light sm:px-3"
+                        >
+                            <Files aria-hidden="true" size={14} className="shrink-0" />
+                            <span className="truncate">Generated CVs</span>
+                        </Tabs.Trigger>
+                        <Tabs.Trigger
+                            value="base"
+                            className="flex h-7 min-w-0 items-center gap-1.5 rounded px-2 font-display text-xs text-medium-gray outline-none transition-colors hover:text-dark-gray focus-visible:ring-2 focus-visible:ring-dark-accent data-[state=active]:bg-[#f1f2f4] data-[state=active]:text-darkest-accent data-[state=active]:shadow-light sm:px-3"
+                        >
+                            <FileText aria-hidden="true" size={14} className="shrink-0" />
+                            <span className="truncate">Base CVs</span>
+                        </Tabs.Trigger>
+                    </Tabs.List>
                 </div>
-                <div className="rounded-2xl border border-light-gray bg-off-white p-4 shadow-cool-light sm:p-6">
-                    <div className="flex justify-between">
-                        <h2 className="inline text-xl font-semibold">Base CVs</h2>
-                        <p className="inline shrink-0 font-semibold text-darkest-accent">
+
+                <Tabs.Content
+                    value="generated"
+                    className="outline-none focus-visible:ring-2 focus-visible:ring-dark-accent"
+                >
+                    <GeneratedCvSection
+                        initialItems={generatedCvs}
+                        initialPage={generatedCvsPage}
+                        initialTotal={generatedCvsTotal}
+                        initialError={generatedCvsError}
+                        onPreview={openGeneratedCvPreview}
+                    />
+                </Tabs.Content>
+
+                <Tabs.Content
+                    value="base"
+                    className="rounded-[10px] border border-light-gray bg-[#f1f2f4] p-4 shadow-cool-light outline-none focus-visible:ring-2 focus-visible:ring-dark-accent sm:p-6"
+                >
+                    <div className="flex justify-between gap-4">
+                        <h2 className="sr-only">Base CVs</h2>
+                        <p className="ml-auto shrink-0 font-semibold text-darkest-accent">
                             {baseCvs.length} / {MAX_BASE_CVS}
                         </p>
                     </div>
@@ -547,7 +607,7 @@ export function DocumentsRoute() {
                         onKeyDown={onKeyDown}
                         onDragOver={(event) => event.preventDefault()}
                         onDrop={onDrop}
-                        className={`mt-4 flex min-h-40 flex-col items-center justify-center rounded-xl border-2 border-dashed p-6 text-center transition-colors ${atLimit || uploading ? "cursor-not-allowed border-light-gray opacity-60" : "cursor-pointer border-medium-accent hover:bg-lightest-accent"}`}
+                        className={`mt-2 flex min-h-40 flex-col items-center justify-center rounded-[10px] border border-dashed p-6 text-center transition-colors ${atLimit || uploading ? "cursor-not-allowed border-light-gray opacity-60" : "cursor-pointer border-dark-accent hover:bg-lightest-accent"}`}
                     >
                         {uploading ? (
                             <LoaderCircle className="mb-3 animate-spin text-dark-accent" size={32} />
@@ -561,7 +621,9 @@ export function DocumentsRoute() {
                                     ? "Base CV limit reached"
                                     : "Drop one file here or choose a file"}
                         </p>
-                        <p className="mt-1 text-sm text-medium-gray">PDF, DOCX, or Markdown · 10 MB maximum</p>
+                        <p className="mt-1 text-sm text-medium-gray">
+                            PDF, DOCX, or Markdown · 10 MB maximum
+                        </p>
                         <input
                             ref={inputRef}
                             type="file"
@@ -607,16 +669,8 @@ export function DocumentsRoute() {
                             ))}
                         </ul>
                     )}
-                </div>
-
-                <GeneratedCvSection
-                    initialItems={generatedCvs}
-                    initialPage={generatedCvsPage}
-                    initialTotal={generatedCvsTotal}
-                    initialError={generatedCvsError}
-                    onPreview={openGeneratedCvPreview}
-                />
-            </section>
+                </Tabs.Content>
+            </Tabs.Root>
 
             <DocumentPreviewDialog
                 document={previewDocument}

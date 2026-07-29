@@ -1,10 +1,91 @@
-import type { ActionFunctionArgs, ShouldRevalidateFunctionArgs } from "react-router";
+import {
+	replace,
+	type ActionFunctionArgs,
+	type LoaderFunctionArgs,
+	type ShouldRevalidateFunctionArgs,
+} from "react-router";
 
 import { api, ApiError, requireSession } from "@/lib/api";
 import type { BaseCv } from "@/types/base-cv";
 import type { GeneratedCvSummary } from "@/types/generated-cv";
 
 export const GENERATED_CV_PAGE_SIZE = 20;
+
+const documentsTabConfig = {
+	generated: {
+		defaultSort: "created",
+		sortKeys: ["name", "type", "size", "created", "version", "company"],
+	},
+	base: {
+		defaultSort: "uploaded",
+		sortKeys: ["name", "type", "size", "uploaded"],
+	},
+} as const;
+
+export type DocumentsTab = keyof typeof documentsTabConfig;
+export type SortDirection = "asc" | "desc";
+type GeneratedSortKey = (typeof documentsTabConfig.generated.sortKeys)[number];
+type BaseSortKey = (typeof documentsTabConfig.base.sortKeys)[number];
+
+export type DocumentsUrlState =
+	| {
+			tab: "generated";
+			page: number;
+			sort: GeneratedSortKey;
+			direction: SortDirection;
+	  }
+	| {
+			tab: "base";
+			page: number;
+			sort: BaseSortKey;
+			direction: SortDirection;
+	  };
+
+export const defaultDocumentsState = (tab: DocumentsTab): DocumentsUrlState =>
+	tab === "base"
+		? { tab, page: 1, sort: documentsTabConfig.base.defaultSort, direction: "desc" }
+		: { tab, page: 1, sort: documentsTabConfig.generated.defaultSort, direction: "desc" };
+
+export const serializeDocumentsState = ({ tab, page, sort, direction }: DocumentsUrlState) => {
+	const search = new URLSearchParams();
+	search.set("tab", tab);
+	search.set("page", String(page));
+	search.set("sort", sort);
+	search.set("direction", direction);
+	return `?${search.toString()}`;
+};
+
+const normalizedPage = (value: string | null) => {
+	const page = Number(value);
+	return Number.isInteger(page) && page > 0 ? page : 1;
+};
+
+const normalizedDirection = (value: string | null): SortDirection =>
+	value === "asc" || value === "desc" ? value : "desc";
+
+export const normalizeDocumentsState = (search: string): DocumentsUrlState => {
+	const params = new URLSearchParams(search);
+	const page = normalizedPage(params.get("page"));
+	const direction = normalizedDirection(params.get("direction"));
+	const requestedSort = params.get("sort");
+
+	if (params.get("tab") === "base") {
+		const config = documentsTabConfig.base;
+		const sort = config.sortKeys.find((sortKey) => sortKey === requestedSort) ?? config.defaultSort;
+		return { tab: "base", page, sort, direction };
+	}
+
+	const config = documentsTabConfig.generated;
+	const sort = config.sortKeys.find((sortKey) => sortKey === requestedSort) ?? config.defaultSort;
+	return { tab: "generated", page, sort, direction };
+};
+
+export const ensureCanonicalDocumentsUrl = (request: Request) => {
+	const url = new URL(request.url);
+	const canonicalSearch = serializeDocumentsState(normalizeDocumentsState(url.search));
+	if (url.search === canonicalSearch) return;
+	throw replace(`${url.pathname}${canonicalSearch}${url.hash}`);
+};
 
 export type DocumentsLoaderData = {
 	baseCvs: BaseCv[];
@@ -73,7 +154,8 @@ const loadGeneratedCvsPage = async () => {
 	}
 };
 
-export async function documentsLoader(): Promise<DocumentsLoaderData> {
+export async function documentsLoader({ request }: LoaderFunctionArgs): Promise<DocumentsLoaderData> {
+	ensureCanonicalDocumentsUrl(request);
 	await requireSession();
 	const baseCvs = await api.getBaseCvs();
 	const generated = await loadGeneratedCvsPage();
