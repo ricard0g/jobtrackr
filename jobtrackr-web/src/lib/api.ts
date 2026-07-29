@@ -456,10 +456,22 @@ export const api = {
 		apiRequest<JobDescriptionResponse>(`/applications/${applicationId}/job-description`),
 	getGeneratedCvs: (applicationId: number) =>
 		apiRequest<GeneratedCv[]>(`/applications/${applicationId}/generated-cvs`),
-	getGeneratedCvsPage: ({ page = 0, size = 20 }: { page?: number; size?: number } = {}) => {
+	getGeneratedCvsPage: ({
+		page = 0,
+		size = 10,
+		sort = "created",
+		direction = "desc",
+	}: {
+		page?: number;
+		size?: number;
+		sort?: "name" | "type" | "size" | "created" | "version" | "company";
+		direction?: "asc" | "desc";
+	} = {}) => {
 		const params = new URLSearchParams({
 			page: String(page),
 			size: String(size),
+			sort,
+			direction,
 		});
 		return apiRequest<GeneratedCvPage>(`/generated-cvs?${params.toString()}`);
 	},

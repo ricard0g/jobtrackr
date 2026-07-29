@@ -1,6 +1,7 @@
 package com.ricard0g.jobtrackr_api.service;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
@@ -14,6 +15,9 @@ import java.util.UUID;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.CsvSource;
+import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
@@ -41,9 +45,11 @@ class ApplicationCvServiceListForUserTest {
 
     private static final UUID USER_ID = UUID.fromString("11111111-1111-4111-8111-111111111111");
     private static final OffsetDateTime TIE_TIME = OffsetDateTime.parse("2026-07-18T12:00:00Z");
-    private static final int PAGE_SIZE = 20;
+    private static final int PAGE_SIZE = 10;
     private static final Pageable PAGEABLE =
             PageRequest.of(0, PAGE_SIZE, Sort.by(Sort.Direction.DESC, "createdAt", "applicationCvId"));
+    private static final GeneratedCvListQuery QUERY =
+            new GeneratedCvListQuery(0, PAGE_SIZE, GeneratedCvSortKey.CREATED, Sort.Direction.DESC);
 
     @Mock
     private UserRepository userRepository;
@@ -85,7 +91,7 @@ class ApplicationCvServiceListForUserTest {
                 .thenReturn(List.of(second, first));
 
         // when
-        final GeneratedCvDtos.PageResponse page = service.listForUser(USER_ID, PAGEABLE);
+        final GeneratedCvDtos.PageResponse page = service.listForUser(USER_ID, QUERY);
 
         // then
         assertThat(page.items()).hasSize(2);
@@ -111,7 +117,7 @@ class ApplicationCvServiceListForUserTest {
                 .thenReturn(List.of(third, first, second));
 
         // when
-        final GeneratedCvDtos.PageResponse page = service.listForUser(USER_ID, PAGEABLE);
+        final GeneratedCvDtos.PageResponse page = service.listForUser(USER_ID, QUERY);
 
         // then
         assertThat(page.items())
@@ -126,7 +132,7 @@ class ApplicationCvServiceListForUserTest {
                 .thenReturn(new PageImpl<>(List.of(), PAGEABLE, 0));
 
         // when
-        final GeneratedCvDtos.PageResponse page = service.listForUser(USER_ID, PAGEABLE);
+        final GeneratedCvDtos.PageResponse page = service.listForUser(USER_ID, QUERY);
 
         // then
         assertThat(page.items()).isEmpty();
@@ -134,6 +140,49 @@ class ApplicationCvServiceListForUserTest {
         verify(applicationCvRepository).findIdsByApplication_User_UserId(USER_ID, PAGEABLE);
         org.mockito.Mockito.verify(applicationCvRepository, org.mockito.Mockito.never())
                 .findAllByIdInWithAssociations(org.mockito.ArgumentMatchers.any());
+    }
+
+    @ParameterizedTest
+    @CsvSource({
+        "NAME, ASC, originalFilename",
+        "NAME, DESC, originalFilename",
+        "TYPE, ASC, format",
+        "TYPE, DESC, format",
+        "SIZE, ASC, byteSize",
+        "SIZE, DESC, byteSize",
+        "CREATED, ASC, createdAt",
+        "CREATED, DESC, createdAt",
+        "VERSION, ASC, version",
+        "VERSION, DESC, version",
+        "COMPANY, ASC, application.company.companyName",
+        "COMPANY, DESC, application.company.companyName"
+    })
+    void listForUser_mapsEverySortKeyAndDirectionWithDeterministicTies(
+            final GeneratedCvSortKey sortKey,
+            final Sort.Direction direction,
+            final String persistenceProperty) {
+        // given
+        when(applicationCvRepository.findIdsByApplication_User_UserId(eq(USER_ID), any(Pageable.class)))
+                .thenAnswer(invocation -> {
+                    final Pageable pageable = invocation.getArgument(1);
+                    return new PageImpl<>(List.of(), pageable, 0);
+                });
+        final GeneratedCvListQuery query = new GeneratedCvListQuery(2, PAGE_SIZE, sortKey, direction);
+
+        // when
+        service.listForUser(USER_ID, query);
+
+        // then
+        final ArgumentCaptor<Pageable> pageableCaptor = ArgumentCaptor.forClass(Pageable.class);
+        verify(applicationCvRepository).findIdsByApplication_User_UserId(eq(USER_ID), pageableCaptor.capture());
+        final Pageable pageable = pageableCaptor.getValue();
+        assertThat(pageable.getPageNumber()).isEqualTo(2);
+        assertThat(pageable.getPageSize()).isEqualTo(PAGE_SIZE);
+        assertThat(pageable.getSort().toList())
+                .extracting(Sort.Order::getProperty, Sort.Order::getDirection)
+                .containsExactly(
+                        org.assertj.core.groups.Tuple.tuple(persistenceProperty, direction),
+                        org.assertj.core.groups.Tuple.tuple("applicationCvId", direction));
     }
 
     private ApplicationCv cv(

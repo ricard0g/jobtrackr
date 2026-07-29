@@ -9,7 +9,7 @@ import { api, ApiError, requireSession } from "@/lib/api";
 import type { BaseCv } from "@/types/base-cv";
 import type { GeneratedCvSummary } from "@/types/generated-cv";
 
-export const GENERATED_CV_PAGE_SIZE = 20;
+export const GENERATED_CV_PAGE_SIZE = 10;
 
 const documentsTabConfig = {
 	generated: {
@@ -24,7 +24,7 @@ const documentsTabConfig = {
 
 export type DocumentsTab = keyof typeof documentsTabConfig;
 export type SortDirection = "asc" | "desc";
-type GeneratedSortKey = (typeof documentsTabConfig.generated.sortKeys)[number];
+export type GeneratedSortKey = (typeof documentsTabConfig.generated.sortKeys)[number];
 type BaseSortKey = (typeof documentsTabConfig.base.sortKeys)[number];
 
 export type DocumentsUrlState =
@@ -135,9 +135,23 @@ const actionError = (intent: DocumentsActionIntent, error: unknown): DocumentsAc
 	error: messageFromError(error, "The operation could not be completed."),
 });
 
-const loadGeneratedCvsPage = async () => {
+const emptyGeneratedCvs = {
+	generatedCvs: [] as GeneratedCvSummary[],
+	generatedCvsPage: 0,
+	generatedCvsTotal: 0,
+	generatedCvsError: null as string | null,
+};
+
+const loadGeneratedCvsPage = async (
+	state: Extract<DocumentsUrlState, { tab: "generated" }>,
+) => {
 	try {
-		const page = await api.getGeneratedCvsPage({ page: 0, size: GENERATED_CV_PAGE_SIZE });
+		const page = await api.getGeneratedCvsPage({
+			page: state.page - 1,
+			size: GENERATED_CV_PAGE_SIZE,
+			sort: state.sort,
+			direction: state.direction,
+		});
 		return {
 			generatedCvs: page.items,
 			generatedCvsPage: page.page,
@@ -157,8 +171,21 @@ const loadGeneratedCvsPage = async () => {
 export async function documentsLoader({ request }: LoaderFunctionArgs): Promise<DocumentsLoaderData> {
 	ensureCanonicalDocumentsUrl(request);
 	await requireSession();
+	const url = new URL(request.url);
+	const state = normalizeDocumentsState(url.search);
 	const baseCvs = await api.getBaseCvs();
-	const generated = await loadGeneratedCvsPage();
+	const generated =
+		state.tab === "generated" ? await loadGeneratedCvsPage(state) : emptyGeneratedCvs;
+
+	if (state.tab === "generated" && generated.generatedCvsError == null) {
+		const lastPage = Math.max(1, Math.ceil(generated.generatedCvsTotal / GENERATED_CV_PAGE_SIZE));
+		if (state.page > lastPage) {
+			throw replace(
+				`${url.pathname}${serializeDocumentsState({ ...state, page: lastPage })}${url.hash}`,
+			);
+		}
+	}
+
 	return { baseCvs, ...generated };
 }
 

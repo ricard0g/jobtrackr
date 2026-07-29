@@ -68,8 +68,10 @@ public class ApplicationCvService {
     }
 
     @Transactional(readOnly = true)
-    public GeneratedCvDtos.PageResponse listForUser(final UUID userId, final Pageable pageable) {
+    public GeneratedCvDtos.PageResponse listForUser(
+            final UUID userId, final GeneratedCvListQuery query) {
         requireUser(userId);
+        final Pageable pageable = query.toPageable();
         final Page<Long> idPage = applicationCvRepository.findIdsByApplication_User_UserId(userId, pageable);
         if (idPage.isEmpty()) {
             return new GeneratedCvDtos.PageResponse(List.of(), 0, pageable.getPageNumber(), pageable.getPageSize());

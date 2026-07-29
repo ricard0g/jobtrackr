@@ -1,9 +1,9 @@
 package com.ricard0g.jobtrackr_api.controller;
 
-import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.argThat;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
@@ -19,11 +19,13 @@ import java.util.List;
 import java.util.UUID;
 
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.CsvSource;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.boot.webmvc.test.autoconfigure.WebMvcTest;
 import org.springframework.context.annotation.Import;
-import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
@@ -34,6 +36,8 @@ import com.ricard0g.jobtrackr_api.exception.CvGenerationException;
 import com.ricard0g.jobtrackr_api.exception.GlobalExceptionHandler;
 import com.ricard0g.jobtrackr_api.model.enums.GeneratedCvFormat;
 import com.ricard0g.jobtrackr_api.service.ApplicationCvService;
+import com.ricard0g.jobtrackr_api.service.GeneratedCvListQuery;
+import com.ricard0g.jobtrackr_api.service.GeneratedCvSortKey;
 
 @WebMvcTest(controllers = GeneratedCvController.class)
 @AutoConfigureMockMvc(addFilters = false)
@@ -44,7 +48,7 @@ class GeneratedCvControllerTest {
     private static final UUID USER_ID = UUID.fromString(USER_ID_VALUE);
     private static final Long APPLICATION_ID = 3L;
     private static final Long GENERATED_CV_ID = 9L;
-    private static final int DEFAULT_PAGE_SIZE = 20;
+    private static final int DEFAULT_PAGE_SIZE = 10;
 
     @Autowired
     private MockMvc mockMvc;
@@ -73,7 +77,7 @@ class GeneratedCvControllerTest {
     @Test
     void listForUser_returnsSpringDataPageWithApplicationContext() throws Exception {
         // given
-        when(applicationCvService.listForUser(eq(USER_ID), any(Pageable.class)))
+        when(applicationCvService.listForUser(eq(USER_ID), any(GeneratedCvListQuery.class)))
                 .thenReturn(new GeneratedCvDtos.PageResponse(List.of(sampleSummary()), 21, 0, DEFAULT_PAGE_SIZE));
 
         // when / then
@@ -91,30 +95,29 @@ class GeneratedCvControllerTest {
                 .andExpect(jsonPath("$.total").value(21))
                 .andExpect(jsonPath("$.page").value(0))
                 .andExpect(jsonPath("$.size").value(DEFAULT_PAGE_SIZE));
-        verify(applicationCvService).listForUser(eq(USER_ID), any(Pageable.class));
+        verify(applicationCvService).listForUser(eq(USER_ID), any(GeneratedCvListQuery.class));
     }
 
     @Test
-    void listForUser_defaultsToTwentyItemsPerPage() throws Exception {
+    void listForUser_defaultsToTenItemsPerPage() throws Exception {
         // given
-        when(applicationCvService.listForUser(eq(USER_ID), any(Pageable.class)))
+        when(applicationCvService.listForUser(eq(USER_ID), any(GeneratedCvListQuery.class)))
                 .thenReturn(new GeneratedCvDtos.PageResponse(List.of(), 0, 0, DEFAULT_PAGE_SIZE));
 
         // when
         mockMvc.perform(get("/api/v1/generated-cvs").principal(principal())).andExpect(status().isOk());
 
         // then
-        verify(applicationCvService)
-                .listForUser(
-                        eq(USER_ID),
-                        argThat(pageable ->
-                                pageable.getPageSize() == DEFAULT_PAGE_SIZE && pageable.getPageNumber() == 0));
+        verify(applicationCvService).listForUser(
+                USER_ID,
+                new GeneratedCvListQuery(
+                        0, DEFAULT_PAGE_SIZE, GeneratedCvSortKey.CREATED, Sort.Direction.DESC));
     }
 
     @Test
     void listForUser_forwardsPageAndSizeQueryParams() throws Exception {
         // given
-        when(applicationCvService.listForUser(eq(USER_ID), any(Pageable.class)))
+        when(applicationCvService.listForUser(eq(USER_ID), any(GeneratedCvListQuery.class)))
                 .thenReturn(new GeneratedCvDtos.PageResponse(List.of(), 0, 1, DEFAULT_PAGE_SIZE));
 
         // when / then
@@ -126,7 +129,77 @@ class GeneratedCvControllerTest {
                 .andExpect(jsonPath("$.items").isEmpty())
                 .andExpect(jsonPath("$.page").value(1))
                 .andExpect(jsonPath("$.size").value(DEFAULT_PAGE_SIZE));
-        verify(applicationCvService).listForUser(eq(USER_ID), any(Pageable.class));
+        verify(applicationCvService).listForUser(
+                USER_ID,
+                new GeneratedCvListQuery(
+                        1, DEFAULT_PAGE_SIZE, GeneratedCvSortKey.CREATED, Sort.Direction.DESC));
+    }
+
+    @ParameterizedTest
+    @CsvSource({
+        "name, asc, NAME, ASC",
+        "name, desc, NAME, DESC",
+        "type, asc, TYPE, ASC",
+        "type, desc, TYPE, DESC",
+        "size, asc, SIZE, ASC",
+        "size, desc, SIZE, DESC",
+        "created, asc, CREATED, ASC",
+        "created, desc, CREATED, DESC",
+        "version, asc, VERSION, ASC",
+        "version, desc, VERSION, DESC",
+        "company, asc, COMPANY, ASC",
+        "company, desc, COMPANY, DESC"
+    })
+    void listForUser_acceptsStablePublicSortKeys(
+            final String sort,
+            final String direction,
+            final GeneratedCvSortKey expectedSort,
+            final Sort.Direction expectedDirection)
+            throws Exception {
+        // given
+        when(applicationCvService.listForUser(eq(USER_ID), any(GeneratedCvListQuery.class)))
+                .thenReturn(new GeneratedCvDtos.PageResponse(List.of(), 0, 2, DEFAULT_PAGE_SIZE));
+
+        // when
+        mockMvc.perform(get("/api/v1/generated-cvs")
+                        .param("page", "2")
+                        .param("size", String.valueOf(DEFAULT_PAGE_SIZE))
+                        .param("sort", sort)
+                        .param("direction", direction)
+                        .principal(principal()))
+                .andExpect(status().isOk());
+
+        // then
+        verify(applicationCvService).listForUser(
+                USER_ID,
+                new GeneratedCvListQuery(2, DEFAULT_PAGE_SIZE, expectedSort, expectedDirection));
+    }
+
+    @ParameterizedTest
+    @CsvSource({"createdAt, desc", "application.company.companyName, asc", "created, sideways"})
+    void listForUser_rejectsUnknownSortKeysAndDirections(
+            final String sort, final String direction) throws Exception {
+        // when / then
+        mockMvc.perform(get("/api/v1/generated-cvs")
+                        .param("sort", sort)
+                        .param("direction", direction)
+                        .principal(principal()))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("INVALID_GENERATED_CV_ORDERING"));
+        verifyNoInteractions(applicationCvService);
+    }
+
+    @ParameterizedTest
+    @CsvSource({"page, -1", "size, 0", "size, 101"})
+    void listForUser_rejectsPageAndSizeBoundaryViolations(
+            final String parameter, final String value) throws Exception {
+        // when / then
+        mockMvc.perform(get("/api/v1/generated-cvs")
+                        .param(parameter, value)
+                        .principal(principal()))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("VALIDATION_ERROR"));
+        verifyNoInteractions(applicationCvService);
     }
 
     @Test

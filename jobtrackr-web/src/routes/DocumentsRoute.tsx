@@ -1,4 +1,14 @@
-import { Download, File, Files, FileText, LoaderCircle, Trash2, UploadCloud } from "lucide-react";
+import {
+    Download,
+    EllipsisVertical,
+    Eye,
+    File,
+    Files,
+    FileText,
+    LoaderCircle,
+    Trash2,
+    UploadCloud,
+} from "lucide-react";
 import { Tabs } from "radix-ui";
 import {
     useCallback,
@@ -9,12 +19,25 @@ import {
     type DragEvent,
     type KeyboardEvent,
 } from "react";
-import { Link, useFetcher, useLoaderData, useLocation, useNavigate } from "react-router";
+import {
+    Link,
+    useFetcher,
+    useLoaderData,
+    useLocation,
+    useNavigate,
+    useNavigation,
+    useRevalidator,
+} from "react-router";
 
 import {
     DocumentPreviewDialog,
     type PreviewableDocument,
 } from "@/components/documents/DocumentPreviewDialog";
+import {
+    DocumentTable,
+    type DocumentTableColumn,
+} from "@/components/documents/DocumentTable";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Button } from "@/components/ui/button";
 import { api } from "@/lib/api";
 import type { BaseCv } from "@/types/base-cv";
@@ -26,6 +49,8 @@ import {
     serializeDocumentsState,
     type DocumentsActionData,
     type DocumentsLoaderData,
+    type DocumentsUrlState,
+    type GeneratedSortKey,
 } from "@/routes/documents-data";
 
 const MAX_BASE_CVS = 20;
@@ -33,12 +58,18 @@ const MAX_BYTES = 10 * 1024 * 1024;
 const acceptedExtensions = [".pdf", ".docx", ".md"];
 const formatLabels = { PDF: "PDF", DOCX: "DOCX", MARKDOWN: "Markdown" } as const;
 
-const formatBytes = (bytes: number) =>
-    new Intl.NumberFormat("en", {
-        style: "unit",
-        unit: bytes >= 1024 * 1024 ? "megabyte" : "kilobyte",
-        maximumFractionDigits: 1,
-    }).format(bytes / (bytes >= 1024 * 1024 ? 1024 * 1024 : 1024));
+const compactNumber = new Intl.NumberFormat("en", { maximumFractionDigits: 1 });
+
+const formatBytes = (bytes: number) => {
+    if (bytes < 1024) return `${bytes} B`;
+    if (bytes < 1024 * 1024) return `${compactNumber.format(bytes / 1024)} kB`;
+    return `${compactNumber.format(bytes / (1024 * 1024))} MB`;
+};
+
+const filenameWithoutExtension = (filename: string) => {
+    const extensionIndex = filename.lastIndexOf(".");
+    return extensionIndex > 0 ? filename.slice(0, extensionIndex) : filename;
+};
 
 const formatDate = (value: string) =>
     new Intl.DateTimeFormat("en", { dateStyle: "medium", timeStyle: "short" }).format(new Date(value));
@@ -148,7 +179,7 @@ function BaseCvRow({
     );
 }
 
-function GeneratedCvLibraryRow({
+function GeneratedCvActions({
     generatedCv,
     onPreview,
     onDeleted,
@@ -159,6 +190,7 @@ function GeneratedCvLibraryRow({
 }) {
     const deleteFetcher = useFetcher<DocumentsActionData>();
     const downloadFetcher = useFetcher<DocumentsActionData>();
+    const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
     const openedDownloadRef = useRef<DocumentsActionData | null>(null);
     const removedAfterDeleteRef = useRef<DocumentsActionData | null>(null);
     const deleting = deleteFetcher.state !== "idle";
@@ -185,189 +217,307 @@ function GeneratedCvLibraryRow({
     const confirmDelete = (event: React.FormEvent<HTMLFormElement>) => {
         if (!window.confirm(`Permanently delete ${generatedCv.originalFilename}?`)) {
             event.preventDefault();
+            return;
         }
+        setMobileMenuOpen(false);
     };
 
-    const openPreview = () => onPreview(generatedCv);
-    const onPreviewKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
-        if (event.key === "Enter" || event.key === " ") {
-            event.preventDefault();
-            openPreview();
-        }
+    const preview = () => {
+        setMobileMenuOpen(false);
+        onPreview(generatedCv);
     };
 
     return (
-        <li className="rounded-xl border border-light-gray/80 bg-white/90 p-4">
-            <div className="flex items-start gap-3">
-                <div
-                    role="button"
-                    tabIndex={0}
+        <div>
+            <div className="hidden items-center justify-center gap-1 md:flex">
+                <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon-sm"
                     aria-label={`Preview ${generatedCv.originalFilename}`}
-                    onClick={openPreview}
-                    onKeyDown={onPreviewKeyDown}
-                    className="flex min-w-0 flex-1 cursor-pointer items-start gap-3 rounded-lg outline-none focus-visible:ring-2 focus-visible:ring-dark-accent"
+                    onClick={preview}
                 >
-                    <div className="rounded-lg bg-light-gray/60 p-2 text-medium-gray">
-                        <FileText aria-hidden="true" />
-                    </div>
-                    <div className="min-w-0 flex-1 text-left">
-                        <p className="truncate font-semibold text-dark-gray">{generatedCv.originalFilename}</p>
-                        <p className="mt-1 text-sm text-medium-gray">
-                            {generatedCv.applicationTitle} · {generatedCv.companyName}
-                        </p>
-                        <p className="mt-0.5 text-sm text-medium-gray">
-                            v{generatedCv.version} · {formatLabels[generatedCv.format]} ·{" "}
-                            {formatBytes(generatedCv.byteSize)} · {formatDate(generatedCv.createdAt)}
-                        </p>
-                    </div>
-                </div>
-                <div className="flex gap-1">
-                    <downloadFetcher.Form method="post" action="/documents">
-                        <input type="hidden" name="intent" value="download-generated-cv" />
-                        <input type="hidden" name="generatedCvId" value={generatedCv.generatedCvId} />
+                    <Eye aria-hidden="true" />
+                </Button>
+                <downloadFetcher.Form method="post" action="/documents">
+                    <input type="hidden" name="intent" value="download-generated-cv" />
+                    <input type="hidden" name="generatedCvId" value={generatedCv.generatedCvId} />
+                    <Button
+                        type="submit"
+                        variant="ghost"
+                        size="icon-sm"
+                        disabled={downloading}
+                        aria-label={`Download ${generatedCv.originalFilename}`}
+                    >
+                        {downloading ? <LoaderCircle className="animate-spin" /> : <Download />}
+                    </Button>
+                </downloadFetcher.Form>
+                <deleteFetcher.Form method="post" action="/documents" onSubmit={confirmDelete}>
+                    <input type="hidden" name="intent" value="delete-generated-cv" />
+                    <input type="hidden" name="generatedCvId" value={generatedCv.generatedCvId} />
+                    <Button
+                        type="submit"
+                        variant="ghost"
+                        size="icon-sm"
+                        disabled={deleting}
+                        aria-label={`Delete ${generatedCv.originalFilename}`}
+                    >
+                        {deleting ? <LoaderCircle className="animate-spin" /> : <Trash2 />}
+                    </Button>
+                </deleteFetcher.Form>
+            </div>
+            <div className="flex justify-center md:hidden">
+                <Popover open={mobileMenuOpen} onOpenChange={setMobileMenuOpen}>
+                    <PopoverTrigger asChild>
                         <Button
-                            type="submit"
+                            type="button"
                             variant="ghost"
-                            disabled={downloading}
-                            aria-label={`Download ${generatedCv.originalFilename}`}
+                            size="icon-sm"
+                            aria-label={`Actions for ${generatedCv.originalFilename}`}
+                            aria-haspopup="menu"
                         >
-                            {downloading ? <LoaderCircle className="animate-spin" /> : <Download />}
+                            <EllipsisVertical aria-hidden="true" />
                         </Button>
-                    </downloadFetcher.Form>
-                    <deleteFetcher.Form method="post" action="/documents" onSubmit={confirmDelete}>
-                        <input type="hidden" name="intent" value="delete-generated-cv" />
-                        <input type="hidden" name="generatedCvId" value={generatedCv.generatedCvId} />
+                    </PopoverTrigger>
+                    <PopoverContent
+                        role="menu"
+                        aria-label={`Actions for ${generatedCv.originalFilename}`}
+                        align="end"
+                        className="w-44 min-w-0 bg-[#f1f2f4] p-2 shadow-cool-light"
+                    >
                         <Button
-                            type="submit"
+                            type="button"
+                            role="menuitem"
                             variant="ghost"
-                            disabled={deleting}
-                            aria-label={`Delete ${generatedCv.originalFilename}`}
+                            size="sm"
+                            className="w-full justify-start"
+                            onClick={preview}
                         >
-                            {deleting ? <LoaderCircle className="animate-spin" /> : <Trash2 />}
+                            <Eye aria-hidden="true" />
+                            Preview
                         </Button>
-                    </deleteFetcher.Form>
-                </div>
+                        <downloadFetcher.Form
+                            method="post"
+                            action="/documents"
+                            className="w-full"
+                            onSubmit={() => setMobileMenuOpen(false)}
+                        >
+                            <input type="hidden" name="intent" value="download-generated-cv" />
+                            <input
+                                type="hidden"
+                                name="generatedCvId"
+                                value={generatedCv.generatedCvId}
+                            />
+                            <Button
+                                type="submit"
+                                role="menuitem"
+                                variant="ghost"
+                                size="sm"
+                                className="w-full justify-start"
+                                disabled={downloading}
+                            >
+                                {downloading ? (
+                                    <LoaderCircle className="animate-spin" />
+                                ) : (
+                                    <Download aria-hidden="true" />
+                                )}
+                                Download
+                            </Button>
+                        </downloadFetcher.Form>
+                        <deleteFetcher.Form
+                            method="post"
+                            action="/documents"
+                            className="w-full"
+                            onSubmit={confirmDelete}
+                        >
+                            <input type="hidden" name="intent" value="delete-generated-cv" />
+                            <input
+                                type="hidden"
+                                name="generatedCvId"
+                                value={generatedCv.generatedCvId}
+                            />
+                            <Button
+                                type="submit"
+                                role="menuitem"
+                                variant="ghost"
+                                size="sm"
+                                className="w-full justify-start text-red-700"
+                                disabled={deleting}
+                            >
+                                {deleting ? (
+                                    <LoaderCircle className="animate-spin" />
+                                ) : (
+                                    <Trash2 aria-hidden="true" />
+                                )}
+                                Delete
+                            </Button>
+                        </deleteFetcher.Form>
+                    </PopoverContent>
+                </Popover>
             </div>
             {downloadFetcher.data?.ok === false ? (
-                <p role="alert" className="mt-2 text-sm text-red-700">
+                <p role="alert" className="sr-only">
                     {downloadFetcher.data.error}
                 </p>
             ) : null}
             {deleteFetcher.data?.ok === false ? (
-                <p role="alert" className="mt-2 text-sm text-red-700">
+                <p role="alert" className="sr-only">
                     {deleteFetcher.data.error}
                 </p>
             ) : null}
-        </li>
+        </div>
     );
 }
 
 function GeneratedCvSection({
-    initialItems,
-    initialPage,
-    initialTotal,
-    initialError,
+    items,
+    total,
+    error,
     onPreview,
 }: {
-    initialItems: GeneratedCvSummary[];
-    initialPage: number;
-    initialTotal: number;
-    initialError: string | null;
+    items: GeneratedCvSummary[];
+    total: number;
+    error: string | null;
     onPreview: (generatedCv: GeneratedCvSummary) => void;
 }) {
-    const [items, setItems] = useState(initialItems);
-    const [page, setPage] = useState(initialPage);
-    const [total, setTotal] = useState(initialTotal);
-    const [error, setError] = useState(initialError);
-    const [loadMoreError, setLoadMoreError] = useState<string | null>(null);
-    const [loadingMore, setLoadingMore] = useState(false);
-    const [retrying, setRetrying] = useState(false);
-    const hasMore = items.length < total;
+    const location = useLocation();
+    const navigate = useNavigate();
+    const navigation = useNavigation();
+    const revalidator = useRevalidator();
+    const [deletedIds, setDeletedIds] = useState<Set<number>>(() => new Set());
+    const normalizedState = normalizeDocumentsState(location.search);
+    const urlState: Extract<DocumentsUrlState, { tab: "generated" }> =
+        normalizedState.tab === "generated"
+            ? normalizedState
+            : (defaultDocumentsState("generated") as Extract<
+                DocumentsUrlState,
+                { tab: "generated" }
+            >);
+    const targetState = navigation.location
+        ? normalizeDocumentsState(navigation.location.search)
+        : null;
+    const pending =
+        navigation.state !== "idle" &&
+        targetState?.tab === "generated";
+    const visibleItems = items.filter((item) => !deletedIds.has(item.generatedCvId));
 
-    const removeGeneratedCv = (generatedCvId: number) => {
-        setItems((previous) => previous.filter((item) => item.generatedCvId !== generatedCvId));
-        setTotal((previous) => Math.max(0, previous - 1));
+    const navigateToState = (
+        nextState: Extract<DocumentsUrlState, { tab: "generated" }>,
+    ) => {
+        void navigate(
+            {
+                pathname: location.pathname,
+                search: serializeDocumentsState(nextState),
+                hash: location.hash,
+            },
+            { replace: true },
+        );
     };
 
-    const loadMore = async () => {
-        if (!hasMore || loadingMore) return;
-        setLoadingMore(true);
-        setLoadMoreError(null);
-        const nextPage = page + 1;
-        try {
-            const response = await api.getGeneratedCvsPage({
-                page: nextPage,
-                size: GENERATED_CV_PAGE_SIZE,
-            });
-            setItems((previous) => {
-                const seen = new Set(previous.map((item) => item.generatedCvId));
-                const appended = response.items.filter((item) => !seen.has(item.generatedCvId));
-                return [...previous, ...appended];
-            });
-            setPage(response.page);
-            setTotal(response.total);
-        } catch (loadError) {
-            setLoadMoreError(
-                loadError instanceof Error ? loadError.message : "Could not load more Generated CVs.",
-            );
-        } finally {
-            setLoadingMore(false);
-        }
+    const sort = (sortKey: GeneratedSortKey) => {
+        const nextDirection =
+            urlState.sort === sortKey
+                ? urlState.direction === "asc"
+                    ? "desc"
+                    : "asc"
+                : "asc";
+        navigateToState({
+            ...urlState,
+            page: 1,
+            sort: sortKey,
+            direction: nextDirection,
+        });
     };
 
-    const retry = async () => {
-        if (retrying) return;
-        setRetrying(true);
-        try {
-            const response = await api.getGeneratedCvsPage({
-                page: 0,
-                size: GENERATED_CV_PAGE_SIZE,
-            });
-            setItems(response.items);
-            setPage(response.page);
-            setTotal(response.total);
-            setError(null);
-            setLoadMoreError(null);
-        } catch (loadError) {
-            setError(
-                loadError instanceof Error ? loadError.message : "Generated CVs could not be loaded.",
-            );
-        } finally {
-            setRetrying(false);
-        }
-    };
+    const columns: DocumentTableColumn<GeneratedCvSummary, GeneratedSortKey>[] = [
+        {
+            key: "name",
+            label: "Name",
+            sortable: true,
+            className: "w-[21%]",
+            render: (generatedCv) => filenameWithoutExtension(generatedCv.originalFilename),
+        },
+        {
+            key: "type",
+            label: "Type",
+            sortable: true,
+            className: "w-[9%]",
+            render: (generatedCv) => formatLabels[generatedCv.format],
+        },
+        {
+            key: "size",
+            label: "Size",
+            sortable: true,
+            className: "w-[9%]",
+            render: (generatedCv) => formatBytes(generatedCv.byteSize),
+        },
+        {
+            key: "created",
+            label: "Created",
+            sortable: true,
+            className: "w-[19%]",
+            render: (generatedCv) => formatDate(generatedCv.createdAt),
+        },
+        {
+            key: "version",
+            label: "Version",
+            sortable: true,
+            className: "w-[10%]",
+            render: (generatedCv) => generatedCv.version,
+        },
+        {
+            key: "company",
+            label: "Company",
+            sortable: true,
+            className: "w-[14%]",
+            render: (generatedCv) => generatedCv.companyName,
+        },
+        {
+            key: "actions",
+            label: "Actions",
+            className: "max-w-[72px] md:w-[18%]",
+            headerClassName: "[padding-inline:8px] md:[padding-inline:20px]",
+            cellClassName:
+                "sticky right-0 z-10 bg-[#f1f2f4] md:static md:bg-transparent",
+            render: (generatedCv) => (
+                <GeneratedCvActions
+                    generatedCv={generatedCv}
+                    onPreview={onPreview}
+                    onDeleted={(generatedCvId) =>
+                        setDeletedIds((previous) => new Set(previous).add(generatedCvId))
+                    }
+                />
+            ),
+        },
+    ];
 
     return (
         <section
             aria-labelledby="generated-cvs-heading"
-            className="rounded-[10px] border border-light-gray bg-light-gray/25 p-4 shadow-cool-light-inner sm:p-6"
+            className="rounded-[10px] py-4 px-0 sm:p-6"
         >
             <h2 id="generated-cvs-heading" className="sr-only">
                 Generated CVs
             </h2>
-            <p className="text-sm text-medium-gray">
-                Role-tailored outputs from Generate, newest first.
-            </p>
 
-            {error ? (
-                <div className="mt-6 rounded-xl border border-light-gray bg-white/70 px-4 py-5 text-center">
-                    <p role="alert" className="text-sm text-medium-gray">
-                        {error}
-                    </p>
-                    <Button
-                        type="button"
-                        variant="ghost"
-                        size="sm"
-                        className="mt-3"
-                        disabled={retrying}
-                        onClick={() => void retry()}
-                    >
-                        {retrying ? <LoaderCircle className="animate-spin" /> : null}
-                        Retry
-                    </Button>
-                </div>
-            ) : items.length === 0 ? (
-                <div className="mt-6 flex flex-col items-center py-6 text-center text-medium-gray">
+            <DocumentTable
+                label="Generated CVs"
+                columns={columns}
+                rows={visibleItems}
+                rowKey={(generatedCv) => generatedCv.generatedCvId}
+                sortKey={urlState.sort}
+                direction={urlState.direction}
+                onSort={sort}
+                page={urlState.page}
+                pageSize={GENERATED_CV_PAGE_SIZE}
+                total={total}
+                onPageChange={(page) => navigateToState({ ...urlState, page })}
+                error={error}
+                onRetry={() => revalidator.revalidate()}
+                retrying={revalidator.state !== "idle"}
+                pending={pending}
+                empty={
+                    <div className="flex flex-col items-center text-medium-gray">
                     <File className="mb-2 opacity-70" size={28} />
                     <h3 className="text-sm font-semibold text-dark-gray">No Generated CVs yet</h3>
                     <p className="mt-1 max-w-md text-sm">
@@ -377,48 +527,15 @@ function GeneratedCvSection({
                         </Link>
                         .
                     </p>
-                </div>
-            ) : (
-                <>
-                    <ul className="mt-5 space-y-3">
-                        {items.map((generatedCv) => (
-                            <GeneratedCvLibraryRow
-                                key={generatedCv.generatedCvId}
-                                generatedCv={generatedCv}
-                                onPreview={onPreview}
-                                onDeleted={removeGeneratedCv}
-                            />
-                        ))}
-                    </ul>
-                    {hasMore ? (
-                        <div className="mt-4 flex flex-col items-center gap-2">
-                            {loadMoreError ? (
-                                <p role="alert" className="text-sm text-medium-gray">
-                                    {loadMoreError}
-                                </p>
-                            ) : null}
-                            <Button
-                                type="button"
-                                variant="ghost"
-                                size="sm"
-                                disabled={loadingMore}
-                                onClick={() => void loadMore()}
-                            >
-                                {loadingMore ? <LoaderCircle className="animate-spin" /> : null}
-                                {loadMoreError ? "Retry" : "Load more"}
-                            </Button>
-                        </div>
-                    ) : (
-                        <p className="mt-4 text-center text-xs text-medium-gray">All Generated CVs loaded</p>
-                    )}
-                </>
-            )}
+                    </div>
+                }
+            />
         </section>
     );
 }
 
 export function DocumentsRoute() {
-    const { baseCvs, generatedCvs, generatedCvsPage, generatedCvsTotal, generatedCvsError } =
+    const { baseCvs, generatedCvs, generatedCvsTotal, generatedCvsError } =
         useLoaderData() as DocumentsLoaderData;
     const uploadFetcher = useFetcher<DocumentsActionData>();
     const previewDownloadFetcher = useFetcher<DocumentsActionData>();
@@ -547,27 +664,27 @@ export function DocumentsRoute() {
                 onValueChange={changeTab}
                 orientation="horizontal"
                 activationMode="manual"
-                className="mx-auto w-full max-w-[1150px] rounded-[10px] border border-light-gray bg-[#e8e8e8] p-3 shadow-cool-light-inner sm:p-6"
+                className="mx-auto w-full max-w-[1400px] rounded-[10px] border border-light-gray bg-[#e8e8e8] p-3 shadow-cool-light-inner sm:p-6"
             >
-                <div className="mb-4 flex w-fit max-w-full items-center gap-2 rounded-[10px] border border-light-gray bg-[#f1f2f4] p-1.5 shadow-cool-light sm:mb-6">
-                    <span className="shrink-0 px-2 font-display text-base text-dark-gray">
+                <div className="mb-4 flex w-full sm:w-fit max-w-full items-center gap-2 rounded-[10px] border border-light-gray bg-[#f1f2f4] p-1.5 shadow-cool-light sm:mb-6">
+                    <span className="hidden sm:inline-block shrink-0 px-2 font-display text-base text-dark-gray">
                         Your Documents
                     </span>
-                    <span aria-hidden="true" className="h-7 w-px shrink-0 bg-light-gray" />
+                    <span aria-hidden="true" className="hidden sm:inline-block h-7 w-px shrink-0 bg-light-gray" />
                     <Tabs.List
                         aria-label="Your Documents"
-                        className="flex min-w-0 items-center rounded-md bg-[#d9d9d9] p-1 shadow-inner"
+                        className="flex min-w-0 w-full sm:w-auto items-center rounded-md bg-[#d9d9d9] p-1 shadow-inner"
                     >
                         <Tabs.Trigger
                             value="generated"
-                            className="flex h-7 min-w-0 items-center gap-1.5 rounded px-2 font-display text-base text-medium-gray outline-none transition-colors hover:text-dark-gray focus-visible:ring-2 focus-visible:ring-dark-accent data-[state=active]:bg-[#f1f2f4] data-[state=active]:text-darkest-accent data-[state=active]:shadow-light sm:px-3"
+                            className="flex justify-center sm:justify-start h-7 min-w-0 w-full sm:w-auto items-center gap-1.5 rounded px-2 font-display text-base text-medium-gray outline-none transition-colors hover:text-dark-gray focus-visible:ring-2 focus-visible:ring-dark-accent data-[state=active]:bg-[#f1f2f4] data-[state=active]:text-darkest-accent data-[state=active]:shadow-light sm:px-3"
                         >
                             <Files aria-hidden="true" size={14} className="shrink-0" />
-                            <span className="truncate">Generated CVs</span>
+                            <span className="truncate w-full">Generated CVs</span>
                         </Tabs.Trigger>
                         <Tabs.Trigger
                             value="base"
-                            className="flex h-7 min-w-0 items-center gap-1.5 rounded px-2 font-display text-base text-medium-gray outline-none transition-colors hover:text-dark-gray focus-visible:ring-2 focus-visible:ring-dark-accent data-[state=active]:bg-[#f1f2f4] data-[state=active]:text-darkest-accent data-[state=active]:shadow-light sm:px-3"
+                            className="flex justify-center sm:justify-start h-7 min-w-0 w-full sm:w-auto items-center gap-1.5 rounded px-2 font-display text-base text-medium-gray outline-none transition-colors hover:text-dark-gray focus-visible:ring-2 focus-visible:ring-dark-accent data-[state=active]:bg-[#f1f2f4] data-[state=active]:text-darkest-accent data-[state=active]:shadow-light sm:px-3"
                         >
                             <FileText aria-hidden="true" size={14} className="shrink-0" />
                             <span className="truncate">Base CVs</span>
@@ -580,10 +697,9 @@ export function DocumentsRoute() {
                     className="outline-none focus-visible:ring-2 focus-visible:ring-dark-accent"
                 >
                     <GeneratedCvSection
-                        initialItems={generatedCvs}
-                        initialPage={generatedCvsPage}
-                        initialTotal={generatedCvsTotal}
-                        initialError={generatedCvsError}
+                        items={generatedCvs}
+                        total={generatedCvsTotal}
+                        error={generatedCvsError}
                         onPreview={openGeneratedCvPreview}
                     />
                 </Tabs.Content>
