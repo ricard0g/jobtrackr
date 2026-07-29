@@ -44,6 +44,7 @@ class GeneratedCvControllerTest {
     private static final UUID USER_ID = UUID.fromString(USER_ID_VALUE);
     private static final Long APPLICATION_ID = 3L;
     private static final Long GENERATED_CV_ID = 9L;
+    private static final int DEFAULT_PAGE_SIZE = 20;
 
     @Autowired
     private MockMvc mockMvc;
@@ -73,7 +74,7 @@ class GeneratedCvControllerTest {
     void listForUser_returnsSpringDataPageWithApplicationContext() throws Exception {
         // given
         when(applicationCvService.listForUser(eq(USER_ID), any(Pageable.class)))
-                .thenReturn(new GeneratedCvDtos.PageResponse(List.of(sampleSummary()), 21, 0, 10));
+                .thenReturn(new GeneratedCvDtos.PageResponse(List.of(sampleSummary()), 21, 0, DEFAULT_PAGE_SIZE));
 
         // when / then
         mockMvc.perform(get("/api/v1/generated-cvs").principal(principal()))
@@ -89,15 +90,15 @@ class GeneratedCvControllerTest {
                 .andExpect(jsonPath("$.items[0].createdAt").exists())
                 .andExpect(jsonPath("$.total").value(21))
                 .andExpect(jsonPath("$.page").value(0))
-                .andExpect(jsonPath("$.size").value(10));
+                .andExpect(jsonPath("$.size").value(DEFAULT_PAGE_SIZE));
         verify(applicationCvService).listForUser(eq(USER_ID), any(Pageable.class));
     }
 
     @Test
-    void listForUser_defaultsToTenItemsPerPage() throws Exception {
+    void listForUser_defaultsToTwentyItemsPerPage() throws Exception {
         // given
         when(applicationCvService.listForUser(eq(USER_ID), any(Pageable.class)))
-                .thenReturn(new GeneratedCvDtos.PageResponse(List.of(), 0, 0, 10));
+                .thenReturn(new GeneratedCvDtos.PageResponse(List.of(), 0, 0, DEFAULT_PAGE_SIZE));
 
         // when
         mockMvc.perform(get("/api/v1/generated-cvs").principal(principal())).andExpect(status().isOk());
@@ -106,24 +107,25 @@ class GeneratedCvControllerTest {
         verify(applicationCvService)
                 .listForUser(
                         eq(USER_ID),
-                        argThat(pageable -> pageable.getPageSize() == 10 && pageable.getPageNumber() == 0));
+                        argThat(pageable ->
+                                pageable.getPageSize() == DEFAULT_PAGE_SIZE && pageable.getPageNumber() == 0));
     }
 
     @Test
     void listForUser_forwardsPageAndSizeQueryParams() throws Exception {
         // given
         when(applicationCvService.listForUser(eq(USER_ID), any(Pageable.class)))
-                .thenReturn(new GeneratedCvDtos.PageResponse(List.of(), 0, 1, 10));
+                .thenReturn(new GeneratedCvDtos.PageResponse(List.of(), 0, 1, DEFAULT_PAGE_SIZE));
 
         // when / then
         mockMvc.perform(get("/api/v1/generated-cvs")
                         .param("page", "1")
-                        .param("size", "10")
+                        .param("size", String.valueOf(DEFAULT_PAGE_SIZE))
                         .principal(principal()))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.items").isEmpty())
                 .andExpect(jsonPath("$.page").value(1))
-                .andExpect(jsonPath("$.size").value(10));
+                .andExpect(jsonPath("$.size").value(DEFAULT_PAGE_SIZE));
         verify(applicationCvService).listForUser(eq(USER_ID), any(Pageable.class));
     }
 

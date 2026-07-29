@@ -41,8 +41,9 @@ class ApplicationCvServiceListForUserTest {
 
     private static final UUID USER_ID = UUID.fromString("11111111-1111-4111-8111-111111111111");
     private static final OffsetDateTime TIE_TIME = OffsetDateTime.parse("2026-07-18T12:00:00Z");
+    private static final int PAGE_SIZE = 20;
     private static final Pageable PAGEABLE =
-            PageRequest.of(0, 10, Sort.by(Sort.Direction.DESC, "createdAt", "applicationCvId"));
+            PageRequest.of(0, PAGE_SIZE, Sort.by(Sort.Direction.DESC, "createdAt", "applicationCvId"));
 
     @Mock
     private UserRepository userRepository;
@@ -93,7 +94,7 @@ class ApplicationCvServiceListForUserTest {
         assertThat(page.items().getFirst().companyName()).isEqualTo("Acme");
         assertThat(page.total()).isEqualTo(42);
         assertThat(page.page()).isZero();
-        assertThat(page.size()).isEqualTo(10);
+        assertThat(page.size()).isEqualTo(PAGEABLE.getPageSize());
         verify(applicationCvRepository).findIdsByApplication_User_UserId(USER_ID, PAGEABLE);
         verify(applicationCvRepository).findAllByIdInWithAssociations(List.of(30L, 20L));
     }

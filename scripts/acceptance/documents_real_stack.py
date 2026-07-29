@@ -23,7 +23,7 @@ API_ORIGIN = os.environ.get("VITE_API_ORIGIN", "http://localhost:8080").rstrip("
 AUTH_BASE = f"{API_ORIGIN}/auth"
 API_BASE = f"{API_ORIGIN}/api/v1"
 GOTENBERG_HEALTH = os.environ.get("GOTENBERG_BASE_URL", "http://localhost:3000").rstrip("/") + "/health"
-PAGE_SIZE = 10
+PAGE_SIZE = 20
 DOCX_CONTENT_TYPE = (
     "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
 )
@@ -308,9 +308,9 @@ def plant_generated_cvs(
     cfg = r2_config()
 
     planted: list[dict[str, Any]] = []
-    # 11 filler PDFs for pagination + one MD + one DOCX for format coverage
+    # Enough filler PDFs for a full first page plus overflow + one MD + one DOCX for format coverage
     specs: list[tuple[str, Path, str, str]] = []
-    for index in range(11):
+    for index in range(PAGE_SIZE + 1):
         specs.append(
             (
                 "PDF",
@@ -521,8 +521,8 @@ def run() -> None:
         raise AcceptanceError(f"Expected page size {PAGE_SIZE}, got {page0['size']}")
     if len(page0["items"]) != PAGE_SIZE:
         raise AcceptanceError(f"Expected {PAGE_SIZE} items on page 0, got {len(page0['items'])}")
-    if page0["total"] < 12:
-        raise AcceptanceError(f"Expected at least 12 Generated CVs, got {page0['total']}")
+    if page0["total"] < PAGE_SIZE + 1:
+        raise AcceptanceError(f"Expected more than {PAGE_SIZE} Generated CVs, got {page0['total']}")
     ids = [item["generatedCvId"] for item in page0["items"]]
     if ids != sorted(ids, reverse=True):
         # newest-first by createdAt then id; planted versions increase over time so ids should be desc
@@ -533,7 +533,7 @@ def run() -> None:
     overlap = set(ids) & {item["generatedCvId"] for item in page1["items"]}
     if overlap:
         raise AcceptanceError(f"Pagination duplicated Generated CV ids: {overlap}")
-    step("Generated CV list returns newest-first pages of ten and loads an additional page")
+    step("Generated CV list returns newest-first pages of twenty and loads an additional page")
 
     by_format = {item["format"]: item for item in planted}
     for fmt, path_suffix, content_prefix in (

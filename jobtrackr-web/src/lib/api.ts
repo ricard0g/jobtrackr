@@ -456,7 +456,7 @@ export const api = {
 		apiRequest<JobDescriptionResponse>(`/applications/${applicationId}/job-description`),
 	getGeneratedCvs: (applicationId: number) =>
 		apiRequest<GeneratedCv[]>(`/applications/${applicationId}/generated-cvs`),
-	getGeneratedCvsPage: ({ page = 0, size = 10 }: { page?: number; size?: number } = {}) => {
+	getGeneratedCvsPage: ({ page = 0, size = 20 }: { page?: number; size?: number } = {}) => {
 		const params = new URLSearchParams({
 			page: String(page),
 			size: String(size),

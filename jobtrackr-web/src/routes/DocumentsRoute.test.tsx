@@ -4,7 +4,7 @@ import { createMemoryRouter, RouterProvider } from "react-router";
 
 import { api } from "@/lib/api";
 import { DocumentsRoute } from "@/routes/DocumentsRoute";
-import type { DocumentsLoaderData } from "@/routes/documents-data";
+import { GENERATED_CV_PAGE_SIZE, type DocumentsLoaderData } from "@/routes/documents-data";
 import type { BaseCv } from "@/types/base-cv";
 import type { GeneratedCvSummary } from "@/types/generated-cv";
 
@@ -220,7 +220,7 @@ describe("DocumentsRoute", () => {
 			],
 			total: 2,
 			page: 1,
-			size: 10,
+			size: GENERATED_CV_PAGE_SIZE,
 		});
 
 		renderDocuments({
@@ -238,7 +238,10 @@ describe("DocumentsRoute", () => {
 		});
 		expect(screen.getByText("acme-backend-v2.pdf")).toBeTruthy();
 		expect(screen.getByText("All Generated CVs loaded")).toBeTruthy();
-		expect(api.getGeneratedCvsPage).toHaveBeenCalledWith({ page: 1, size: 10 });
+		expect(api.getGeneratedCvsPage).toHaveBeenCalledWith({
+			page: 1,
+			size: GENERATED_CV_PAGE_SIZE,
+		});
 	});
 
 	it("keeps appended Generated CVs after a Documents action revalidates the loader", async () => {
@@ -254,7 +257,7 @@ describe("DocumentsRoute", () => {
 			],
 			total: 2,
 			page: 1,
-			size: 10,
+			size: GENERATED_CV_PAGE_SIZE,
 		});
 
 		let loaderData: DocumentsLoaderData = {

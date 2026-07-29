@@ -30,7 +30,7 @@ import lombok.RequiredArgsConstructor;
 @Validated
 public class GeneratedCvController {
 
-    private static final int DEFAULT_PAGE_SIZE = 10;
+    private static final int DEFAULT_PAGE_SIZE = 20;
 
     private final ApplicationCvService applicationCvService;
 

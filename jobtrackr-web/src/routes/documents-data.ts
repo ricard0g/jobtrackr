@@ -4,7 +4,7 @@ import { api, ApiError, requireSession } from "@/lib/api";
 import type { BaseCv } from "@/types/base-cv";
 import type { GeneratedCvSummary } from "@/types/generated-cv";
 
-export const GENERATED_CV_PAGE_SIZE = 10;
+export const GENERATED_CV_PAGE_SIZE = 20;
 
 export type DocumentsLoaderData = {
 	baseCvs: BaseCv[];

@@ -24,7 +24,7 @@ Optional seed login (`agent@example.test` / `dev-password`) is useful for the ma
 
 ## Automated HTTP path
 
-Runs upload, authenticated streaming preview, Markdown source delivery, DOCX cache miss/hit against real Gotenberg + R2, Download Original source checks, Generated CV pages of ten, Generated CV previews, delete + cleanup scheduling, and authorization checks:
+Runs upload, authenticated streaming preview, Markdown source delivery, DOCX cache miss/hit against real Gotenberg + R2, Download Original source checks, Generated CV pages of twenty, Generated CV previews, delete + cleanup scheduling, and authorization checks:
 
 ```bash
 ./scripts/acceptance/documents-real-stack.sh
@@ -43,7 +43,7 @@ With the web app at `http://localhost:5173` and `VITE_API_MOCKING=false`:
 5. Confirm PDF/DOCX controls: Previous/Next bounds, Zoom In/Out bounds, Fit to width, Download Original, Close.
 6. Navigate the dialog with keyboard; Escape closes; focus stays inside the dialog while open.
 7. Resize to ~375px width and confirm controls remain usable.
-8. Use Load more when more than ten Generated CVs exist.
+8. Use Load more when more than twenty Generated CVs exist.
 9. Delete a document and confirm it disappears and previewing it fails.
 
 ## Verification gates
