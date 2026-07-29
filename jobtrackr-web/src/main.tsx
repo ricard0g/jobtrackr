@@ -20,7 +20,7 @@ import { loginAction, publicAuthLoader, registerAction } from "@/routes/auth-dat
 import { LoginPage, RegisterPage } from "@/routes/auth";
 import { KanbanRoute } from "@/routes/KanbanRoute";
 import { DocumentsRoute } from "@/routes/DocumentsRoute";
-import { documentsAction, documentsLoader } from "@/routes/documents-data";
+import { documentsAction, documentsLoader, documentsShouldRevalidate } from "@/routes/documents-data";
 import { GenerateRoute } from "@/routes/GenerateRoute";
 import { generateAction, generateLoader } from "@/routes/generate-data";
 
@@ -72,6 +72,7 @@ const router = createBrowserRouter([
 				Component: DocumentsRoute,
 				loader: documentsLoader,
 				action: documentsAction,
+				shouldRevalidate: documentsShouldRevalidate,
 				ErrorBoundary: RootErrorBoundary,
 			},
 			{

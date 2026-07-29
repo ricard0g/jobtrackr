@@ -17,7 +17,10 @@ import software.amazon.awssdk.services.s3.S3Client;
 import software.amazon.awssdk.services.s3.model.DeleteObjectRequest;
 import software.amazon.awssdk.services.s3.model.GetObjectRequest;
 import software.amazon.awssdk.services.s3.model.GetObjectResponse;
+import software.amazon.awssdk.services.s3.model.HeadObjectRequest;
+import software.amazon.awssdk.services.s3.model.NoSuchKeyException;
 import software.amazon.awssdk.services.s3.model.PutObjectRequest;
+import software.amazon.awssdk.services.s3.model.S3Exception;
 import software.amazon.awssdk.services.s3.presigner.S3Presigner;
 import software.amazon.awssdk.services.s3.presigner.model.GetObjectPresignRequest;
 
@@ -59,6 +62,25 @@ public class R2ObjectStorage implements ObjectStorage, BaseCvStorage {
     }
 
     @Override
+    public boolean exists(final String objectKey) {
+        try {
+            final HeadObjectRequest request = HeadObjectRequest.builder()
+                    .bucket(properties.bucket())
+                    .key(objectKey)
+                    .build();
+            r2S3Client.headObject(request);
+            return true;
+        } catch (final NoSuchKeyException exception) {
+            return false;
+        } catch (final SdkException exception) {
+            if (isNotFound(exception)) {
+                return false;
+            }
+            throw StorageUnavailableException.baseCv();
+        }
+    }
+
+    @Override
     public URI createDownloadUri(final String objectKey, final String originalFilename) {
         try {
             final String encodedFilename = URLEncoder.encode(originalFilename, StandardCharsets.UTF_8)
@@ -89,5 +111,12 @@ public class R2ObjectStorage implements ObjectStorage, BaseCvStorage {
         } catch (final SdkException exception) {
             throw StorageUnavailableException.baseCv();
         }
+    }
+
+    private static boolean isNotFound(final SdkException exception) {
+        if (exception instanceof S3Exception s3Exception) {
+            return s3Exception.statusCode() == 404;
+        }
+        return false;
     }
 }

@@ -14,6 +14,7 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.stereotype.Component;
 
 import com.ricard0g.jobtrackr_api.config.cvgeneration.CvGenerationProperties;
@@ -61,6 +62,7 @@ public class CvGenerationServiceClient {
             Map.entry("STORAGE_UNAVAILABLE", "Document storage is temporarily unavailable"),
             Map.entry("INTERNAL_ERROR", "CV generation failed"));
 
+    @Qualifier("cvGenerationHttpClient")
     private final HttpClient cvGenerationHttpClient;
     private final CvGenerationProperties properties;
     private final JsonMapper jsonMapper;

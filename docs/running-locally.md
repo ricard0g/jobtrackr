@@ -50,6 +50,12 @@ Start Postgres:
 
 This also starts the FastAPI CV generation service on `http://localhost:8081`. User-facing CV generation requires the Gemini provider and a configured Google AI API key.
 
+DOCX preview conversion uses the pinned Gotenberg LibreOffice service on `http://localhost:3000`. If Postgres and CV generation are already running, start only Gotenberg:
+
+```bash
+./scripts/dev-gotenberg.sh
+```
+
 Start the API:
 
 ```bash
@@ -67,6 +73,7 @@ Health check:
 ```bash
 curl http://localhost:8080/actuator/health
 curl http://localhost:8081/health/live
+curl http://localhost:3000/health
 ```
 
 Flyway runs automatically when the API starts against a fresh database.
@@ -165,6 +172,16 @@ To restore the existing local snapshot:
 ```
 
 Do not commit raw files in `db/dumps/`; they may contain personal data.
+
+## Documents Real-Stack Acceptance
+
+To prove Documents against the live API, Postgres, R2, and pinned Gotenberg:
+
+```bash
+./scripts/acceptance/documents-real-stack.sh
+```
+
+See `docs/acceptance/documents-real-stack.md` for prerequisites, the automated HTTP path, and the manual UI checklist.
 
 ## Stopping Services
 

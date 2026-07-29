@@ -100,11 +100,11 @@ public class CvGenerationException extends RuntimeException {
                 "Idempotency-Key must be between 1 and 128 characters");
     }
 
-    public static CvGenerationException applicationCvNotFound() {
+    public static CvGenerationException generatedCvNotFound() {
         return new CvGenerationException(
-                "APPLICATION_CV_NOT_FOUND",
+                "GENERATED_CV_NOT_FOUND",
                 HttpStatus.NOT_FOUND,
-                "Generated Application CV not found");
+                "Generated CV not found");
     }
 
     public static CvGenerationException storageUnavailable() {
@@ -112,5 +112,19 @@ public class CvGenerationException extends RuntimeException {
                 "STORAGE_UNAVAILABLE",
                 HttpStatus.BAD_GATEWAY,
                 "Document storage is temporarily unavailable");
+    }
+
+    public static CvGenerationException previewUnavailable() {
+        return new CvGenerationException(
+                "GENERATED_CV_PREVIEW_UNAVAILABLE",
+                HttpStatus.BAD_GATEWAY,
+                "Generated CV preview is temporarily unavailable");
+    }
+
+    public static CvGenerationException previewUnsupportedFormat() {
+        return new CvGenerationException(
+                "GENERATED_CV_PREVIEW_UNSUPPORTED_FORMAT",
+                HttpStatus.UNSUPPORTED_MEDIA_TYPE,
+                "Preview is not available for this Generated CV format");
     }
 }

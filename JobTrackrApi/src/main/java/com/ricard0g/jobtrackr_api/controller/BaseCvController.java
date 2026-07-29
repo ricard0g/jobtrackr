@@ -4,6 +4,7 @@ import java.security.Principal;
 import java.util.List;
 import java.util.UUID;
 
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
@@ -19,9 +20,11 @@ import org.springframework.web.multipart.MultipartFile;
 import org.springframework.web.multipart.MultipartHttpServletRequest;
 
 import com.ricard0g.jobtrackr_api.dto.BaseCvDto.BaseCvDownloadDto;
+import com.ricard0g.jobtrackr_api.dto.BaseCvDto.BaseCvPreviewDto;
 import com.ricard0g.jobtrackr_api.dto.BaseCvDto.BaseCvResponseDto;
 import com.ricard0g.jobtrackr_api.exception.BaseCvException;
 import com.ricard0g.jobtrackr_api.service.BaseCvService;
+import com.ricard0g.jobtrackr_api.util.PreviewHttpHeaders;
 
 import jakarta.validation.constraints.Positive;
 import lombok.RequiredArgsConstructor;
@@ -61,6 +64,21 @@ public class BaseCvController {
             @PathVariable @Positive final Long baseCvId) {
         final UUID userId = AuthenticatedUserId.from(principal);
         return ResponseEntity.ok(baseCvService.createDownload(userId, baseCvId));
+    }
+
+    @GetMapping("/{baseCvId}/preview")
+    public ResponseEntity<byte[]> preview(
+            final Principal principal,
+            @PathVariable @Positive final Long baseCvId) {
+        final UUID userId = AuthenticatedUserId.from(principal);
+        final BaseCvPreviewDto preview = baseCvService.preview(userId, baseCvId);
+        return ResponseEntity.ok()
+                .header(HttpHeaders.CACHE_CONTROL, PreviewHttpHeaders.CACHE_CONTROL)
+                .header(
+                        HttpHeaders.CONTENT_DISPOSITION,
+                        PreviewHttpHeaders.inlineContentDisposition(preview.originalFilename()))
+                .contentType(MediaType.parseMediaType(preview.contentType()))
+                .body(preview.bytes());
     }
 
     @DeleteMapping("/{baseCvId}")

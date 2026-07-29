@@ -9,7 +9,7 @@ import {
 	writePreparingLayoutPreference,
 } from "@/routes/generate-layout-preference";
 import type { Application } from "@/types/application";
-import type { ApplicationCv } from "@/types/application-cv";
+import type { GeneratedCv } from "@/types/generated-cv";
 import type { BaseCv } from "@/types/base-cv";
 import type { AiConsent, CvGeneration } from "@/types/cv-generation";
 
@@ -84,7 +84,7 @@ const generation = (overrides: Partial<CvGeneration> = {}): CvGeneration => ({
 	correlationId: "corr-10",
 	errorCode: null,
 	errorMessage: null,
-	applicationCvId: null,
+	generatedCvId: null,
 	modelId: null,
 	workflowVersion: null,
 	createdAt: "2026-07-16T10:00:00.000Z",
@@ -95,8 +95,8 @@ const generation = (overrides: Partial<CvGeneration> = {}): CvGeneration => ({
 	...overrides,
 });
 
-const applicationCv = (overrides: Partial<ApplicationCv> = {}): ApplicationCv => ({
-	applicationCvId: 5,
+const generatedCv = (overrides: Partial<GeneratedCv> = {}): GeneratedCv => ({
+	generatedCvId: 5,
 	applicationId: 1,
 	version: 1,
 	originalFilename: "application-1-v1.pdf",
@@ -119,7 +119,7 @@ const loaderData = (overrides: Partial<GenerateLoaderData> = {}): GenerateLoader
 	applications: [application()],
 	baseCvs: [baseCv()],
 	generations: [],
-	applicationCvsByApplicationId: {},
+	generatedCvsByApplicationId: {},
 	jobDescriptionsByApplicationId: { 1: "Prefetched job description" },
 	consent: consent(),
 	...overrides,
@@ -190,7 +190,7 @@ describe("GenerateRoute", () => {
 						cvGenerationId: 3,
 						applicationId: 3,
 						status: "COMPLETED",
-						applicationCvId: 1,
+						generatedCvId: 1,
 					}),
 					generation({
 						cvGenerationId: 4,
@@ -201,8 +201,8 @@ describe("GenerateRoute", () => {
 					}),
 					generation({ cvGenerationId: 5, applicationId: 5, status: "CANCELLED" }),
 				],
-				applicationCvsByApplicationId: {
-					3: [applicationCv({ applicationId: 3, applicationCvId: 1 })],
+				generatedCvsByApplicationId: {
+					3: [generatedCv({ applicationId: 3, generatedCvId: 1 })],
 				},
 				jobDescriptionsByApplicationId: {},
 			}),
@@ -248,15 +248,15 @@ describe("GenerateRoute", () => {
 
 	it("disables generate and shows quota messaging when an application has 20 CVs", async () => {
 		const cvs = Array.from({ length: 20 }, (_, index) =>
-			applicationCv({
-				applicationCvId: index + 1,
+			generatedCv({
+				generatedCvId: index + 1,
 				version: index + 1,
 				originalFilename: `application-1-v${index + 1}.pdf`,
 			}),
 		);
 		renderGenerate(
 			loaderData({
-				applicationCvsByApplicationId: { 1: cvs },
+				generatedCvsByApplicationId: { 1: cvs },
 			}),
 		);
 
@@ -325,9 +325,9 @@ describe("GenerateRoute", () => {
 
 		renderGenerate(
 			loaderData({
-				generations: [generation({ status: "COMPLETED", applicationCvId: 5 })],
-				applicationCvsByApplicationId: {
-					1: [applicationCv()],
+				generations: [generation({ status: "COMPLETED", generatedCvId: 5 })],
+				generatedCvsByApplicationId: {
+					1: [generatedCv()],
 				},
 			}),
 			async ({ request }) => {
@@ -411,11 +411,11 @@ describe("GenerateRoute", () => {
 						cvGenerationId: 2,
 						applicationId: 2,
 						status: "COMPLETED",
-						applicationCvId: 9,
+						generatedCvId: 9,
 					}),
 				],
-				applicationCvsByApplicationId: {
-					2: [applicationCv({ applicationId: 2, applicationCvId: 9 })],
+				generatedCvsByApplicationId: {
+					2: [generatedCv({ applicationId: 2, generatedCvId: 9 })],
 				},
 				jobDescriptionsByApplicationId: {},
 			}),
@@ -455,7 +455,7 @@ describe("GenerateRoute", () => {
 						cvGenerationId: 1,
 						applicationId: 1,
 						status: "COMPLETED",
-						applicationCvId: 11,
+						generatedCvId: 11,
 						createdAt: "2026-07-10T10:00:00.000Z",
 					}),
 					generation({
@@ -468,7 +468,7 @@ describe("GenerateRoute", () => {
 						cvGenerationId: 3,
 						applicationId: 2,
 						status: "COMPLETED",
-						applicationCvId: 12,
+						generatedCvId: 12,
 						createdAt: "2026-07-10T10:00:00.000Z",
 					}),
 					generation({
@@ -481,7 +481,7 @@ describe("GenerateRoute", () => {
 						cvGenerationId: 5,
 						applicationId: 3,
 						status: "COMPLETED",
-						applicationCvId: 13,
+						generatedCvId: 13,
 						createdAt: "2026-07-10T10:00:00.000Z",
 					}),
 					generation({
@@ -497,10 +497,10 @@ describe("GenerateRoute", () => {
 						createdAt: "2026-07-16T10:00:00.000Z",
 					}),
 				],
-				applicationCvsByApplicationId: {
-					1: [applicationCv({ applicationId: 1, applicationCvId: 11 })],
-					2: [applicationCv({ applicationId: 2, applicationCvId: 12 })],
-					3: [applicationCv({ applicationId: 3, applicationCvId: 13 })],
+				generatedCvsByApplicationId: {
+					1: [generatedCv({ applicationId: 1, generatedCvId: 11 })],
+					2: [generatedCv({ applicationId: 2, generatedCvId: 12 })],
+					3: [generatedCv({ applicationId: 3, generatedCvId: 13 })],
 				},
 				jobDescriptionsByApplicationId: {},
 			}),
@@ -539,7 +539,7 @@ describe("GenerateRoute", () => {
 						cvGenerationId: 2,
 						applicationId: 1,
 						status: "COMPLETED",
-						applicationCvId: 11,
+						generatedCvId: 11,
 						createdAt: "2026-07-16T10:00:00.000Z",
 					}),
 					generation({
@@ -555,12 +555,12 @@ describe("GenerateRoute", () => {
 						createdAt: "2026-07-16T10:00:00.000Z",
 					}),
 				],
-				applicationCvsByApplicationId: {
-					1: [applicationCv({ applicationId: 1, applicationCvId: 11 })],
+				generatedCvsByApplicationId: {
+					1: [generatedCv({ applicationId: 1, generatedCvId: 11 })],
 					2: [
-						applicationCv({
+						generatedCv({
 							applicationId: 2,
-							applicationCvId: 12,
+							generatedCvId: 12,
 							createdAt: "2026-07-09T09:00:00.000Z",
 						}),
 					],
@@ -609,12 +609,12 @@ describe("GenerateRoute", () => {
 						cvGenerationId: 2,
 						applicationId: 3,
 						status: "COMPLETED",
-						applicationCvId: 13,
+						generatedCvId: 13,
 					}),
 					generation({ cvGenerationId: 3, applicationId: 4, status: "PROCESSING" }),
 				],
-				applicationCvsByApplicationId: {
-					3: [applicationCv({ applicationId: 3, applicationCvId: 13 })],
+				generatedCvsByApplicationId: {
+					3: [generatedCv({ applicationId: 3, generatedCvId: 13 })],
 				},
 				jobDescriptionsByApplicationId: {},
 			}),
@@ -643,7 +643,7 @@ describe("GenerateRoute", () => {
 						cvGenerationId: 1,
 						applicationId: 1,
 						status: "COMPLETED",
-						applicationCvId: 11,
+						generatedCvId: 11,
 						createdAt: "2026-07-10T10:00:00.000Z",
 					}),
 					generation({
@@ -653,8 +653,8 @@ describe("GenerateRoute", () => {
 						createdAt: "2026-07-16T10:00:00.000Z",
 					}),
 				],
-				applicationCvsByApplicationId: {
-					1: [applicationCv({ applicationId: 1, applicationCvId: 11 })],
+				generatedCvsByApplicationId: {
+					1: [generatedCv({ applicationId: 1, generatedCvId: 11 })],
 				},
 				jobDescriptionsByApplicationId: {},
 			}),
@@ -757,7 +757,7 @@ describe("GenerateRoute", () => {
 						updatedAt: "2026-07-14T09:00:00.000Z",
 					}),
 				],
-				applicationCvsByApplicationId: {},
+				generatedCvsByApplicationId: {},
 				jobDescriptionsByApplicationId: {},
 			}),
 		);
@@ -801,27 +801,27 @@ describe("GenerateRoute", () => {
 						cvGenerationId: 1,
 						applicationId: 1,
 						status: "COMPLETED",
-						applicationCvId: 11,
+						generatedCvId: 11,
 					}),
 					generation({
 						cvGenerationId: 2,
 						applicationId: 2,
 						status: "COMPLETED",
-						applicationCvId: 12,
+						generatedCvId: 12,
 					}),
 				],
-				applicationCvsByApplicationId: {
+				generatedCvsByApplicationId: {
 					1: [
-						applicationCv({
+						generatedCv({
 							applicationId: 1,
-							applicationCvId: 11,
+							generatedCvId: 11,
 							createdAt: "2026-07-10T09:00:00.000Z",
 						}),
 					],
 					2: [
-						applicationCv({
+						generatedCv({
 							applicationId: 2,
-							applicationCvId: 12,
+							generatedCvId: 12,
 							createdAt: "2026-07-15T09:00:00.000Z",
 						}),
 					],
@@ -851,11 +851,11 @@ describe("GenerateRoute", () => {
 						cvGenerationId: 1,
 						applicationId: 1,
 						status: "COMPLETED",
-						applicationCvId: 11,
+						generatedCvId: 11,
 					}),
 				],
-				applicationCvsByApplicationId: {
-					1: [applicationCv({ applicationId: 1, applicationCvId: 11 })],
+				generatedCvsByApplicationId: {
+					1: [generatedCv({ applicationId: 1, generatedCvId: 11 })],
 				},
 				jobDescriptionsByApplicationId: {},
 			}),
@@ -913,17 +913,17 @@ describe("GenerateRoute", () => {
 	it("lists successful versions with accessible download and delete controls", async () => {
 		renderGenerate(
 			loaderData({
-				applicationCvsByApplicationId: {
+				generatedCvsByApplicationId: {
 					1: [
-						applicationCv({
+						generatedCv({
 							version: 2,
 							originalFilename: "application-1-v2.pdf",
-							applicationCvId: 6,
+							generatedCvId: 6,
 						}),
-						applicationCv({
+						generatedCv({
 							version: 1,
 							originalFilename: "application-1-v1.pdf",
-							applicationCvId: 5,
+							generatedCvId: 5,
 						}),
 					],
 				},
@@ -1034,14 +1034,14 @@ describe("GenerateRoute", () => {
 				generations: [
 					generation({
 						status: "COMPLETED",
-						applicationCvId: 5,
+						generatedCvId: 5,
 						requestedFormat: "PDF",
 						modelId: "gemini-mock",
 					}),
 				],
-				applicationCvsByApplicationId: {
+				generatedCvsByApplicationId: {
 					1: [
-						applicationCv({
+						generatedCv({
 							createdAt: "2026-07-15T09:00:00.000Z",
 							originalFilename: "settled-v1.pdf",
 						}),
@@ -1152,11 +1152,11 @@ describe("GenerateRoute", () => {
 				generations: [
 					generation({
 						status: "COMPLETED",
-						applicationCvId: 5,
+						generatedCvId: 5,
 					}),
 				],
-				applicationCvsByApplicationId: {
-					1: [applicationCv()],
+				generatedCvsByApplicationId: {
+					1: [generatedCv()],
 				},
 			}),
 		);
@@ -1455,15 +1455,15 @@ describe("GenerateRoute", () => {
 			generations: [
 				generation({
 					status: "COMPLETED",
-					applicationCvId: 5,
+					generatedCvId: 5,
 					modelId: "gemini-3.1-flash-lite",
 					startedAt: "2026-07-16T10:00:00.000Z",
 					completedAt: "2026-07-16T10:01:00.000Z",
 				}),
 			],
-			applicationCvsByApplicationId: {
+			generatedCvsByApplicationId: {
 				1: [
-					applicationCv({
+					generatedCv({
 						originalFilename: "finishing-v1.pdf",
 						createdAt: "2026-07-16T10:01:00.000Z",
 					}),
@@ -1499,7 +1499,7 @@ describe("GenerateRoute", () => {
 				generation({
 					cvGenerationId: 10,
 					status: "COMPLETED",
-					applicationCvId: 5,
+					generatedCvId: 5,
 					createdAt: "2026-07-15T09:00:00.000Z",
 					updatedAt: "2026-07-15T09:00:00.000Z",
 				}),
@@ -1511,8 +1511,8 @@ describe("GenerateRoute", () => {
 					startedAt: null,
 				}),
 			],
-			applicationCvsByApplicationId: {
-				1: [applicationCv({ originalFilename: "retry-v1.pdf" })],
+			generatedCvsByApplicationId: {
+				1: [generatedCv({ originalFilename: "retry-v1.pdf" })],
 			},
 		});
 		const router = createMemoryRouter(
@@ -1537,7 +1537,7 @@ describe("GenerateRoute", () => {
 				generation({
 					cvGenerationId: 10,
 					status: "COMPLETED",
-					applicationCvId: 5,
+					generatedCvId: 5,
 					createdAt: "2026-07-15T09:00:00.000Z",
 					updatedAt: "2026-07-15T09:00:00.000Z",
 				}),
@@ -1549,8 +1549,8 @@ describe("GenerateRoute", () => {
 					startedAt: null,
 				}),
 			],
-			applicationCvsByApplicationId: {
-				1: [applicationCv({ originalFilename: "retry-v1.pdf" })],
+			generatedCvsByApplicationId: {
+				1: [generatedCv({ originalFilename: "retry-v1.pdf" })],
 			},
 		});
 		await act(async () => {
@@ -1593,12 +1593,12 @@ describe("GenerateRoute", () => {
 			generations: [
 				generation({
 					status: "COMPLETED",
-					applicationCvId: 5,
+					generatedCvId: 5,
 					startedAt: "2026-07-16T10:00:00.000Z",
 					completedAt: "2026-07-16T10:01:00.000Z",
 				}),
 			],
-			applicationCvsByApplicationId: {},
+			generatedCvsByApplicationId: {},
 		});
 		await act(async () => {
 			await router.revalidate();
@@ -1612,14 +1612,14 @@ describe("GenerateRoute", () => {
 			generations: [
 				generation({
 					status: "COMPLETED",
-					applicationCvId: 5,
+					generatedCvId: 5,
 					startedAt: "2026-07-16T10:00:00.000Z",
 					completedAt: "2026-07-16T10:01:00.000Z",
 				}),
 			],
-			applicationCvsByApplicationId: {
+			generatedCvsByApplicationId: {
 				1: [
-					applicationCv({
+					generatedCv({
 						originalFilename: "lagging-v1.pdf",
 						createdAt: "2026-07-16T10:01:00.000Z",
 					}),
@@ -1671,11 +1671,11 @@ describe("GenerateRoute", () => {
 					cvGenerationId: 20,
 					applicationId: 2,
 					status: "COMPLETED",
-					applicationCvId: 5,
+					generatedCvId: 5,
 				}),
 			],
-			applicationCvsByApplicationId: {
-				2: [applicationCv({ applicationId: 2 })],
+			generatedCvsByApplicationId: {
+				2: [generatedCv({ applicationId: 2 })],
 			},
 			jobDescriptionsByApplicationId: {},
 		});

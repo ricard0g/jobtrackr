@@ -26,7 +26,7 @@ import {
 	getApplicationStatusOption,
 	type Application,
 } from "@/types/application";
-import type { ApplicationCv } from "@/types/application-cv";
+import type { GeneratedCv } from "@/types/generated-cv";
 import type { BaseCv } from "@/types/base-cv";
 import {
 	cvGenerationStatusLabels,
@@ -36,7 +36,7 @@ import {
 	type GeneratedCvFormat,
 } from "@/types/cv-generation";
 import {
-	MAX_APPLICATION_CVS,
+	MAX_GENERATED_CVS,
 	type GenerateActionData,
 	type GenerateLoaderData,
 } from "@/routes/generate-data";
@@ -94,7 +94,7 @@ const openSignedDownload = (uri: string) => {
 	link.click();
 };
 
-function ApplicationCvRow({ applicationCv }: { applicationCv: ApplicationCv }) {
+function GeneratedCvRow({ generatedCv }: { generatedCv: GeneratedCv }) {
 	const deleteFetcher = useFetcher<GenerateActionData>();
 	const downloadFetcher = useFetcher<GenerateActionData>();
 	const openedDownloadRef = useRef<GenerateActionData | null>(null);
@@ -111,7 +111,7 @@ function ApplicationCvRow({ applicationCv }: { applicationCv: ApplicationCv }) {
 	}, [downloadFetcher.state, downloadFetcher.data]);
 
 	const confirmDelete = (event: React.FormEvent<HTMLFormElement>) => {
-		if (!window.confirm(`Permanently delete ${applicationCv.originalFilename}?`)) {
+		if (!window.confirm(`Permanently delete ${generatedCv.originalFilename}?`)) {
 			event.preventDefault();
 		}
 	};
@@ -119,35 +119,35 @@ function ApplicationCvRow({ applicationCv }: { applicationCv: ApplicationCv }) {
 	return (
 		<li className="flex items-start gap-3 rounded-lg border border-light-gray bg-white px-3 py-2">
 			<div className="min-w-0 flex-1">
-				<p className="truncate text-sm font-semibold text-dark-gray">{applicationCv.originalFilename}</p>
+				<p className="truncate text-sm font-semibold text-dark-gray">{generatedCv.originalFilename}</p>
 				<p className="mt-0.5 text-xs text-medium-gray">
-					v{applicationCv.version} · {formatLabels[applicationCv.format]} ·{" "}
-					{formatBytes(applicationCv.byteSize)} · {formatAbsoluteTime(applicationCv.createdAt)}
+					v{generatedCv.version} · {formatLabels[generatedCv.format]} ·{" "}
+					{formatBytes(generatedCv.byteSize)} · {formatAbsoluteTime(generatedCv.createdAt)}
 				</p>
 			</div>
 			<div className="flex gap-1">
 				<downloadFetcher.Form method="post" action="/generate">
 					<input type="hidden" name="intent" value="download-cv" />
-					<input type="hidden" name="applicationCvId" value={applicationCv.applicationCvId} />
+					<input type="hidden" name="generatedCvId" value={generatedCv.generatedCvId} />
 					<Button
 						type="submit"
 						variant="ghost"
 						size="sm"
 						disabled={downloading}
-						aria-label={`Download ${applicationCv.originalFilename}`}
+						aria-label={`Download ${generatedCv.originalFilename}`}
 					>
 						{downloading ? <LoaderCircle className="animate-spin" /> : <Download />}
 					</Button>
 				</downloadFetcher.Form>
 				<deleteFetcher.Form method="post" action="/generate" onSubmit={confirmDelete}>
 					<input type="hidden" name="intent" value="delete-cv" />
-					<input type="hidden" name="applicationCvId" value={applicationCv.applicationCvId} />
+					<input type="hidden" name="generatedCvId" value={generatedCv.generatedCvId} />
 					<Button
 						type="submit"
 						variant="ghost"
 						size="sm"
 						disabled={deleting}
-						aria-label={`Delete ${applicationCv.originalFilename}`}
+						aria-label={`Delete ${generatedCv.originalFilename}`}
 					>
 						{deleting ? <LoaderCircle className="animate-spin" /> : <Trash2 />}
 					</Button>
@@ -288,7 +288,7 @@ function GenerateDialogForm({
 
 			{atLimit ? (
 				<p role="alert" className="text-sm text-amber-800">
-					This application already has {MAX_APPLICATION_CVS} generated CVs. Delete one before generating
+					This application already has {MAX_GENERATED_CVS} generated CVs. Delete one before generating
 					another.
 				</p>
 			) : null}
@@ -481,7 +481,7 @@ function CompanyMark({
 function ApplicationGenerateRow({
 	application,
 	generations,
-	applicationCvs,
+	generatedCvs,
 	baseCvs,
 	consent,
 	initialJobDescription,
@@ -494,7 +494,7 @@ function ApplicationGenerateRow({
 }: {
 	application: Application;
 	generations: CvGeneration[];
-	applicationCvs: ApplicationCv[];
+	generatedCvs: GeneratedCv[];
 	baseCvs: BaseCv[];
 	consent: AiConsent;
 	initialJobDescription: string;
@@ -511,10 +511,10 @@ function ApplicationGenerateRow({
 	const panelId = useId();
 	const isGrid = section === "preparing" && layout === "grid";
 	const latest = latestGeneration(generations);
-	const atLimit = applicationCvs.length >= MAX_APPLICATION_CVS;
+	const atLimit = generatedCvs.length >= MAX_GENERATED_CVS;
 	const canGenerate = baseCvs.length > 0 && !atLimit;
 	const cancelling = cancelFetcher.state !== "idle";
-	const sortedCvs = applicationCvs.toSorted((left, right) => right.version - left.version);
+	const sortedCvs = generatedCvs.toSorted((left, right) => right.version - left.version);
 	const hasActiveGeneration = generations.some((generation) =>
 		isActiveCvGenerationStatus(generation.status),
 	);
@@ -524,10 +524,10 @@ function ApplicationGenerateRow({
 		null;
 	const statusOption = getApplicationStatusOption(application.applicationStatus);
 	const placeLabel = locationRemoteLabel(application);
-	const stateLabel = generationStateLabel(generations, applicationCvs.length > 0);
+	const stateLabel = generationStateLabel(generations, generatedCvs.length > 0);
 	const activityAt =
 		section === "generated"
-			? generatedActivityAt(applicationCvs)
+			? generatedActivityAt(generatedCvs)
 			: preparingActivityAt(application, generations);
 	const relativeActivity = activityAt ? formatRelativeTime(activityAt) : null;
 	const absoluteActivity = activityAt ? formatAbsoluteTime(activityAt) : null;
@@ -541,8 +541,8 @@ function ApplicationGenerateRow({
 	if (latest?.modelId) {
 		formatModelParts.push(displayModelName(latest.modelId));
 	}
-	const newestCv = newestGeneratedCv(applicationCvs);
-	const cvCount = applicationCvs.length;
+	const newestCv = newestGeneratedCv(generatedCvs);
+	const cvCount = generatedCvs.length;
 
 	const openDialog = () => {
 		setDialogSession((value) => value + 1);
@@ -659,7 +659,7 @@ function ApplicationGenerateRow({
 
 			{atLimit ? (
 				<p className="text-sm text-amber-800">
-					Generated CV limit reached ({applicationCvs.length} / {MAX_APPLICATION_CVS}). Delete one
+					Generated CV limit reached ({generatedCvs.length} / {MAX_GENERATED_CVS}). Delete one
 					to make room.
 				</p>
 			) : null}
@@ -668,10 +668,10 @@ function ApplicationGenerateRow({
 				<div>
 					<h3 className="text-sm font-semibold text-darkest-accent">Successful versions</h3>
 					<ul className="mt-2 space-y-2">
-						{sortedCvs.map((applicationCv) => (
-							<ApplicationCvRow
-								key={applicationCv.applicationCvId}
-								applicationCv={applicationCv}
+						{sortedCvs.map((generatedCv) => (
+							<GeneratedCvRow
+								key={generatedCv.generatedCvId}
+								generatedCv={generatedCv}
 							/>
 						))}
 					</ul>
@@ -897,7 +897,7 @@ export function GenerateRoute() {
 		applications,
 		baseCvs,
 		generations,
-		applicationCvsByApplicationId,
+		generatedCvsByApplicationId,
 		jobDescriptionsByApplicationId,
 		consent,
 	} = useLoaderData() as GenerateLoaderData;
@@ -972,7 +972,7 @@ export function GenerateRoute() {
 		for (const applicationId of previousActiveIdsRef.current) {
 			if (activeIds.has(applicationId)) continue;
 
-			const docs = applicationCvsByApplicationId[applicationId] ?? [];
+			const docs = generatedCvsByApplicationId[applicationId] ?? [];
 			const applicationGenerations = generations.filter(
 				(generation) => generation.applicationId === applicationId,
 			);
@@ -1013,7 +1013,7 @@ export function GenerateRoute() {
 		}
 
 		previousActiveIdsRef.current = stillWatching;
-	}, [applications, applicationCvsByApplicationId, generations]);
+	}, [applications, generatedCvsByApplicationId, generations]);
 
 	useEffect(() => {
 		if (completionHighlightIds.size === 0) return;
@@ -1026,7 +1026,7 @@ export function GenerateRoute() {
 	const { preparing, generated } = buildGenerateSections(
 		applications,
 		generations,
-		applicationCvsByApplicationId,
+		generatedCvsByApplicationId,
 	);
 
 	const renderSectionItems = (
@@ -1041,14 +1041,14 @@ export function GenerateRoute() {
 					: "divide-y divide-light-gray border-y border-light-gray"
 			}
 		>
-			{items.map(({ application, generations: applicationGenerations, applicationCvs }) => {
+			{items.map(({ application, generations: applicationGenerations, generatedCvs }) => {
 				const newlyCompleted = completionHighlightIds.has(application.applicationId);
 				return (
 					<ApplicationGenerateRow
 						key={application.applicationId}
 						application={application}
 						generations={applicationGenerations}
-						applicationCvs={applicationCvs}
+						generatedCvs={generatedCvs}
 						baseCvs={baseCvs}
 						consent={consent}
 						initialJobDescription={

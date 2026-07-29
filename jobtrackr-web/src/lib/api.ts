@@ -22,7 +22,7 @@ import { API_BASE_URL, AUTH_BASE_URL } from "@/lib/api-config";
 import type { Tag, TagWriteRequest } from "@/types/tag";
 import type { User } from "@/types/user";
 import type { BaseCv, BaseCvDownload } from "@/types/base-cv";
-import type { ApplicationCv, ApplicationCvDownload } from "@/types/application-cv";
+import type { GeneratedCv, GeneratedCvDownload, GeneratedCvPage } from "@/types/generated-cv";
 import type {
 	AiConsent,
 	AiConsentRequest,
@@ -238,6 +238,31 @@ async function apiRequest<T>(path: string, init: RequestInit = {}, retry = true)
 	return readJson<T>(response);
 }
 
+async function apiRequestBlob(path: string, init: RequestInit = {}, retry = true): Promise<Blob> {
+	const headers = new Headers(init.headers);
+
+	if (!headers.has("Accept")) headers.set("Accept", "application/pdf");
+	if (accessToken) {
+		headers.set("Authorization", `Bearer ${accessToken}`);
+	}
+
+	const response = await fetch(`${API_BASE_URL}${path}`, {
+		...init,
+		headers,
+	});
+
+	if (response.status === 401 && retry) {
+		await refreshSession();
+		return apiRequestBlob(path, init, false);
+	}
+
+	if (!response.ok) {
+		throw await parseApiError(response, "Preview could not be loaded.");
+	}
+
+	return response.blob();
+}
+
 export async function requireSession() {
 	if (accessToken) {
 		return;
@@ -262,6 +287,10 @@ export const api = {
 		apiRequest<void>(`/base-cvs/${baseCvId}`, { method: "DELETE" }),
 	getBaseCvDownload: (baseCvId: number) =>
 		apiRequest<BaseCvDownload>(`/base-cvs/${baseCvId}/download`),
+	getBaseCvPreview: (baseCvId: number, signal?: AbortSignal) =>
+		apiRequestBlob(`/base-cvs/${baseCvId}/preview`, { signal }),
+	getGeneratedCvPreview: (generatedCvId: number, signal?: AbortSignal) =>
+		apiRequestBlob(`/generated-cvs/${generatedCvId}/preview`, { signal }),
 	getApplications: () => apiRequest<Application[]>("/applications"),
 	getApplicationById: (applicationId: number) =>
 		apiRequest<Application>(`/applications/${applicationId}`),
@@ -425,12 +454,19 @@ export const api = {
 		}),
 	getJobDescription: (applicationId: number) =>
 		apiRequest<JobDescriptionResponse>(`/applications/${applicationId}/job-description`),
-	getApplicationCvs: (applicationId: number) =>
-		apiRequest<ApplicationCv[]>(`/applications/${applicationId}/application-cvs`),
-	getApplicationCvDownload: (applicationCvId: number) =>
-		apiRequest<ApplicationCvDownload>(`/application-cvs/${applicationCvId}/download`),
-	deleteApplicationCv: (applicationCvId: number) =>
-		apiRequest<void>(`/application-cvs/${applicationCvId}`, { method: "DELETE" }),
+	getGeneratedCvs: (applicationId: number) =>
+		apiRequest<GeneratedCv[]>(`/applications/${applicationId}/generated-cvs`),
+	getGeneratedCvsPage: ({ page = 0, size = 20 }: { page?: number; size?: number } = {}) => {
+		const params = new URLSearchParams({
+			page: String(page),
+			size: String(size),
+		});
+		return apiRequest<GeneratedCvPage>(`/generated-cvs?${params.toString()}`);
+	},
+	getGeneratedCvDownload: (generatedCvId: number) =>
+		apiRequest<GeneratedCvDownload>(`/generated-cvs/${generatedCvId}/download`),
+	deleteGeneratedCv: (generatedCvId: number) =>
+		apiRequest<void>(`/generated-cvs/${generatedCvId}`, { method: "DELETE" }),
 };
 
 export type AppLoaderData = {

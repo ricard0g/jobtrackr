@@ -36,3 +36,11 @@ pnpm-debug.log*
 # Local database exports. Keep these local unless sanitized intentionally.
 db/dumps/*
 !db/dumps/.gitkeep
+
+# Generated Documents acceptance artifacts (PDF copies)
+scripts/acceptance/fixtures/*.pdf
+scripts/acceptance/fixtures/*.md
+scripts/acceptance/fixtures/acceptance-generated.docx
+scripts/acceptance/__pycache__/
+scripts/acceptance/**/__pycache__/
+*.pyc

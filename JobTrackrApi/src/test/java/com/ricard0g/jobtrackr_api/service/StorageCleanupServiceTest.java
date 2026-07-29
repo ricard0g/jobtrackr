@@ -66,4 +66,29 @@ class StorageCleanupServiceTest {
         verify(repository).save(job);
         verify(repository, never()).delete(any());
     }
+
+    @Test
+    void processNext_retriesPreviewKeyDeleteFailures() {
+        // given
+        when(properties.maxCleanupAttempts()).thenReturn(5);
+        when(repository.claimNextJobId(any())).thenReturn(Optional.of(9L));
+        final String previewKey = "users/11111111-1111-4111-8111-111111111111/previews/base-cvs/7.pdf";
+        final StorageCleanupJob job = StorageCleanupJob.create(previewKey);
+        when(repository.findById(9L)).thenReturn(Optional.of(job));
+        org.mockito.Mockito
+                .doThrow(new RuntimeException("temporary r2 failure"))
+                .when(objectStorage)
+                .delete(previewKey);
+
+        // when
+        service.processNext();
+
+        // then
+        assert job.getCompletedAt() == null;
+        assert "STORAGE_DELETE_FAILED".equals(job.getLastError());
+        assert job.getNextAttemptAt().isAfter(OffsetDateTime.now().minusSeconds(1));
+        verify(objectStorage).delete(previewKey);
+        verify(repository).save(job);
+        verify(repository, never()).delete(any());
+    }
 }

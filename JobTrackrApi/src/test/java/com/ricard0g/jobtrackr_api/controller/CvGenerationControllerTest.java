@@ -1,5 +1,6 @@
 package com.ricard0g.jobtrackr_api.controller;
 
+import static org.hamcrest.Matchers.nullValue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.verify;
@@ -71,7 +72,21 @@ class CvGenerationControllerTest {
                 .andExpect(jsonPath("$.cvGenerationId").value(11))
                 .andExpect(jsonPath("$.status").value("PENDING"))
                 .andExpect(jsonPath("$.jobDescriptionSnapshot").doesNotExist())
-                .andExpect(jsonPath("$.correlationId").value(CORRELATION_ID.toString()));
+                .andExpect(jsonPath("$.correlationId").value(CORRELATION_ID.toString()))
+                .andExpect(jsonPath("$.generatedCvId").value(nullValue()))
+                .andExpect(jsonPath("$.applicationCvId").doesNotExist());
+    }
+
+    @Test
+    void get_whenCompleted_exposesGeneratedCvId() throws Exception {
+        // given
+        when(cvGenerationService.get(USER_ID, 11L)).thenReturn(completedResponse());
+
+        // when / then
+        mockMvc.perform(get("/api/v1/cv-generations/11").principal(principal()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.generatedCvId").value(99))
+                .andExpect(jsonPath("$.applicationCvId").doesNotExist());
     }
 
     @Test
@@ -138,10 +153,19 @@ class CvGenerationControllerTest {
     }
 
     private CvGenerationDtos.Response sampleResponse() {
-        return sampleResponse(CvGenerationStatus.PENDING);
+        return sampleResponse(CvGenerationStatus.PENDING, null);
     }
 
     private CvGenerationDtos.Response sampleResponse(final CvGenerationStatus status) {
+        return sampleResponse(status, null);
+    }
+
+    private CvGenerationDtos.Response completedResponse() {
+        return sampleResponse(CvGenerationStatus.COMPLETED, 99L);
+    }
+
+    private CvGenerationDtos.Response sampleResponse(
+            final CvGenerationStatus status, final Long generatedCvId) {
         final OffsetDateTime now = OffsetDateTime.parse("2026-07-18T10:00:00Z");
         return new CvGenerationDtos.Response(
                 11L,
@@ -153,7 +177,7 @@ class CvGenerationControllerTest {
                 CORRELATION_ID,
                 null,
                 null,
-                null,
+                generatedCvId,
                 null,
                 null,
                 now,

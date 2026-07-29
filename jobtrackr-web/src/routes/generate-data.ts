@@ -2,7 +2,7 @@ import type { ActionFunctionArgs } from "react-router";
 
 import { api, ApiError, requireSession } from "@/lib/api";
 import type { Application } from "@/types/application";
-import type { ApplicationCv } from "@/types/application-cv";
+import type { GeneratedCv } from "@/types/generated-cv";
 import type { BaseCv } from "@/types/base-cv";
 import type {
 	AiConsent,
@@ -10,7 +10,7 @@ import type {
 	GeneratedCvFormat,
 } from "@/types/cv-generation";
 
-export const MAX_APPLICATION_CVS = 20;
+export const MAX_GENERATED_CVS = 20;
 export const MAX_JOB_DESCRIPTION_CHARS = 50_000;
 export const MAX_ADDITIONAL_INFO_CHARS = 5_000;
 
@@ -18,7 +18,7 @@ export type GenerateLoaderData = {
 	applications: Application[];
 	baseCvs: BaseCv[];
 	generations: CvGeneration[];
-	applicationCvsByApplicationId: Record<number, ApplicationCv[]>;
+	generatedCvsByApplicationId: Record<number, GeneratedCv[]>;
 	jobDescriptionsByApplicationId: Record<number, string>;
 	consent: AiConsent;
 };
@@ -54,7 +54,7 @@ const errorMessages: Record<string, string> = {
 	CV_GENERATION_NOT_FOUND: "This generation is no longer available.",
 	INVALID_STATUS_TRANSITION: "Only queued generations can be cancelled.",
 	MISSING_IDEMPOTENCY_KEY: "The generation request could not be started. Please try again.",
-	APPLICATION_CV_NOT_FOUND: "This generated CV is no longer available.",
+	GENERATED_CV_NOT_FOUND: "This generated CV is no longer available.",
 	STORAGE_UNAVAILABLE: "Document storage is temporarily unavailable. Please try again.",
 	APPLICATION_NOT_FOUND: "This application is no longer available.",
 };
@@ -112,19 +112,19 @@ export async function generateLoader(): Promise<GenerateLoaderData> {
 					);
 					return (
 						knownApplication &&
-						(generation.status === "COMPLETED" || generation.applicationCvId != null)
+						(generation.status === "COMPLETED" || generation.generatedCvId != null)
 					);
 				})
 				.map((generation) => generation.applicationId),
 		),
 	];
 
-	const [applicationCvsEntries, jobDescriptionEntries] = await Promise.all([
+	const [generatedCvsEntries, jobDescriptionEntries] = await Promise.all([
 		Promise.all(
 			applicationIds.map(async (applicationId) => {
 				try {
-					const applicationCvs = await api.getApplicationCvs(applicationId);
-					return [applicationId, applicationCvs] as const;
+					const generatedCvs = await api.getGeneratedCvs(applicationId);
+					return [applicationId, generatedCvs] as const;
 				} catch (error) {
 					if (error instanceof ApiError && error.status === 404) {
 						return [applicationId, []] as const;
@@ -152,7 +152,7 @@ export async function generateLoader(): Promise<GenerateLoaderData> {
 		applications,
 		baseCvs,
 		generations,
-		applicationCvsByApplicationId: Object.fromEntries(applicationCvsEntries),
+		generatedCvsByApplicationId: Object.fromEntries(generatedCvsEntries),
 		jobDescriptionsByApplicationId: Object.fromEntries(jobDescriptionEntries),
 		consent,
 	};
@@ -218,20 +218,20 @@ export async function generateAction({ request }: ActionFunctionArgs): Promise<G
 		}
 
 		if (intent === "delete-cv") {
-			const applicationCvId = Number(formData.get("applicationCvId"));
-			if (!Number.isInteger(applicationCvId) || applicationCvId <= 0) {
+			const generatedCvId = Number(formData.get("generatedCvId"));
+			if (!Number.isInteger(generatedCvId) || generatedCvId <= 0) {
 				return { ok: false, intent, error: "Invalid generated CV." };
 			}
-			await api.deleteApplicationCv(applicationCvId);
+			await api.deleteGeneratedCv(generatedCvId);
 			return { ok: true, intent };
 		}
 
 		if (intent === "download-cv") {
-			const applicationCvId = Number(formData.get("applicationCvId"));
-			if (!Number.isInteger(applicationCvId) || applicationCvId <= 0) {
+			const generatedCvId = Number(formData.get("generatedCvId"));
+			if (!Number.isInteger(generatedCvId) || generatedCvId <= 0) {
 				return { ok: false, intent, error: "Invalid generated CV." };
 			}
-			const download = await api.getApplicationCvDownload(applicationCvId);
+			const download = await api.getGeneratedCvDownload(generatedCvId);
 			return { ok: true, intent, uri: download.uri };
 		}
 
