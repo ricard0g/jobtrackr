@@ -1,10 +1,12 @@
 import {
+    CloudDownload,
     Download,
     EllipsisVertical,
     Eye,
     File,
     Files,
     FileText,
+    Link2,
     LoaderCircle,
     Trash2,
     UploadCloud,
@@ -37,8 +39,31 @@ import {
     DocumentTable,
     type DocumentTableColumn,
 } from "@/components/documents/DocumentTable";
+import {
+    AlertDialog,
+    AlertDialogAction,
+    AlertDialogCancel,
+    AlertDialogContent,
+    AlertDialogDescription,
+    AlertDialogFooter,
+    AlertDialogHeader,
+    AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Button } from "@/components/ui/button";
+import {
+    Tooltip,
+    TooltipContent,
+    TooltipProvider,
+    TooltipTrigger,
+} from "@/components/ui/tooltip";
+import {
+    Toast,
+    ToastDescription,
+    ToastProvider,
+    ToastTitle,
+    ToastViewport,
+} from "@/components/ui/toast";
 import { api } from "@/lib/api";
 import type { BaseCv } from "@/types/base-cv";
 import type { GeneratedCvSummary } from "@/types/generated-cv";
@@ -183,43 +208,72 @@ function GeneratedCvActions({
     generatedCv,
     onPreview,
     onDeleted,
+    onFailure,
+    returnTo,
 }: {
     generatedCv: GeneratedCvSummary;
     onPreview: (generatedCv: GeneratedCvSummary) => void;
     onDeleted: (generatedCvId: number) => void;
+    onFailure: (message: string) => void;
+    returnTo: string;
 }) {
     const deleteFetcher = useFetcher<DocumentsActionData>();
     const downloadFetcher = useFetcher<DocumentsActionData>();
+    const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+    const [desktopMenuOpen, setDesktopMenuOpen] = useState(false);
     const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
     const openedDownloadRef = useRef<DocumentsActionData | null>(null);
+    const mobileDownloadPendingRef = useRef(false);
     const removedAfterDeleteRef = useRef<DocumentsActionData | null>(null);
+    const reportedDeleteErrorRef = useRef<DocumentsActionData | null>(null);
+    const reportedDownloadErrorRef = useRef<DocumentsActionData | null>(null);
     const deleting = deleteFetcher.state !== "idle";
     const downloading = downloadFetcher.state !== "idle";
 
     useEffect(() => {
         if (downloadFetcher.state !== "idle") return;
         const data = downloadFetcher.data;
+        if (data && mobileDownloadPendingRef.current) {
+            mobileDownloadPendingRef.current = false;
+            queueMicrotask(() => setMobileMenuOpen(false));
+        }
+        if (data?.ok === false && data.intent === "download-generated-cv") {
+            if (reportedDownloadErrorRef.current === data) return;
+            reportedDownloadErrorRef.current = data;
+            onFailure(data.error ?? "The download link could not be prepared.");
+            return;
+        }
         if (!data?.ok || data.intent !== "download-generated-cv" || !data.uri) return;
         if (openedDownloadRef.current === data) return;
         openedDownloadRef.current = data;
         openSignedDownload(data.uri);
-    }, [downloadFetcher.state, downloadFetcher.data]);
+    }, [downloadFetcher.state, downloadFetcher.data, onFailure]);
 
     useEffect(() => {
         if (deleteFetcher.state !== "idle") return;
         const data = deleteFetcher.data;
+        if (data?.ok === false && data.intent === "delete-generated-cv") {
+            if (reportedDeleteErrorRef.current === data) return;
+            reportedDeleteErrorRef.current = data;
+            onFailure(data.error ?? "The Generated CV could not be deleted.");
+            return;
+        }
         if (!data?.ok || data.intent !== "delete-generated-cv") return;
         if (removedAfterDeleteRef.current === data) return;
         removedAfterDeleteRef.current = data;
         onDeleted(generatedCv.generatedCvId);
-    }, [deleteFetcher.state, deleteFetcher.data, generatedCv.generatedCvId, onDeleted]);
+    }, [
+        deleteFetcher.state,
+        deleteFetcher.data,
+        generatedCv.generatedCvId,
+        onDeleted,
+        onFailure,
+    ]);
 
-    const confirmDelete = (event: React.FormEvent<HTMLFormElement>) => {
-        if (!window.confirm(`Permanently delete ${generatedCv.originalFilename}?`)) {
-            event.preventDefault();
-            return;
-        }
+    const requestDelete = () => {
+        setDesktopMenuOpen(false);
         setMobileMenuOpen(false);
+        setDeleteDialogOpen(true);
     };
 
     const preview = () => {
@@ -228,63 +282,141 @@ function GeneratedCvActions({
     };
 
     return (
-        <div>
+        <TooltipProvider delayDuration={0}>
             <div className="hidden items-center justify-center gap-1 md:flex">
-                <Button
-                    type="button"
-                    variant="ghost"
-                    size="icon-sm"
-                    aria-label={`Preview ${generatedCv.originalFilename}`}
-                    onClick={preview}
-                >
-                    <Eye aria-hidden="true" />
-                </Button>
-                <downloadFetcher.Form method="post" action="/documents">
-                    <input type="hidden" name="intent" value="download-generated-cv" />
-                    <input type="hidden" name="generatedCvId" value={generatedCv.generatedCvId} />
-                    <Button
-                        type="submit"
-                        variant="ghost"
-                        size="icon-sm"
-                        disabled={downloading}
-                        aria-label={`Download ${generatedCv.originalFilename}`}
-                    >
-                        {downloading ? <LoaderCircle className="animate-spin" /> : <Download />}
-                    </Button>
-                </downloadFetcher.Form>
-                <deleteFetcher.Form method="post" action="/documents" onSubmit={confirmDelete}>
-                    <input type="hidden" name="intent" value="delete-generated-cv" />
-                    <input type="hidden" name="generatedCvId" value={generatedCv.generatedCvId} />
-                    <Button
-                        type="submit"
-                        variant="ghost"
-                        size="icon-sm"
-                        disabled={deleting}
-                        aria-label={`Delete ${generatedCv.originalFilename}`}
-                    >
-                        {deleting ? <LoaderCircle className="animate-spin" /> : <Trash2 />}
-                    </Button>
-                </deleteFetcher.Form>
-            </div>
-            <div className="flex justify-center md:hidden">
-                <Popover open={mobileMenuOpen} onOpenChange={setMobileMenuOpen}>
-                    <PopoverTrigger asChild>
+                <Tooltip>
+                    <TooltipTrigger asChild>
+                        <Button
+                            asChild
+                            variant="ghost"
+                            size="icon-sm"
+                        >
+                            <Link
+                                to={`/applications/${generatedCv.applicationId}`}
+                                state={{ returnTo }}
+                                aria-label={`Open application for ${generatedCv.originalFilename}`}
+                            >
+                                <Link2 aria-hidden="true" />
+                            </Link>
+                        </Button>
+                    </TooltipTrigger>
+                    <TooltipContent>Open Application</TooltipContent>
+                </Tooltip>
+                <Tooltip>
+                    <TooltipTrigger asChild>
                         <Button
                             type="button"
                             variant="ghost"
                             size="icon-sm"
-                            aria-label={`Actions for ${generatedCv.originalFilename}`}
-                            aria-haspopup="menu"
+                            aria-label={`Preview ${generatedCv.originalFilename}`}
+                            onClick={preview}
                         >
-                            <EllipsisVertical aria-hidden="true" />
+                            <Eye aria-hidden="true" />
                         </Button>
-                    </PopoverTrigger>
+                    </TooltipTrigger>
+                    <TooltipContent>Preview</TooltipContent>
+                </Tooltip>
+                <downloadFetcher.Form method="post" action="/documents">
+                    <input type="hidden" name="intent" value="download-generated-cv" />
+                    <input type="hidden" name="generatedCvId" value={generatedCv.generatedCvId} />
+                    <Tooltip>
+                        <TooltipTrigger asChild>
+                            <Button
+                                type="submit"
+                                variant="ghost"
+                                size="icon-sm"
+                                disabled={downloading}
+                                aria-busy={downloading}
+                                aria-label={`Download ${generatedCv.originalFilename}`}
+                            >
+                                {downloading ? (
+                                    <LoaderCircle className="animate-spin" />
+                                ) : (
+                                    <CloudDownload />
+                                )}
+                            </Button>
+                        </TooltipTrigger>
+                        <TooltipContent>Download</TooltipContent>
+                    </Tooltip>
+                </downloadFetcher.Form>
+                <Popover open={desktopMenuOpen} onOpenChange={setDesktopMenuOpen}>
+                    <Tooltip>
+                        <TooltipTrigger asChild>
+                            <PopoverTrigger asChild>
+                                <Button
+                                    type="button"
+                                    variant="ghost"
+                                    size="icon-sm"
+                                    aria-label={`More actions for ${generatedCv.originalFilename}`}
+                                    aria-haspopup="menu"
+                                >
+                                    <EllipsisVertical aria-hidden="true" />
+                                </Button>
+                            </PopoverTrigger>
+                        </TooltipTrigger>
+                        <TooltipContent>More actions</TooltipContent>
+                    </Tooltip>
                     <PopoverContent
                         role="menu"
-                        aria-label={`Actions for ${generatedCv.originalFilename}`}
+                        aria-label={`More actions for ${generatedCv.originalFilename}`}
+                        align="end"
+                        className="w-36 min-w-0 bg-[#f1f2f4] p-2 shadow-cool-light"
+                    >
+                        <Button
+                            type="button"
+                            role="menuitem"
+                            variant="ghost"
+                            size="sm"
+                            className="w-full justify-start text-red-700"
+                            disabled={deleting}
+                            onClick={requestDelete}
+                        >
+                            <Trash2 aria-hidden="true" />
+                            Delete
+                        </Button>
+                    </PopoverContent>
+                </Popover>
+            </div>
+            <div className="flex justify-center md:hidden">
+                <Popover open={mobileMenuOpen} onOpenChange={setMobileMenuOpen}>
+                    <Tooltip>
+                        <TooltipTrigger asChild>
+                            <PopoverTrigger asChild>
+                                <Button
+                                    type="button"
+                                    variant="ghost"
+                                    size="icon-sm"
+                                    aria-label={`More actions for ${generatedCv.originalFilename} on small screens`}
+                                    aria-haspopup="menu"
+                                >
+                                    <EllipsisVertical aria-hidden="true" />
+                                </Button>
+                            </PopoverTrigger>
+                        </TooltipTrigger>
+                        <TooltipContent>More actions</TooltipContent>
+                    </Tooltip>
+                    <PopoverContent
+                        role="menu"
+                        aria-label={`More actions for ${generatedCv.originalFilename} on small screens`}
                         align="end"
                         className="w-44 min-w-0 bg-[#f1f2f4] p-2 shadow-cool-light"
                     >
+                        <Button
+                            asChild
+                            role="menuitem"
+                            variant="ghost"
+                            size="sm"
+                            className="w-full justify-start"
+                        >
+                            <Link
+                                to={`/applications/${generatedCv.applicationId}`}
+                                state={{ returnTo }}
+                                onClick={() => setMobileMenuOpen(false)}
+                            >
+                                <Link2 aria-hidden="true" />
+                                Open Application
+                            </Link>
+                        </Button>
                         <Button
                             type="button"
                             role="menuitem"
@@ -300,7 +432,9 @@ function GeneratedCvActions({
                             method="post"
                             action="/documents"
                             className="w-full"
-                            onSubmit={() => setMobileMenuOpen(false)}
+                            onSubmit={() => {
+                                mobileDownloadPendingRef.current = true;
+                            }}
                         >
                             <input type="hidden" name="intent" value="download-generated-cv" />
                             <input
@@ -315,20 +449,52 @@ function GeneratedCvActions({
                                 size="sm"
                                 className="w-full justify-start"
                                 disabled={downloading}
+                                aria-busy={downloading}
                             >
                                 {downloading ? (
                                     <LoaderCircle className="animate-spin" />
                                 ) : (
-                                    <Download aria-hidden="true" />
+                                    <CloudDownload aria-hidden="true" />
                                 )}
                                 Download
                             </Button>
                         </downloadFetcher.Form>
+                        <Button
+                            type="button"
+                            role="menuitem"
+                            variant="ghost"
+                            size="sm"
+                            className="w-full justify-start text-red-700"
+                            disabled={deleting}
+                            onClick={requestDelete}
+                        >
+                            <Trash2 aria-hidden="true" />
+                            Delete
+                        </Button>
+                    </PopoverContent>
+                </Popover>
+            </div>
+            <AlertDialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
+                <AlertDialogContent>
+                    <AlertDialogHeader>
+                        <AlertDialogTitle>
+                            Delete {generatedCv.originalFilename}?
+                        </AlertDialogTitle>
+                        <AlertDialogDescription>
+                            The Generated CV will be permanently deleted. Its Application,
+                            Kanban state, and generation history will stay intact.
+                        </AlertDialogDescription>
+                    </AlertDialogHeader>
+                    <AlertDialogFooter>
+                        <AlertDialogCancel asChild>
+                            <Button type="button" variant="ghost" disabled={deleting}>
+                                Cancel
+                            </Button>
+                        </AlertDialogCancel>
                         <deleteFetcher.Form
                             method="post"
                             action="/documents"
-                            className="w-full"
-                            onSubmit={confirmDelete}
+                            onSubmit={() => setDeleteDialogOpen(false)}
                         >
                             <input type="hidden" name="intent" value="delete-generated-cv" />
                             <input
@@ -336,36 +502,21 @@ function GeneratedCvActions({
                                 name="generatedCvId"
                                 value={generatedCv.generatedCvId}
                             />
-                            <Button
-                                type="submit"
-                                role="menuitem"
-                                variant="ghost"
-                                size="sm"
-                                className="w-full justify-start text-red-700"
-                                disabled={deleting}
-                            >
-                                {deleting ? (
-                                    <LoaderCircle className="animate-spin" />
-                                ) : (
-                                    <Trash2 aria-hidden="true" />
-                                )}
-                                Delete
-                            </Button>
+                            <AlertDialogAction asChild>
+                                <Button type="submit" disabled={deleting}>
+                                    {deleting ? (
+                                        <LoaderCircle className="animate-spin" />
+                                    ) : (
+                                        <Trash2 aria-hidden="true" />
+                                    )}
+                                    Delete Generated CV
+                                </Button>
+                            </AlertDialogAction>
                         </deleteFetcher.Form>
-                    </PopoverContent>
-                </Popover>
-            </div>
-            {downloadFetcher.data?.ok === false ? (
-                <p role="alert" className="sr-only">
-                    {downloadFetcher.data.error}
-                </p>
-            ) : null}
-            {deleteFetcher.data?.ok === false ? (
-                <p role="alert" className="sr-only">
-                    {deleteFetcher.data.error}
-                </p>
-            ) : null}
-        </div>
+                    </AlertDialogFooter>
+                </AlertDialogContent>
+            </AlertDialog>
+        </TooltipProvider>
     );
 }
 
@@ -385,6 +536,8 @@ function GeneratedCvSection({
     const navigation = useNavigation();
     const revalidator = useRevalidator();
     const [deletedIds, setDeletedIds] = useState<Set<number>>(() => new Set());
+    const [failureToast, setFailureToast] = useState<{ id: number; message: string } | null>(null);
+    const nextToastIdRef = useRef(0);
     const normalizedState = normalizeDocumentsState(location.search);
     const urlState: Extract<DocumentsUrlState, { tab: "generated" }> =
         normalizedState.tab === "generated"
@@ -400,6 +553,10 @@ function GeneratedCvSection({
         navigation.state !== "idle" &&
         targetState?.tab === "generated";
     const visibleItems = items.filter((item) => !deletedIds.has(item.generatedCvId));
+    const showFailureToast = useCallback((message: string) => {
+        nextToastIdRef.current += 1;
+        setFailureToast({ id: nextToastIdRef.current, message });
+    }, []);
 
     const navigateToState = (
         nextState: Extract<DocumentsUrlState, { tab: "generated" }>,
@@ -483,6 +640,8 @@ function GeneratedCvSection({
                 <GeneratedCvActions
                     generatedCv={generatedCv}
                     onPreview={onPreview}
+                    onFailure={showFailureToast}
+                    returnTo={`${location.pathname}${location.search}${location.hash}`}
                     onDeleted={(generatedCvId) =>
                         setDeletedIds((previous) => new Set(previous).add(generatedCvId))
                     }
@@ -492,15 +651,16 @@ function GeneratedCvSection({
     ];
 
     return (
-        <section
-            aria-labelledby="generated-cvs-heading"
-            className="rounded-[10px] py-4 px-0 sm:p-6"
-        >
-            <h2 id="generated-cvs-heading" className="sr-only">
-                Generated CVs
-            </h2>
+        <ToastProvider swipeDirection="right">
+            <section
+                aria-labelledby="generated-cvs-heading"
+                className="rounded-[10px] py-4 px-0 sm:p-6"
+            >
+                <h2 id="generated-cvs-heading" className="sr-only">
+                    Generated CVs
+                </h2>
 
-            <DocumentTable
+                <DocumentTable
                 label="Generated CVs"
                 columns={columns}
                 rows={visibleItems}
@@ -529,8 +689,22 @@ function GeneratedCvSection({
                     </p>
                     </div>
                 }
-            />
-        </section>
+                />
+            </section>
+            <Toast
+                key={failureToast?.id ?? 0}
+                open={failureToast != null}
+                onOpenChange={(open) => {
+                    if (!open) setFailureToast(null);
+                }}
+                duration={6000}
+                role="alert"
+            >
+                <ToastTitle>Document action failed</ToastTitle>
+                <ToastDescription>{failureToast?.message}</ToastDescription>
+            </Toast>
+            <ToastViewport />
+        </ToastProvider>
     );
 }
 

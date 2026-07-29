@@ -12,6 +12,14 @@ import {
 import type { BaseCv } from "@/types/base-cv";
 import type { GeneratedCvSummary } from "@/types/generated-cv";
 
+class ResizeObserverMock {
+	observe() {}
+	unobserve() {}
+	disconnect() {}
+}
+
+vi.stubGlobal("ResizeObserver", ResizeObserverMock);
+
 vi.mock("react-pdf", async () => {
 	const React = await import("react");
 	return {
@@ -127,6 +135,10 @@ const renderDocuments = (
 				action,
 			},
 			{ path: "/generate", element: <div>Generate route</div> },
+			{
+				path: "/applications/:applicationId",
+				element: <div>Application detail route</div>,
+			},
 		],
 		{ initialEntries: [initialEntry] },
 	);
@@ -355,9 +367,16 @@ describe("DocumentsRoute", () => {
 		expect(within(table).getByText("7")).toBeTruthy();
 		expect(within(table).getByText("9")).toBeTruthy();
 		expect(within(table).getAllByText("Acme")).toHaveLength(3);
+		expect(
+			screen.getByRole("link", {
+				name: "Open application for acme-backend-v2.pdf",
+			}),
+		).toBeTruthy();
 		expect(screen.getByRole("button", { name: "Preview acme-backend-v2.pdf" })).toBeTruthy();
 		expect(screen.getByRole("button", { name: "Download acme-backend-v2.pdf" })).toBeTruthy();
-		expect(screen.getByRole("button", { name: "Delete acme-backend-v2.pdf" })).toBeTruthy();
+		expect(
+			screen.getByRole("button", { name: "More actions for acme-backend-v2.pdf" }),
+		).toBeTruthy();
 
 		const headerSurface = document.querySelector(
 			'[data-slot="document-table-head-surface"]',
@@ -379,18 +398,239 @@ describe("DocumentsRoute", () => {
 		expect(actionsCell?.className).toContain("md:static");
 
 		const mobileActions = screen.getByRole("button", {
-			name: "Actions for acme-backend-v2.pdf",
+			name: "More actions for acme-backend-v2.pdf on small screens",
 		});
 		fireEvent.click(mobileActions);
 		const mobileMenu = await screen.findByRole("menu", {
-			name: "Actions for acme-backend-v2.pdf",
+			name: "More actions for acme-backend-v2.pdf on small screens",
 		});
+		expect(
+			within(mobileMenu).getByRole("menuitem", { name: "Open Application" }),
+		).toBeTruthy();
 		expect(within(mobileMenu).getByRole("menuitem", { name: "Preview" })).toBeTruthy();
 		expect(within(mobileMenu).getByRole("menuitem", { name: "Download" })).toBeTruthy();
 		expect(within(mobileMenu).getByRole("menuitem", { name: "Delete" })).toBeTruthy();
 
 		const section = screen.getByRole("heading", { name: "Generated CVs" }).closest("section");
 		expect(section).toBeTruthy();
+	});
+
+	it("keeps Generated CV rows and Name cells inert until Preview is explicitly selected", async () => {
+		const preview = vi.spyOn(api, "getGeneratedCvPreview");
+		renderDocuments({
+			generatedCvs: [generatedCv()],
+			generatedCvsTotal: 1,
+		});
+
+		const name = await screen.findByText("acme-backend-v2");
+		fireEvent.click(name);
+		fireEvent.click(name.closest("tr") as HTMLElement);
+
+		expect(preview).not.toHaveBeenCalled();
+		expect(screen.queryByRole("dialog")).toBeNull();
+	});
+
+	it("opens a Generated CV Application after the explicit row actions in the agreed order", async () => {
+		const initialEntry =
+			"/documents?tab=generated&page=3&sort=company&direction=asc";
+		const router = renderDocuments(
+			{
+				generatedCvs: [generatedCv()],
+				generatedCvsTotal: 21,
+			},
+			undefined,
+			initialEntry,
+		);
+
+		const table = await screen.findByRole("table", { name: "Generated CVs" });
+		const actionsCell = within(table).getByText("acme-backend-v2").closest("tr")?.lastElementChild;
+		expect(actionsCell).toBeTruthy();
+
+		const actionButtons = [
+			within(actionsCell as HTMLElement).getByRole("link", {
+				name: "Open application for acme-backend-v2.pdf",
+			}),
+			within(actionsCell as HTMLElement).getByRole("button", {
+				name: "Preview acme-backend-v2.pdf",
+			}),
+			within(actionsCell as HTMLElement).getByRole("button", {
+				name: "Download acme-backend-v2.pdf",
+			}),
+			within(actionsCell as HTMLElement).getByRole("button", {
+				name: "More actions for acme-backend-v2.pdf",
+			}),
+		];
+
+		expect(actionButtons.map((button) => button.getAttribute("aria-label"))).toEqual([
+			"Open application for acme-backend-v2.pdf",
+			"Preview acme-backend-v2.pdf",
+			"Download acme-backend-v2.pdf",
+			"More actions for acme-backend-v2.pdf",
+		]);
+
+		fireEvent.click(actionButtons[0]);
+
+		await waitFor(() => {
+			expect(router.state.location.pathname).toBe("/applications/3");
+			expect(router.state.location.state).toEqual({ returnTo: initialEntry });
+		});
+	});
+
+	it("shows visible tooltips for every icon-only Generated CV action", async () => {
+		renderDocuments({
+			generatedCvs: [generatedCv()],
+			generatedCvsTotal: 1,
+		});
+
+		await screen.findByRole("table", { name: "Generated CVs" });
+		const actions = [
+			["Open application for acme-backend-v2.pdf", "Open Application"],
+			["Preview acme-backend-v2.pdf", "Preview"],
+			["Download acme-backend-v2.pdf", "Download"],
+			["More actions for acme-backend-v2.pdf", "More actions"],
+		] as const;
+
+		for (const [accessibleName, tooltip] of actions) {
+			const action =
+				accessibleName.startsWith("Open")
+					? screen.getByRole("link", { name: accessibleName })
+					: screen.getByRole("button", { name: accessibleName });
+			fireEvent.focus(action);
+			expect((await screen.findByRole("tooltip")).textContent).toBe(tooltip);
+			fireEvent.blur(action);
+			await waitFor(() => {
+				expect(screen.queryByRole("tooltip")).toBeNull();
+			});
+		}
+
+		const smallScreenActions = screen.getByRole("button", {
+			name: "More actions for acme-backend-v2.pdf on small screens",
+		});
+		fireEvent.focus(smallScreenActions);
+		expect((await screen.findByRole("tooltip")).textContent).toBe("More actions");
+	});
+
+	it("scopes Generated CV download pending state and reports failure in a toast", async () => {
+		let resolveDownload: ((value: unknown) => void) | undefined;
+		const downloadResult = new Promise((resolve) => {
+			resolveDownload = resolve;
+		});
+		const action = vi.fn(async () => downloadResult);
+		const initialEntry =
+			"/documents?tab=generated&page=2&sort=name&direction=desc";
+		const router = renderDocuments(
+			{
+				generatedCvs: [
+					generatedCv(),
+					generatedCv({
+						generatedCvId: 102,
+						originalFilename: "platform-profile.pdf",
+					}),
+				],
+				generatedCvsTotal: 12,
+			},
+			action,
+			initialEntry,
+		);
+
+		await screen.findByRole("button", { name: "Download acme-backend-v2.pdf" });
+		const selectedDownload = screen.getByRole("button", {
+			name: "Download acme-backend-v2.pdf",
+		});
+		const otherDownload = screen.getByRole("button", {
+			name: "Download platform-profile.pdf",
+		});
+		fireEvent.click(selectedDownload);
+
+		await waitFor(() => {
+			expect(action).toHaveBeenCalledTimes(1);
+			expect(selectedDownload.getAttribute("aria-busy")).toBe("true");
+			expect(selectedDownload.hasAttribute("disabled")).toBe(true);
+			expect(selectedDownload.querySelector(".animate-spin")).toBeTruthy();
+			expect(otherDownload.getAttribute("aria-busy")).toBe("false");
+			expect(otherDownload.hasAttribute("disabled")).toBe(false);
+		});
+		fireEvent.click(selectedDownload);
+		expect(action).toHaveBeenCalledTimes(1);
+
+		await act(async () => {
+			resolveDownload?.({
+				ok: false,
+				intent: "download-generated-cv",
+				error: "The download link could not be prepared.",
+			});
+			await downloadResult;
+		});
+
+		const toast = await screen.findByRole("alert");
+		expect(toast.textContent).toContain("The download link could not be prepared.");
+		expect(toast.closest("tr")).toBeNull();
+		expect(router.state.location.pathname + router.state.location.search).toBe(initialEntry);
+		expect(screen.getByText("acme-backend-v2")).toBeTruthy();
+	});
+
+	it("keeps the small-screen action menu open to show row-scoped download pending state", async () => {
+		let resolveDownload: ((value: unknown) => void) | undefined;
+		const downloadResult = new Promise((resolve) => {
+			resolveDownload = resolve;
+		});
+		const action = vi.fn(async () => downloadResult);
+
+		renderDocuments(
+			{
+				generatedCvs: [generatedCv()],
+				generatedCvsTotal: 1,
+			},
+			action,
+		);
+
+		const trigger = await screen.findByRole("button", {
+			name: "More actions for acme-backend-v2.pdf on small screens",
+		});
+		fireEvent.click(trigger);
+		const menu = await screen.findByRole("menu", {
+			name: "More actions for acme-backend-v2.pdf on small screens",
+		});
+		const download = within(menu).getByRole("menuitem", { name: "Download" });
+		fireEvent.click(download);
+
+		await waitFor(() => {
+			expect(action).toHaveBeenCalledTimes(1);
+			expect(
+				screen.getByRole("menu", {
+					name: "More actions for acme-backend-v2.pdf on small screens",
+				}),
+			).toBeTruthy();
+			expect(download.getAttribute("aria-busy")).toBe("true");
+			expect(download.querySelector(".animate-spin")).toBeTruthy();
+		});
+
+		await act(async () => {
+			resolveDownload?.({
+				ok: false,
+				intent: "download-generated-cv",
+				error: "The download link could not be prepared.",
+			});
+			await downloadResult;
+		});
+
+		await waitFor(() => {
+			expect(
+				screen.queryByRole("menu", {
+					name: "More actions for acme-backend-v2.pdf on small screens",
+				}),
+			).toBeNull();
+		});
+		expect((await screen.findByRole("alert")).textContent).toContain(
+			"The download link could not be prepared.",
+		);
+
+		fireEvent.click(trigger);
+		expect(
+			await screen.findByRole("menu", {
+				name: "More actions for acme-backend-v2.pdf on small screens",
+			}),
+		).toBeTruthy();
 	});
 
 	it("sorts every data column through replace navigation and resets to page one", async () => {
@@ -619,9 +859,13 @@ describe("DocumentsRoute", () => {
 		expect(screen.getByRole("button", { name: "Download engineering-profile.pdf" })).toBeTruthy();
 	});
 
-	it("confirms before deleting a Generated CV", async () => {
-		const confirmSpy = vi.spyOn(window, "confirm").mockReturnValue(false);
-		const action = vi.fn();
+	it("deletes a Generated CV only after its document-specific confirmation dialog", async () => {
+		const action = vi.fn(async ({ request }: { request: Request }) => {
+			const formData = await request.formData();
+			expect(formData.get("intent")).toBe("delete-generated-cv");
+			expect(formData.get("generatedCvId")).toBe("101");
+			return { ok: true, intent: "delete-generated-cv" };
+		});
 
 		renderDocuments(
 			{
@@ -631,12 +875,89 @@ describe("DocumentsRoute", () => {
 			action,
 		);
 
-		await screen.findByRole("button", { name: "Preview acme-backend-v2.pdf" });
-		fireEvent.click(screen.getByRole("button", { name: "Delete acme-backend-v2.pdf" }));
+		await screen.findByRole("button", { name: "More actions for acme-backend-v2.pdf" });
+		fireEvent.click(
+			screen.getByRole("button", { name: "More actions for acme-backend-v2.pdf" }),
+		);
+		fireEvent.click(
+			within(
+				await screen.findByRole("menu", {
+					name: "More actions for acme-backend-v2.pdf",
+				}),
+			).getByRole("menuitem", { name: "Delete" }),
+		);
 
-		expect(confirmSpy).toHaveBeenCalledWith("Permanently delete acme-backend-v2.pdf?");
+		const dialog = await screen.findByRole("alertdialog", {
+			name: "Delete acme-backend-v2.pdf?",
+		});
+		expect(dialog.textContent).toContain(
+			"The Generated CV will be permanently deleted. Its Application, Kanban state, and generation history will stay intact.",
+		);
+		fireEvent.click(within(dialog).getByRole("button", { name: "Cancel" }));
 		expect(action).not.toHaveBeenCalled();
-		confirmSpy.mockRestore();
+
+		fireEvent.click(
+			screen.getByRole("button", { name: "More actions for acme-backend-v2.pdf" }),
+		);
+		fireEvent.click(
+			within(
+				await screen.findByRole("menu", {
+					name: "More actions for acme-backend-v2.pdf",
+				}),
+			).getByRole("menuitem", { name: "Delete" }),
+		);
+		fireEvent.click(
+			within(
+				await screen.findByRole("alertdialog", {
+					name: "Delete acme-backend-v2.pdf?",
+				}),
+			).getByRole("button", { name: "Delete Generated CV" }),
+		);
+
+		await waitFor(() => {
+			expect(action).toHaveBeenCalledTimes(1);
+			expect(screen.queryByText("acme-backend-v2")).toBeNull();
+		});
+	});
+
+	it("keeps a Generated CV visible and toasts when deletion fails", async () => {
+		const action = vi.fn(async () => ({
+			ok: false,
+			intent: "delete-generated-cv",
+			error: "This Generated CV could not be deleted.",
+		}));
+
+		renderDocuments(
+			{
+				generatedCvs: [generatedCv()],
+				generatedCvsTotal: 1,
+			},
+			action,
+		);
+
+		await screen.findByRole("button", { name: "More actions for acme-backend-v2.pdf" });
+		fireEvent.click(
+			screen.getByRole("button", { name: "More actions for acme-backend-v2.pdf" }),
+		);
+		fireEvent.click(
+			within(
+				await screen.findByRole("menu", {
+					name: "More actions for acme-backend-v2.pdf",
+				}),
+			).getByRole("menuitem", { name: "Delete" }),
+		);
+		fireEvent.click(
+			within(
+				await screen.findByRole("alertdialog", {
+					name: "Delete acme-backend-v2.pdf?",
+				}),
+			).getByRole("button", { name: "Delete Generated CV" }),
+		);
+
+		const toast = await screen.findByRole("alert");
+		expect(toast.textContent).toContain("This Generated CV could not be deleted.");
+		expect(toast.closest("tr")).toBeNull();
+		expect(screen.getByText("acme-backend-v2")).toBeTruthy();
 	});
 
 	it("opens the preview dialog with a loading state when selecting a Base CV row", async () => {

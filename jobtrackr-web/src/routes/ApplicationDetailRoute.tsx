@@ -10,6 +10,7 @@ import {
     Link,
     useFetcher,
     useLoaderData,
+    useLocation,
     useNavigate,
     useRouteError,
 } from "react-router";
@@ -53,6 +54,7 @@ import type {
     ApplicationDetailActionData,
     ApplicationDetailLoaderData,
 } from "./application-detail-data";
+import { applicationCloseDestination } from "./application-return-navigation";
 
 type DrawerMode = "view" | "edit";
 
@@ -206,7 +208,9 @@ export function ApplicationDetailRoute() {
         tags: allTags,
         upsertApplication,
     } = useBoard();
+    const location = useLocation();
     const navigate = useNavigate();
+    const closeDestination = applicationCloseDestination(location.state);
     const applicationFetcher = useFetcher();
     const tagFetcher = useFetcher();
     const createTagFetcher = useFetcher();
@@ -402,9 +406,9 @@ export function ApplicationDetailRoute() {
             deleteApplicationData.intent === "deleteApplication"
         ) {
             removeApplication(deleteApplicationData.applicationId);
-            navigate("/", { replace: true });
+            navigate(closeDestination, { replace: true });
         }
-    }, [deleteApplicationData, navigate, removeApplication]);
+    }, [closeDestination, deleteApplicationData, navigate, removeApplication]);
 
     const updateFormValue = <T extends keyof InterviewFormValues>(
         name: T,
@@ -510,7 +514,7 @@ export function ApplicationDetailRoute() {
         <Dialog
             open
             onOpenChange={(open) => {
-                if (!open) navigate("/", { replace: true });
+                if (!open) navigate(closeDestination, { replace: true });
             }}
         >
             <DialogContent
