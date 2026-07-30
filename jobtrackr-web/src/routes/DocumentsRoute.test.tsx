@@ -620,6 +620,108 @@ describe("DocumentsRoute", () => {
 		expect(screen.getByText("acme-backend-v2")).toBeTruthy();
 	});
 
+	it("prefers revalidated Recent loader data over a stale Retry fetcher response", async () => {
+		let deletedOnServer = false;
+		let recentFailed = true;
+		const deleted = generatedCv({
+			generatedCvId: 101,
+			originalFilename: "delete-me.pdf",
+		});
+		const staleAfterRetry = [
+			deleted,
+			...Array.from({ length: 4 }, (_, index) =>
+				generatedCv({
+					generatedCvId: 102 + index,
+					originalFilename: `stale-${index + 1}.pdf`,
+				}),
+			),
+		];
+		const refilledAfterDelete = [
+			...staleAfterRetry.slice(1),
+			generatedCv({
+				generatedCvId: 106,
+				originalFilename: "refilled.pdf",
+			}),
+		];
+		const loader = vi.fn((): DocumentsLoaderData => ({
+			baseCvs: [],
+			generatedCvs: deletedOnServer ? [] : [deleted],
+			generatedCvsPage: 0,
+			generatedCvsTotal: deletedOnServer ? 0 : 1,
+			generatedCvsError: null,
+		}));
+		const recentLoader = vi.fn(() => {
+			if (recentFailed) {
+				return { items: [], error: "Recent files could not be loaded." };
+			}
+			return {
+				items: deletedOnServer ? refilledAfterDelete : staleAfterRetry,
+				error: null,
+			};
+		});
+		const action = vi.fn(async () => {
+			deletedOnServer = true;
+			return { ok: true, intent: "delete-generated-cv" };
+		});
+		const router = createMemoryRouter(
+			[
+				documentsRoute({
+					loader,
+					recentLoader,
+					action,
+				}),
+				{
+					path: "/resources/documents/recent",
+					loader: () => {
+						recentFailed = false;
+						return { items: staleAfterRetry, error: null };
+					},
+				},
+			],
+			{
+				initialEntries: ["/documents?tab=generated&page=1&sort=created&direction=desc"],
+			},
+		);
+		render(<RouterProvider router={router} />);
+
+		const recent = await screen.findByRole("region", { name: "Recent files" });
+		expect((await within(recent).findByRole("alert")).textContent).toContain(
+			"Recent files could not be loaded.",
+		);
+
+		fireEvent.click(within(recent).getByRole("button", { name: "Retry" }));
+		expect(
+			await within(recent).findByRole("button", {
+				name: "Preview delete-me.pdf from Recent files",
+			}),
+		).toBeTruthy();
+
+		fireEvent.click(
+			await screen.findByRole("button", { name: "More actions for delete-me.pdf" }),
+		);
+		fireEvent.click(
+			within(
+				await screen.findByRole("menu", {
+					name: "More actions for delete-me.pdf",
+				}),
+			).getByRole("menuitem", { name: "Delete" }),
+		);
+		fireEvent.click(
+			within(
+				await screen.findByRole("alertdialog", {
+					name: "Delete delete-me.pdf?",
+				}),
+			).getByRole("button", { name: "Delete Generated CV" }),
+		);
+
+		await waitFor(() => {
+			const recentAfterDelete = screen.getByRole("region", { name: "Recent files" });
+			expect(within(recentAfterDelete).queryByText("delete-me.pdf")).toBeNull();
+			expect(within(recentAfterDelete).getByText("refilled.pdf")).toBeTruthy();
+		});
+		expect(action).toHaveBeenCalledTimes(1);
+	});
+
 	it("shows five Recent file skeletons while the Recent resource loader is pending", async () => {
 		const router = createMemoryRouter(
 			[
@@ -1505,6 +1607,52 @@ describe("DocumentsRoute", () => {
 		const table = screen.getByRole("table", { name: "Generated CVs" });
 		expect(within(table).queryByText("No Generated CVs in your library")).toBeNull();
 		expect(screen.getByText(/of 20$/)).toBeTruthy();
+	});
+
+	it("clamps the result range when a delete empties the current page", async () => {
+		const onlyOnPageTwo = generatedCv({
+			generatedCvId: 111,
+			originalFilename: "last-on-page.pdf",
+		});
+		const action = vi.fn(async () => ({ ok: true, intent: "delete-generated-cv" }));
+
+		renderDocuments(
+			{
+				generatedCvs: [onlyOnPageTwo],
+				generatedCvsPage: 1,
+				generatedCvsTotal: 11,
+			},
+			action,
+			"/documents?tab=generated&page=2&sort=created&direction=desc",
+		);
+
+		expect(await screen.findByText("11–11 of 11")).toBeTruthy();
+
+		fireEvent.click(
+			await screen.findByRole("button", { name: "More actions for last-on-page.pdf" }),
+		);
+		fireEvent.click(
+			within(
+				await screen.findByRole("menu", {
+					name: "More actions for last-on-page.pdf",
+				}),
+			).getByRole("menuitem", { name: "Delete" }),
+		);
+		fireEvent.click(
+			within(
+				await screen.findByRole("alertdialog", {
+					name: "Delete last-on-page.pdf?",
+				}),
+			).getByRole("button", { name: "Delete Generated CV" }),
+		);
+
+		await waitFor(() => {
+			expect(action).toHaveBeenCalledTimes(1);
+			expect(screen.queryByText("last-on-page")).toBeNull();
+		});
+
+		expect(screen.queryByText("11–10 of 10")).toBeNull();
+		expect(screen.getByText("1–10 of 10")).toBeTruthy();
 	});
 
 	it("keeps a Generated CV visible and toasts when deletion fails", async () => {

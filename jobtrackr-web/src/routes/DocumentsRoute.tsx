@@ -665,7 +665,11 @@ function GeneratedCvSection({
     const navigate = useNavigate();
     const navigation = useNavigation();
     const recentFetcher = useFetcher<RecentGeneratedCvsData>();
-    const recent = recentFetcher.data ?? recentGeneratedCvs;
+    // Keep Retry fetcher data only while the parent recent loader is still in error.
+    const recent =
+        recentGeneratedCvs.error != null && recentFetcher.data != null
+            ? recentFetcher.data
+            : recentGeneratedCvs;
     const [deletedIds, setDeletedIds] = useState<Set<number>>(() => new Set());
     const [failureToast, setFailureToast] = useState<{ id: number; message: string } | null>(null);
     const nextToastIdRef = useRef(0);

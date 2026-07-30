@@ -73,8 +73,9 @@ export function DocumentTable<Row, SortKey extends string>({
 	pending = false,
 }: DocumentTableProps<Row, SortKey>) {
 	const totalPages = Math.max(1, Math.ceil(total / pageSize));
-	const firstResult = total === 0 ? 0 : (page - 1) * pageSize + 1;
-	const lastResult = total === 0 ? 0 : Math.min(page * pageSize, total);
+	const safePage = Math.min(Math.max(1, page), total === 0 ? 1 : totalPages);
+	const firstResult = total === 0 ? 0 : (safePage - 1) * pageSize + 1;
+	const lastResult = total === 0 ? 0 : Math.min(safePage * pageSize, total);
 	const showEmptyLibrary = !error && total === 0;
 	const placeholderCount = error || showEmptyLibrary ? 0 : Math.max(0, pageSize - rows.length);
 
@@ -205,8 +206,8 @@ export function DocumentTable<Row, SortKey extends string>({
 						variant="ghost"
 						size="sm"
 						aria-label="Previous page"
-						disabled={pending || page <= 1}
-						onClick={() => onPageChange(page - 1)}
+						disabled={pending || safePage <= 1}
+						onClick={() => onPageChange(safePage - 1)}
 					>
 						Previous
 					</Button>
@@ -215,8 +216,8 @@ export function DocumentTable<Row, SortKey extends string>({
 						variant="ghost"
 						size="sm"
 						aria-label="Next page"
-						disabled={pending || page >= totalPages}
-						onClick={() => onPageChange(page + 1)}
+						disabled={pending || safePage >= totalPages}
+						onClick={() => onPageChange(safePage + 1)}
 					>
 						Next
 					</Button>
