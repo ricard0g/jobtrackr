@@ -1,6 +1,5 @@
 import {
     CloudDownload,
-    Download,
     EllipsisVertical,
     Eye,
     File,
@@ -15,6 +14,7 @@ import { Tabs } from "radix-ui";
 import {
     useCallback,
     useEffect,
+    useMemo,
     useRef,
     useState,
     type ChangeEvent,
@@ -28,6 +28,7 @@ import {
     useLocation,
     useNavigate,
     useNavigation,
+    useRevalidator,
     useRouteLoaderData,
 } from "react-router";
 
@@ -68,6 +69,7 @@ import type { BaseCv } from "@/types/base-cv";
 import type { GeneratedCvSummary } from "@/types/generated-cv";
 import {
     defaultDocumentsState,
+    BASE_CV_PAGE_SIZE,
     DOCUMENTS_RECENT_ROUTE_ID,
     GENERATED_CV_PAGE_SIZE,
     normalizeDocumentsState,
@@ -76,6 +78,7 @@ import {
     type DocumentsActionData,
     type DocumentsLoaderData,
     type DocumentsUrlState,
+    type BaseSortKey,
     type GeneratedSortKey,
     type RecentGeneratedCvsData,
 } from "@/routes/documents-data";
@@ -98,6 +101,12 @@ const filenameWithoutExtension = (filename: string) => {
     return extensionIndex > 0 ? filename.slice(0, extensionIndex) : filename;
 };
 
+const nextSortDirection = (
+    currentSort: string,
+    currentDirection: "asc" | "desc",
+    nextSort: string,
+) => (currentSort === nextSort && currentDirection === "asc" ? "desc" : "asc");
+
 const formatDate = (value: string) =>
     new Intl.DateTimeFormat("en", { dateStyle: "medium", timeStyle: "short" }).format(new Date(value));
 
@@ -109,100 +118,172 @@ const openSignedDownload = (uri: string) => {
     link.click();
 };
 
-function BaseCvRow({
+function BaseCvActions({
     baseCv,
     onPreview,
+    onFailure,
 }: {
     baseCv: BaseCv;
     onPreview: (baseCv: BaseCv) => void;
+    onFailure: (message: string) => void;
 }) {
     const deleteFetcher = useFetcher<DocumentsActionData>();
     const downloadFetcher = useFetcher<DocumentsActionData>();
+    const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+    const [menuOpen, setMenuOpen] = useState(false);
     const openedDownloadRef = useRef<DocumentsActionData | null>(null);
+    const reportedDeleteErrorRef = useRef<DocumentsActionData | null>(null);
+    const reportedDownloadErrorRef = useRef<DocumentsActionData | null>(null);
     const deleting = deleteFetcher.state !== "idle";
     const downloading = downloadFetcher.state !== "idle";
 
     useEffect(() => {
         if (downloadFetcher.state !== "idle") return;
         const data = downloadFetcher.data;
+        if (data?.ok === false && data.intent === "download") {
+            if (reportedDownloadErrorRef.current === data) return;
+            reportedDownloadErrorRef.current = data;
+            onFailure(data.error ?? "The download link could not be prepared.");
+            return;
+        }
         if (!data?.ok || data.intent !== "download" || !data.uri) return;
         if (openedDownloadRef.current === data) return;
         openedDownloadRef.current = data;
         openSignedDownload(data.uri);
-    }, [downloadFetcher.state, downloadFetcher.data]);
+    }, [downloadFetcher.state, downloadFetcher.data, onFailure]);
 
-    const confirmDelete = (event: React.FormEvent<HTMLFormElement>) => {
-        if (!window.confirm(`Permanently delete ${baseCv.originalFilename}?`)) event.preventDefault();
+    useEffect(() => {
+        if (deleteFetcher.state !== "idle") return;
+        const data = deleteFetcher.data;
+        if (data?.ok === false && data.intent === "delete") {
+            if (reportedDeleteErrorRef.current === data) return;
+            reportedDeleteErrorRef.current = data;
+            onFailure(data.error ?? "The Base CV could not be deleted.");
+        }
+    }, [deleteFetcher.state, deleteFetcher.data, onFailure]);
+
+    const requestDelete = () => {
+        setMenuOpen(false);
+        setDeleteDialogOpen(true);
     };
 
-    const openPreview = () => onPreview(baseCv);
-    const onPreviewKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
-        if (event.key === "Enter" || event.key === " ") {
-            event.preventDefault();
-            openPreview();
-        }
+    const confirmDelete = () => {
+        const formData = new FormData();
+        formData.set("intent", "delete");
+        formData.set("baseCvId", String(baseCv.baseCvId));
+        deleteFetcher.submit(formData, { method: "post", action: "/documents" });
+        setDeleteDialogOpen(false);
     };
 
     return (
-        <li className="rounded-xl border border-light-gray bg-white p-4">
-            <div className="flex items-start gap-3">
-                <div
-                    role="button"
-                    tabIndex={0}
-                    aria-label={`Preview ${baseCv.originalFilename}`}
-                    onClick={openPreview}
-                    onKeyDown={onPreviewKeyDown}
-                    className="flex min-w-0 flex-1 cursor-pointer items-start gap-3 rounded-lg outline-none focus-visible:ring-2 focus-visible:ring-dark-accent"
-                >
-                    <div className="rounded-lg bg-lightest-accent p-2 text-dark-accent">
-                        <FileText aria-hidden="true" />
-                    </div>
-                    <div className="min-w-0 flex-1 text-left">
-                        <p className="truncate font-semibold text-dark-gray">{baseCv.originalFilename}</p>
-                        <p className="mt-1 text-sm text-medium-gray">
-                            {formatLabels[baseCv.format]} · {formatBytes(baseCv.byteSize)} ·{" "}
-                            {formatDate(baseCv.createdAt)}
-                        </p>
-                    </div>
-                </div>
-                <div className="flex gap-1">
-                    <downloadFetcher.Form method="post" action="/documents">
-                        <input type="hidden" name="intent" value="download" />
-                        <input type="hidden" name="baseCvId" value={baseCv.baseCvId} />
+        <TooltipProvider delayDuration={0}>
+            <div className="flex items-center justify-center gap-1">
+                <Tooltip>
+                    <TooltipTrigger asChild>
                         <Button
-                            type="submit"
+                            type="button"
                             variant="ghost"
-                            disabled={downloading}
-                            aria-label={`Download ${baseCv.originalFilename}`}
+                            size="icon-sm"
+                            aria-label={`Preview ${baseCv.originalFilename}`}
+                            onClick={() => onPreview(baseCv)}
                         >
-                            {downloading ? <LoaderCircle className="animate-spin" /> : <Download />}
+                            <Eye aria-hidden="true" />
                         </Button>
-                    </downloadFetcher.Form>
-                    <deleteFetcher.Form method="post" action="/documents" onSubmit={confirmDelete}>
-                        <input type="hidden" name="intent" value="delete" />
-                        <input type="hidden" name="baseCvId" value={baseCv.baseCvId} />
+                    </TooltipTrigger>
+                    <TooltipContent>Preview</TooltipContent>
+                </Tooltip>
+                <downloadFetcher.Form method="post" action="/documents">
+                    <input type="hidden" name="intent" value="download" />
+                    <input type="hidden" name="baseCvId" value={baseCv.baseCvId} />
+                    <Tooltip>
+                        <TooltipTrigger asChild>
+                            <Button
+                                type="submit"
+                                variant="ghost"
+                                size="icon-sm"
+                                disabled={downloading}
+                                aria-busy={downloading}
+                                aria-label={`Download ${baseCv.originalFilename}`}
+                            >
+                                {downloading ? (
+                                    <LoaderCircle className="animate-spin" />
+                                ) : (
+                                    <CloudDownload aria-hidden="true" />
+                                )}
+                            </Button>
+                        </TooltipTrigger>
+                        <TooltipContent>Download</TooltipContent>
+                    </Tooltip>
+                </downloadFetcher.Form>
+                <Popover open={menuOpen} onOpenChange={setMenuOpen}>
+                    <Tooltip>
+                        <TooltipTrigger asChild>
+                            <PopoverTrigger asChild>
+                                <Button
+                                    type="button"
+                                    variant="ghost"
+                                    size="icon-sm"
+                                    aria-label={`More actions for ${baseCv.originalFilename}`}
+                                    aria-haspopup="menu"
+                                >
+                                    <EllipsisVertical aria-hidden="true" />
+                                </Button>
+                            </PopoverTrigger>
+                        </TooltipTrigger>
+                        <TooltipContent>More actions</TooltipContent>
+                    </Tooltip>
+                    <PopoverContent
+                        role="menu"
+                        aria-label={`More actions for ${baseCv.originalFilename}`}
+                        align="end"
+                        className="w-36 min-w-0 bg-[#f1f2f4] p-2 shadow-cool-light"
+                    >
                         <Button
-                            type="submit"
+                            type="button"
+                            role="menuitem"
                             variant="ghost"
+                            size="sm"
+                            className="w-full justify-start text-red-700"
                             disabled={deleting}
-                            aria-label={`Delete ${baseCv.originalFilename}`}
+                            onClick={requestDelete}
                         >
-                            {deleting ? <LoaderCircle className="animate-spin" /> : <Trash2 />}
+                            <Trash2 aria-hidden="true" />
+                            Delete
                         </Button>
-                    </deleteFetcher.Form>
-                </div>
+                    </PopoverContent>
+                </Popover>
             </div>
-            {downloadFetcher.data?.ok === false ? (
-                <p role="alert" className="mt-2 text-sm text-red-700">
-                    {downloadFetcher.data.error}
-                </p>
-            ) : null}
-            {deleteFetcher.data?.ok === false ? (
-                <p role="alert" className="mt-2 text-sm text-red-700">
-                    {deleteFetcher.data.error}
-                </p>
-            ) : null}
-        </li>
+            <AlertDialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
+                <AlertDialogContent>
+                    <AlertDialogHeader>
+                        <AlertDialogTitle>Delete {baseCv.originalFilename}?</AlertDialogTitle>
+                        <AlertDialogDescription>
+                            This Base CV will no longer be available for future CV Generation.
+                            Existing Generated CVs will stay in your library.
+                        </AlertDialogDescription>
+                    </AlertDialogHeader>
+                    <AlertDialogFooter>
+                        <AlertDialogCancel asChild>
+                            <Button type="button" variant="ghost" disabled={deleting}>
+                                Cancel
+                            </Button>
+                        </AlertDialogCancel>
+                        <Button
+                            type="button"
+                            disabled={deleting}
+                            onClick={confirmDelete}
+                        >
+                            {deleting ? (
+                                <LoaderCircle className="animate-spin" />
+                            ) : (
+                                <Trash2 aria-hidden="true" />
+                            )}
+                            Delete Base CV
+                        </Button>
+                    </AlertDialogFooter>
+                </AlertDialogContent>
+            </AlertDialog>
+        </TooltipProvider>
     );
 }
 
@@ -648,6 +729,333 @@ function RecentFilesSection({
     );
 }
 
+function BaseCvSection({
+    items,
+    error,
+    onPreview,
+}: {
+    items: BaseCv[];
+    error: string | null;
+    onPreview: (baseCv: BaseCv) => void;
+}) {
+    const uploadFetcher = useFetcher<DocumentsActionData>();
+    const revalidator = useRevalidator();
+    const location = useLocation();
+    const navigate = useNavigate();
+    const inputRef = useRef<HTMLInputElement>(null);
+    const handledUploadRef = useRef<DocumentsActionData | null>(null);
+    const [clientError, setClientError] = useState<string | null>(null);
+    const [dragging, setDragging] = useState(false);
+    const [failureToast, setFailureToast] = useState<{ id: number; message: string } | null>(null);
+    const nextToastIdRef = useRef(0);
+    const uploading = uploadFetcher.state !== "idle";
+    const atLimit = error == null && items.length >= MAX_BASE_CVS;
+    const normalizedState = normalizeDocumentsState(location.search);
+    const urlState: Extract<DocumentsUrlState, { tab: "base" }> =
+        normalizedState.tab === "base"
+            ? normalizedState
+            : (defaultDocumentsState("base") as Extract<DocumentsUrlState, { tab: "base" }>);
+    const uploadError =
+        uploadFetcher.state === "idle" && uploadFetcher.data?.ok === false
+            ? uploadFetcher.data.error
+            : null;
+    const visibleUploadError = clientError ?? uploadError;
+
+    const navigateToState = useCallback(
+        (nextState: Extract<DocumentsUrlState, { tab: "base" }>) => {
+            void navigate(
+                {
+                    pathname: location.pathname,
+                    search: serializeDocumentsState(nextState),
+                    hash: location.hash,
+                },
+                { replace: true },
+            );
+        },
+        [location.hash, location.pathname, navigate],
+    );
+
+    useEffect(() => {
+        if (uploadFetcher.state !== "idle") return;
+        const data = uploadFetcher.data;
+        if (!data?.ok || data.intent !== "upload") return;
+        if (handledUploadRef.current === data) return;
+        handledUploadRef.current = data;
+        setClientError(null);
+        navigateToState(
+            defaultDocumentsState("base") as Extract<DocumentsUrlState, { tab: "base" }>,
+        );
+    }, [uploadFetcher.state, uploadFetcher.data, navigateToState]);
+
+    const showFailureToast = useCallback((message: string) => {
+        nextToastIdRef.current += 1;
+        setFailureToast({ id: nextToastIdRef.current, message });
+    }, []);
+
+    const upload = (file: File | undefined) => {
+        setClientError(null);
+        if (!file) {
+            setClientError("Choose one file to upload.");
+            return;
+        }
+        const extensionIndex = file.name.lastIndexOf(".");
+        const extension = extensionIndex >= 0 ? file.name.slice(extensionIndex).toLowerCase() : "";
+        if (!acceptedExtensions.includes(extension)) {
+            setClientError("Choose a PDF, DOCX, or Markdown file.");
+            return;
+        }
+        if (file.size > MAX_BYTES) {
+            setClientError("The file is larger than the 10 MB limit.");
+            return;
+        }
+        const formData = new FormData();
+        formData.set("intent", "upload");
+        formData.set("file", file);
+        uploadFetcher.submit(formData, {
+            method: "post",
+            action: "/documents",
+            encType: "multipart/form-data",
+        });
+    };
+
+    const onChange = (event: ChangeEvent<HTMLInputElement>) => {
+        const files = event.target.files;
+        if (files && files.length > 1) {
+            setClientError("Choose one file at a time.");
+        } else {
+            upload(files?.[0]);
+        }
+        event.target.value = "";
+    };
+
+    const onDrop = (event: DragEvent<HTMLDivElement>) => {
+        event.preventDefault();
+        setDragging(false);
+        if (uploading || atLimit) return;
+        if (event.dataTransfer.files.length !== 1) {
+            setClientError("Drop one file at a time.");
+            return;
+        }
+        upload(event.dataTransfer.files[0]);
+    };
+
+    const onKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
+        if ((event.key === "Enter" || event.key === " ") && !uploading && !atLimit) {
+            event.preventDefault();
+            inputRef.current?.click();
+        }
+    };
+
+    const sortedItems = useMemo(() => {
+        const multiplier = urlState.direction === "asc" ? 1 : -1;
+        return [...items].sort((left, right) => {
+            let result: number;
+            if (urlState.sort === "name") {
+                result = filenameWithoutExtension(left.originalFilename).localeCompare(
+                    filenameWithoutExtension(right.originalFilename),
+                    "en",
+                    { sensitivity: "base" },
+                );
+            } else if (urlState.sort === "type") {
+                result = formatLabels[left.format].localeCompare(formatLabels[right.format], "en");
+            } else if (urlState.sort === "size") {
+                result = left.byteSize - right.byteSize;
+            } else {
+                result = new Date(left.createdAt).getTime() - new Date(right.createdAt).getTime();
+            }
+            if (result !== 0) return result * multiplier;
+            return (left.baseCvId - right.baseCvId) * multiplier;
+        });
+    }, [items, urlState.direction, urlState.sort]);
+
+    const firstIndex = (urlState.page - 1) * BASE_CV_PAGE_SIZE;
+    const pageItems = sortedItems.slice(firstIndex, firstIndex + BASE_CV_PAGE_SIZE);
+
+    const sort = (sortKey: BaseSortKey) => {
+        const nextDirection = nextSortDirection(urlState.sort, urlState.direction, sortKey);
+        navigateToState({ ...urlState, page: 1, sort: sortKey, direction: nextDirection });
+    };
+
+    const columns: DocumentTableColumn<BaseCv, BaseSortKey>[] = [
+        {
+            key: "name",
+            label: "Name",
+            sortable: true,
+            className: "w-[30%]",
+            render: (baseCv) => filenameWithoutExtension(baseCv.originalFilename),
+        },
+        {
+            key: "type",
+            label: "Type",
+            sortable: true,
+            className: "w-[15%]",
+            render: (baseCv) => formatLabels[baseCv.format],
+        },
+        {
+            key: "size",
+            label: "Size",
+            sortable: true,
+            className: "w-[15%]",
+            render: (baseCv) => formatBytes(baseCv.byteSize),
+        },
+        {
+            key: "uploaded",
+            label: "Uploaded",
+            sortable: true,
+            className: "w-[22%]",
+            render: (baseCv) => formatDate(baseCv.createdAt),
+        },
+        {
+            key: "actions",
+            label: "Actions",
+            className: "w-[18%]",
+            cellClassName: "sticky right-0 z-10 bg-[#f1f2f4]",
+            render: (baseCv) => (
+                <BaseCvActions
+                    baseCv={baseCv}
+                    onPreview={onPreview}
+                    onFailure={showFailureToast}
+                />
+            ),
+        },
+    ];
+
+    const dropZoneState = visibleUploadError
+        ? "border-red-600 bg-red-50"
+        : atLimit
+            ? "cursor-not-allowed border-amber-600 bg-amber-50"
+            : uploading
+                ? "cursor-wait border-dark-accent bg-lightest-accent"
+                : dragging
+                    ? "border-dark-accent bg-lightest-accent ring-2 ring-dark-accent/20"
+                    : "cursor-pointer border-dark-accent bg-[#e8e8e8] hover:bg-lightest-accent";
+
+    return (
+        <ToastProvider swipeDirection="right">
+            <section aria-labelledby="base-cvs-heading" className="rounded-[10px] py-4">
+                <h2 id="base-cvs-heading" className="sr-only">
+                    Base CVs
+                </h2>
+                <div className="mb-3 flex justify-end">
+                    <p className="text-sm font-semibold text-darkest-accent" aria-live="polite">
+                        {error == null
+                            ? `${items.length} of ${MAX_BASE_CVS} Base CVs`
+                            : "Base CV quota unavailable"}
+                    </p>
+                </div>
+                <div
+                    role="button"
+                    tabIndex={atLimit || uploading ? -1 : 0}
+                    aria-disabled={atLimit || uploading}
+                    aria-label="Upload a Base CV"
+                    onClick={() => !atLimit && !uploading && inputRef.current?.click()}
+                    onKeyDown={onKeyDown}
+                    onDragEnter={(event) => {
+                        event.preventDefault();
+                        if (!atLimit && !uploading) setDragging(true);
+                    }}
+                    onDragOver={(event) => {
+                        event.preventDefault();
+                        if (!atLimit && !uploading) setDragging(true);
+                    }}
+                    onDragLeave={(event) => {
+                        const relatedTarget = event.relatedTarget;
+                        if (
+                            !(relatedTarget instanceof Node) ||
+                            !event.currentTarget.contains(relatedTarget)
+                        ) {
+                            setDragging(false);
+                        }
+                    }}
+                    onDrop={onDrop}
+                    className={`flex min-h-[165px] flex-col items-center justify-center rounded-[10px] border border-dashed p-6 text-center transition-colors ${dropZoneState}`}
+                >
+                    {uploading ? (
+                        <LoaderCircle className="mb-3 animate-spin text-dark-accent" size={32} />
+                    ) : (
+                        <UploadCloud className="mb-3 text-dark-accent" size={32} />
+                    )}
+                    <p className="font-semibold text-dark-gray">
+                        {uploading
+                            ? "Uploading Base CV…"
+                            : atLimit
+                                ? "Base CV limit reached"
+                                : dragging
+                                    ? "Drop your file to upload"
+                                    : "Drop one file here or choose a file"}
+                    </p>
+                    <p className="mt-1 text-sm text-medium-gray">
+                        PDF, Markdown or DOCX · 10 MB maximum
+                    </p>
+                    <input
+                        ref={inputRef}
+                        type="file"
+                        accept=".pdf,.docx,.md,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,text/markdown,text/plain"
+                        onChange={onChange}
+                        disabled={atLimit || uploading}
+                        className="sr-only"
+                        tabIndex={-1}
+                    />
+                </div>
+                <div className="min-h-9 py-2" aria-live="polite">
+                    {atLimit ? (
+                        <p className="text-sm text-amber-800">
+                            Delete a Base CV to make room for another upload.
+                        </p>
+                    ) : visibleUploadError ? (
+                        <p role="alert" className="text-sm text-red-700">
+                            {visibleUploadError}
+                        </p>
+                    ) : uploading ? (
+                        <p role="status" className="text-sm text-darkest-accent">
+                            Upload in progress.
+                        </p>
+                    ) : null}
+                </div>
+
+                <DocumentTable
+                    label="Base CVs"
+                    columns={columns}
+                    rows={pageItems}
+                    rowKey={(baseCv) => baseCv.baseCvId}
+                    sortKey={urlState.sort}
+                    direction={urlState.direction}
+                    onSort={sort}
+                    page={urlState.page}
+                    pageSize={BASE_CV_PAGE_SIZE}
+                    total={items.length}
+                    onPageChange={(page) => navigateToState({ ...urlState, page })}
+                    error={error}
+                    onRetry={() => revalidator.revalidate()}
+                    retrying={revalidator.state !== "idle"}
+                    empty={
+                        <div className="flex flex-col items-center text-medium-gray">
+                            <File className="mb-2 opacity-70" size={28} />
+                            <h3 className="text-sm font-semibold text-dark-gray">No Base CVs yet</h3>
+                            <p className="mt-1 max-w-md text-sm">
+                                Upload a source document to make it available for future CV Generation.
+                            </p>
+                        </div>
+                    }
+                />
+            </section>
+            <Toast
+                key={failureToast?.id ?? 0}
+                open={failureToast != null}
+                onOpenChange={(open) => {
+                    if (!open) setFailureToast(null);
+                }}
+                duration={6000}
+                role="alert"
+            >
+                <ToastTitle>Document action failed</ToastTitle>
+                <ToastDescription>{failureToast?.message}</ToastDescription>
+            </Toast>
+            <ToastViewport />
+        </ToastProvider>
+    );
+}
+
 function GeneratedCvSection({
     items,
     total,
@@ -715,12 +1123,7 @@ function GeneratedCvSection({
     };
 
     const sort = (sortKey: GeneratedSortKey) => {
-        const nextDirection =
-            urlState.sort === sortKey
-                ? urlState.direction === "asc"
-                    ? "desc"
-                    : "asc"
-                : "asc";
+        const nextDirection = nextSortDirection(urlState.sort, urlState.direction, sortKey);
         navigateToState({
             ...urlState,
             page: 1,
@@ -794,7 +1197,7 @@ function GeneratedCvSection({
         <ToastProvider swipeDirection="right">
             <section
                 aria-labelledby="generated-cvs-heading"
-                className="rounded-[10px] py-4 px-0 sm:p-6"
+                className="rounded-[10px] py-4"
             >
                 <h2 id="generated-cvs-heading" className="sr-only">
                     Generated CVs
@@ -860,7 +1263,7 @@ function GeneratedCvSection({
 export function DocumentsRouteHydrateFallback() {
     return (
         <div className="h-full overflow-y-auto px-3 pb-12 pt-2 sm:px-4 sm:pt-5">
-            <div className="mx-auto w-full max-w-[1400px] rounded-[10px] border border-light-gray bg-[#e8e8e8] p-3 shadow-cool-light-inner sm:p-6">
+            <div className="mx-auto w-full max-w-[1156px] rounded-[10px] bg-[#e8e8e8] p-3 shadow-cool-light-inner sm:p-6">
                 <div
                     aria-hidden="true"
                     className="mb-6 h-[41px] w-full max-w-[394px] animate-pulse rounded-[10px] bg-[#f1f2f4] shadow-cool-light"
@@ -876,21 +1279,16 @@ export function DocumentsRouteHydrateFallback() {
 }
 
 export function DocumentsRoute() {
-    const { baseCvs, generatedCvs, generatedCvsTotal, generatedCvsError } =
+    const { baseCvs, baseCvsError, generatedCvs, generatedCvsTotal, generatedCvsError } =
         useLoaderData() as DocumentsLoaderData;
     const recentGeneratedCvs = useRouteLoaderData(
         DOCUMENTS_RECENT_ROUTE_ID,
     ) as RecentGeneratedCvsData;
-    const uploadFetcher = useFetcher<DocumentsActionData>();
     const previewDownloadFetcher = useFetcher<DocumentsActionData>();
     const location = useLocation();
     const navigate = useNavigate();
-    const inputRef = useRef<HTMLInputElement>(null);
     const openedPreviewDownloadRef = useRef<DocumentsActionData | null>(null);
-    const [clientError, setClientError] = useState<string | null>(null);
     const [previewDocument, setPreviewDocument] = useState<PreviewableDocument | null>(null);
-    const uploading = uploadFetcher.state !== "idle";
-    const atLimit = baseCvs.length >= MAX_BASE_CVS;
     const urlState = normalizeDocumentsState(location.search);
 
     const loadPreview = useCallback(
@@ -947,46 +1345,6 @@ export function DocumentsRoute() {
         previewDownloadFetcher.submit(formData, { method: "post", action: "/documents" });
     };
 
-    const upload = (file: File | undefined) => {
-        setClientError(null);
-        if (!file) return;
-        const extension = file.name.slice(file.name.lastIndexOf(".")).toLowerCase();
-        if (!acceptedExtensions.includes(extension)) {
-            setClientError("Choose a PDF, DOCX, or Markdown file.");
-            return;
-        }
-        if (file.size > MAX_BYTES) {
-            setClientError("The file is larger than the 10 MB limit.");
-            return;
-        }
-        const formData = new FormData();
-        formData.set("intent", "upload");
-        formData.set("file", file);
-        uploadFetcher.submit(formData, {
-            method: "post",
-            action: "/documents",
-            encType: "multipart/form-data",
-        });
-    };
-
-    const onChange = (event: ChangeEvent<HTMLInputElement>) => {
-        upload(event.target.files?.[0]);
-        event.target.value = "";
-    };
-    const onDrop = (event: DragEvent<HTMLDivElement>) => {
-        event.preventDefault();
-        if (event.dataTransfer.files.length > 1) {
-            setClientError("Drop one file at a time.");
-            return;
-        }
-        if (!uploading && !atLimit) upload(event.dataTransfer.files[0]);
-    };
-    const onKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
-        if ((event.key === "Enter" || event.key === " ") && !uploading && !atLimit) {
-            event.preventDefault();
-            inputRef.current?.click();
-        }
-    };
     const changeTab = (value: string) => {
         if (value !== "generated" && value !== "base") return;
         if (value === urlState.tab) return;
@@ -1008,7 +1366,7 @@ export function DocumentsRoute() {
                 onValueChange={changeTab}
                 orientation="horizontal"
                 activationMode="manual"
-                className="mx-auto w-full max-w-[1400px] rounded-[10px] border border-light-gray bg-[#e8e8e8] p-3 shadow-cool-light-inner sm:p-6"
+                className="mx-auto w-full max-w-[1156px] rounded-[10px] bg-[#e8e8e8] p-3 shadow-cool-light-inner sm:p-6"
             >
                 <div className="mb-4 flex w-full sm:w-fit max-w-full items-center gap-2 rounded-[10px] border border-light-gray bg-[#f1f2f4] p-1.5 shadow-cool-light sm:mb-4">
                     <span className="hidden sm:inline-block shrink-0 px-2 font-display text-base text-dark-gray">
@@ -1051,85 +1409,13 @@ export function DocumentsRoute() {
 
                 <Tabs.Content
                     value="base"
-                    className="rounded-[10px] border border-light-gray bg-[#f1f2f4] p-4 shadow-cool-light outline-none focus-visible:ring-2 focus-visible:ring-dark-accent sm:p-6"
+                    className="outline-none focus-visible:ring-2 focus-visible:ring-dark-accent"
                 >
-                    <div className="flex justify-between gap-4">
-                        <h2 className="sr-only">Base CVs</h2>
-                        <p className="ml-auto shrink-0 font-semibold text-darkest-accent">
-                            {baseCvs.length} / {MAX_BASE_CVS}
-                        </p>
-                    </div>
-                    <div
-                        role="button"
-                        tabIndex={atLimit || uploading ? -1 : 0}
-                        aria-disabled={atLimit || uploading}
-                        aria-label="Upload a Base CV"
-                        onClick={() => !atLimit && !uploading && inputRef.current?.click()}
-                        onKeyDown={onKeyDown}
-                        onDragOver={(event) => event.preventDefault()}
-                        onDrop={onDrop}
-                        className={`mt-2 flex min-h-40 flex-col items-center justify-center rounded-[10px] border border-dashed p-6 text-center transition-colors ${atLimit || uploading ? "cursor-not-allowed border-light-gray opacity-60" : "cursor-pointer border-dark-accent hover:bg-lightest-accent"}`}
-                    >
-                        {uploading ? (
-                            <LoaderCircle className="mb-3 animate-spin text-dark-accent" size={32} />
-                        ) : (
-                            <UploadCloud className="mb-3 text-dark-accent" size={32} />
-                        )}
-                        <p className="font-semibold">
-                            {uploading
-                                ? "Uploading Base CV…"
-                                : atLimit
-                                    ? "Base CV limit reached"
-                                    : "Drop one file here or choose a file"}
-                        </p>
-                        <p className="mt-1 text-sm text-medium-gray">
-                            PDF, DOCX, or Markdown · 10 MB maximum
-                        </p>
-                        <input
-                            ref={inputRef}
-                            type="file"
-                            accept=".pdf,.docx,.md,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,text/markdown,text/plain"
-                            onChange={onChange}
-                            disabled={atLimit || uploading}
-                            className="sr-only"
-                            tabIndex={-1}
-                        />
-                    </div>
-                    {atLimit ? (
-                        <p className="mt-3 text-sm text-amber-800">
-                            Delete a Base CV to make room for another upload.
-                        </p>
-                    ) : null}
-                    {clientError ? (
-                        <p role="alert" className="mt-3 text-sm text-red-700">
-                            {clientError}
-                        </p>
-                    ) : null}
-                    {uploadFetcher.data?.ok === false ? (
-                        <p role="alert" className="mt-3 text-sm text-red-700">
-                            {uploadFetcher.data.error}
-                        </p>
-                    ) : null}
-
-                    {baseCvs.length === 0 ? (
-                        <div className="mt-8 flex flex-col items-center py-8 text-center text-medium-gray">
-                            <File className="mb-3" size={32} />
-                            <h3 className="font-semibold text-dark-gray">No Base CVs yet</h3>
-                            <p className="mt-1 max-w-md text-sm">
-                                Upload your first CV to keep it ready for future tailored document generation.
-                            </p>
-                        </div>
-                    ) : (
-                        <ul className="mt-6 space-y-3">
-                            {baseCvs.map((baseCv) => (
-                                <BaseCvRow
-                                    key={baseCv.baseCvId}
-                                    baseCv={baseCv}
-                                    onPreview={openBaseCvPreview}
-                                />
-                            ))}
-                        </ul>
-                    )}
+                    <BaseCvSection
+                        items={baseCvs}
+                        error={baseCvsError ?? null}
+                        onPreview={openBaseCvPreview}
+                    />
                 </Tabs.Content>
             </Tabs.Root>
 

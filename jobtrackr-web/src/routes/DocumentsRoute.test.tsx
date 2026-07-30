@@ -8,10 +8,11 @@ import {
 	type RouteObject,
 } from "react-router";
 
-import { api, clearAccessToken, setAccessToken } from "@/lib/api";
+import { api, ApiError, clearAccessToken, setAccessToken } from "@/lib/api";
 import { DocumentsRoute, DocumentsRouteHydrateFallback } from "@/routes/DocumentsRoute";
 import {
 	documentsLoader,
+	documentsAction,
 	DOCUMENTS_RECENT_ROUTE_ID,
 	ensureCanonicalDocumentsUrl,
 	recentGeneratedCvsLoader,
@@ -169,6 +170,7 @@ const renderDocuments = (
 	} = data;
 	const loaderData: DocumentsLoaderData = {
 		baseCvs: [],
+		baseCvsError: null,
 		generatedCvs: [],
 		generatedCvsPage: 0,
 		generatedCvsTotal: 0,
@@ -338,7 +340,7 @@ describe("DocumentsRoute", () => {
 			ctrlKey: false,
 		});
 		expect(await screen.findByText("No Base CVs yet")).toBeTruthy();
-		expect(screen.getByText("PDF, DOCX, or Markdown · 10 MB maximum")).toBeTruthy();
+		expect(screen.getByText("PDF, Markdown or DOCX · 10 MB maximum")).toBeTruthy();
 		expect(screen.getByRole("button", { name: "Upload a Base CV" }).getAttribute("tabindex")).toBe(
 			"0",
 		);
@@ -347,10 +349,347 @@ describe("DocumentsRoute", () => {
 	it("renders document metadata and accessible actions", async () => {
 		renderBaseDocuments({ baseCvs: [baseCv()] });
 
-		expect(await screen.findByText("engineering-profile.pdf")).toBeTruthy();
-		expect(screen.getByText(/PDF · 1.5 MB/)).toBeTruthy();
+		const table = await screen.findByRole("table", { name: "Base CVs" });
+		expect(
+			within(table)
+				.getAllByRole("columnheader")
+				.map((header) => header.textContent?.trim()),
+		).toEqual(["Name", "Type", "Size", "Uploaded", "Actions"]);
+		expect(within(table).getByText("engineering-profile")).toBeTruthy();
+		expect(within(table).queryByText("engineering-profile.pdf")).toBeNull();
+		expect(within(table).getByText("PDF")).toBeTruthy();
+		expect(within(table).getByText("1.5 MB")).toBeTruthy();
 		expect(screen.getByRole("button", { name: "Download engineering-profile.pdf" })).toBeTruthy();
-		expect(screen.getByRole("button", { name: "Delete engineering-profile.pdf" })).toBeTruthy();
+		expect(
+			screen.getByRole("button", { name: "More actions for engineering-profile.pdf" }),
+		).toBeTruthy();
+		expect(screen.queryByRole("link", { name: /Open application/i })).toBeNull();
+	});
+
+	it("sorts and paginates the bounded Base CV collection through URL state", async () => {
+		const documents = Array.from({ length: 12 }, (_, index) =>
+			baseCv({
+				baseCvId: index + 1,
+				originalFilename: `profile-${String(index + 1).padStart(2, "0")}.pdf`,
+				createdAt: `2026-07-${String(index + 1).padStart(2, "0")}T12:00:00Z`,
+			}),
+		);
+		const router = renderBaseDocuments({ baseCvs: documents });
+		const table = await screen.findByRole("table", { name: "Base CVs" });
+
+		expect(within(table).getByText("profile-12")).toBeTruthy();
+		expect(within(table).queryByText("profile-01")).toBeNull();
+		expect(screen.getByText("1–10 of 12")).toBeTruthy();
+
+		fireEvent.click(within(table).getByRole("button", { name: "Name" }));
+		await waitFor(() => {
+			expect(router.state.location.search).toBe(
+				"?tab=base&page=1&sort=name&direction=asc",
+			);
+			expect(within(table).getByText("profile-01")).toBeTruthy();
+		});
+
+		fireEvent.click(screen.getByRole("button", { name: "Next page" }));
+		await waitFor(() => {
+			expect(router.state.location.search).toBe(
+				"?tab=base&page=2&sort=name&direction=asc",
+			);
+		});
+		expect(screen.getByText("11–12 of 12")).toBeTruthy();
+		expect(within(table).getByText("profile-11")).toBeTruthy();
+
+		fireEvent.click(within(table).getByRole("button", { name: "Name" }));
+		await waitFor(() => {
+			expect(router.state.location.search).toBe(
+				"?tab=base&page=1&sort=name&direction=desc",
+			);
+		});
+		expect(within(table).getByText("profile-12")).toBeTruthy();
+
+		for (const [column, sort] of [
+			["Type", "type"],
+			["Size", "size"],
+			["Uploaded", "uploaded"],
+		] as const) {
+			fireEvent.click(within(table).getByRole("button", { name: column }));
+			await waitFor(() => {
+				expect(router.state.location.search).toBe(
+					`?tab=base&page=1&sort=${sort}&direction=asc`,
+				);
+			});
+		}
+		fireEvent.click(within(table).getByRole("button", { name: "Uploaded" }));
+		await waitFor(() => {
+			expect(router.state.location.search).toBe(
+				"?tab=base&page=1&sort=uploaded&direction=desc",
+			);
+		});
+	});
+
+	it("validates Base CV drops before submitting and exposes drag and upload states", async () => {
+		let resolveUpload: ((value: unknown) => void) | undefined;
+		const action = vi.fn(
+			() =>
+				new Promise((resolve) => {
+					resolveUpload = resolve;
+				}),
+		);
+		renderBaseDocuments({}, action);
+		const dropZone = await screen.findByRole("button", { name: "Upload a Base CV" });
+
+		fireEvent.dragEnter(dropZone, {
+			dataTransfer: { files: [new File(["valid"], "candidate.pdf", { type: "application/pdf" })] },
+		});
+		expect(screen.getByText("Drop your file to upload")).toBeTruthy();
+
+		fireEvent.drop(dropZone, {
+			dataTransfer: {
+				files: [
+					new File(["one"], "one.pdf", { type: "application/pdf" }),
+					new File(["two"], "two.pdf", { type: "application/pdf" }),
+				],
+			},
+		});
+		expect(screen.getByRole("alert").textContent).toContain("Drop one file at a time.");
+		expect(action).not.toHaveBeenCalled();
+
+		const oversized = new File(["oversized"], "candidate.docx", {
+			type: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+		});
+		Object.defineProperty(oversized, "size", { value: 10 * 1024 * 1024 + 1 });
+		fireEvent.drop(dropZone, {
+			dataTransfer: { files: [oversized] },
+		});
+		expect(screen.getByRole("alert").textContent).toContain(
+			"The file is larger than the 10 MB limit.",
+		);
+		expect(action).not.toHaveBeenCalled();
+
+		fireEvent.drop(dropZone, {
+			dataTransfer: {
+				files: [new File(["invalid"], "candidate.txt", { type: "text/plain" })],
+			},
+		});
+		expect(screen.getByRole("alert").textContent).toContain(
+			"Choose a PDF, DOCX, or Markdown file.",
+		);
+		expect(action).not.toHaveBeenCalled();
+
+		fireEvent.drop(dropZone, {
+			dataTransfer: {
+				files: [new File(["valid"], "candidate.md", { type: "text/markdown" })],
+			},
+		});
+		expect(await screen.findByText("Uploading Base CV…")).toBeTruthy();
+		expect(dropZone.getAttribute("aria-disabled")).toBe("true");
+		expect(action).toHaveBeenCalledTimes(1);
+
+		await act(async () => {
+			resolveUpload?.({ ok: true, intent: "upload" });
+		});
+	});
+
+	it("keeps Base CVs active and resets the table after a successful upload", async () => {
+		const documents = Array.from({ length: 12 }, (_, index) =>
+			baseCv({
+				baseCvId: index + 1,
+				originalFilename: `profile-${index + 1}.pdf`,
+			}),
+		);
+		const action = vi.fn(async ({ request }: { request: Request }) => {
+			const formData = await request.formData();
+			expect(formData.get("intent")).toBe("upload");
+			expect((formData.get("file") as File).size).toBe(9);
+			return { ok: true, intent: "upload" };
+		});
+		const router = renderDocuments(
+			{ baseCvs: documents },
+			action,
+			"/documents?tab=base&page=2&sort=name&direction=asc",
+		);
+		const dropZone = await screen.findByRole("button", { name: "Upload a Base CV" });
+
+		fireEvent.drop(dropZone, {
+			dataTransfer: {
+				files: [
+					new File(["valid"], "newest-profile.pdf", {
+						type: "application/pdf",
+					}),
+				],
+			},
+		});
+
+		await waitFor(() => {
+			expect(router.state.location.search).toBe(
+				"?tab=base&page=1&sort=uploaded&direction=desc",
+			);
+			expect(router.state.historyAction).toBe("REPLACE");
+		});
+		expect(screen.getByRole("tab", { name: "Base CVs" }).getAttribute("aria-selected")).toBe(
+			"true",
+		);
+	});
+
+	it("keeps upload available when the Base CV list fails and scopes Retry to the table", async () => {
+		renderBaseDocuments({
+			baseCvs: [],
+			baseCvsError: "Base CVs could not be loaded.",
+		});
+
+		const upload = await screen.findByRole("button", { name: "Upload a Base CV" });
+		expect(upload.getAttribute("aria-disabled")).toBe("false");
+		expect(screen.getByText("Base CV quota unavailable")).toBeTruthy();
+		const table = screen.getByRole("table", { name: "Base CVs" });
+		expect(within(table).getByRole("alert").textContent).toContain(
+			"Base CVs could not be loaded.",
+		);
+		expect(within(table).getByRole("button", { name: "Retry" })).toBeTruthy();
+	});
+
+	it("uses tooltips, a scoped download failure toast, and a Base CV deletion contract", async () => {
+		const action = vi.fn(async ({ request }: { request: Request }) => {
+			const formData = await request.formData();
+			if (formData.get("intent") === "download") {
+				return { ok: false, intent: "download", error: "Download unavailable." };
+			}
+			return { ok: true, intent: "delete" };
+		});
+		renderBaseDocuments({ baseCvs: [baseCv()] }, action);
+
+		const preview = await screen.findByRole("button", {
+			name: "Preview engineering-profile.pdf",
+		});
+		fireEvent.focus(preview);
+		expect((await screen.findByRole("tooltip")).textContent).toContain("Preview");
+
+		fireEvent.click(screen.getByRole("button", { name: "Download engineering-profile.pdf" }));
+		const toast = await screen.findByRole("alert");
+		expect(toast.textContent).toContain("Download unavailable.");
+		expect(toast.closest("tr")).toBeNull();
+
+		fireEvent.click(screen.getByRole("button", { name: "More actions for engineering-profile.pdf" }));
+		fireEvent.click(await screen.findByRole("menuitem", { name: "Delete" }));
+		const dialog = await screen.findByRole("alertdialog", {
+			name: "Delete engineering-profile.pdf?",
+		});
+		expect(dialog.textContent).toContain(
+			"no longer be available for future CV Generation",
+		);
+		expect(dialog.textContent).toContain("Existing Generated CVs will stay");
+		fireEvent.click(within(dialog).getByRole("button", { name: "Delete Base CV" }));
+
+		await waitFor(() => {
+			expect(action).toHaveBeenCalledTimes(2);
+		});
+	});
+
+	it("shows download progress only on the selected Base CV action", async () => {
+		let resolveDownload: ((value: unknown) => void) | undefined;
+		const downloadResult = new Promise((resolve) => {
+			resolveDownload = resolve;
+		});
+		const action = vi.fn(async () => downloadResult);
+		renderBaseDocuments(
+			{
+				baseCvs: [
+					baseCv(),
+					baseCv({
+						baseCvId: 2,
+						originalFilename: "platform-profile.docx",
+						format: "DOCX",
+					}),
+				],
+			},
+			action,
+		);
+
+		const selected = await screen.findByRole("button", {
+			name: "Download engineering-profile.pdf",
+		});
+		const other = screen.getByRole("button", {
+			name: "Download platform-profile.docx",
+		});
+		fireEvent.click(selected);
+
+		await waitFor(() => {
+			expect(selected.getAttribute("aria-busy")).toBe("true");
+			expect(selected.hasAttribute("disabled")).toBe(true);
+			expect(selected.querySelector(".animate-spin")).toBeTruthy();
+			expect(other.getAttribute("aria-busy")).toBe("false");
+			expect(other.hasAttribute("disabled")).toBe(false);
+		});
+		fireEvent.click(selected);
+		expect(action).toHaveBeenCalledTimes(1);
+
+		await act(async () => {
+			resolveDownload?.({
+				ok: false,
+				intent: "download",
+				error: "The download link could not be prepared.",
+			});
+			await downloadResult;
+		});
+	});
+
+	it("maps Base CV API validation and storage failures to scoped action errors", async () => {
+		setAccessToken("test-token");
+		const uploadSpy = vi.spyOn(api, "uploadBaseCv");
+		vi.spyOn(api, "deleteBaseCv").mockRejectedValueOnce(
+			new ApiError("In use", 409, "BASE_CV_IN_USE"),
+		);
+
+		for (const [code, expectedError] of [
+			["DUPLICATE_BASE_CV", "This exact document is already in your Base CV library."],
+			[
+				"MALFORMED_BASE_CV",
+				"This document is malformed or has no meaningful extractable text.",
+			],
+			[
+				"PROTECTED_BASE_CV",
+				"Password-protected or encrypted documents are not supported.",
+			],
+			[
+				"BASE_CV_STORAGE_UNAVAILABLE",
+				"Document storage is temporarily unavailable. Please try again.",
+			],
+			[
+				"BASE_CV_LIMIT_REACHED",
+				"You have reached the limit of 20 Base CVs. Delete one before uploading another.",
+			],
+		] as const) {
+			uploadSpy.mockRejectedValueOnce(new ApiError("Upload rejected", 409, code));
+			const uploadForm = new FormData();
+			uploadForm.set("intent", "upload");
+			uploadForm.set(
+				"file",
+				new File(["document"], "candidate.pdf", { type: "application/pdf" }),
+			);
+			const uploadResult = await documentsAction({
+				request: { formData: async () => uploadForm } as Request,
+				params: {},
+			} as Parameters<typeof documentsAction>[0]);
+			expect(uploadResult).toEqual({
+				ok: false,
+				intent: "upload",
+				error: expectedError,
+			});
+		}
+
+		const deleteForm = new FormData();
+		deleteForm.set("intent", "delete");
+		deleteForm.set("baseCvId", "1");
+		const deleteResult = await documentsAction({
+			request: new Request("http://localhost/documents", {
+				method: "POST",
+				body: deleteForm,
+			}),
+			params: {},
+		} as Parameters<typeof documentsAction>[0]);
+		expect(deleteResult).toEqual({
+			ok: false,
+			intent: "delete",
+			error: "This Base CV is in use by an active generation and cannot be deleted right now.",
+		});
 	});
 
 	it("disables upload controls when the quota is full", async () => {
@@ -374,7 +713,7 @@ describe("DocumentsRoute", () => {
 		const upload = await screen.findByRole("button", { name: "Upload a Base CV" });
 		expect(upload.getAttribute("aria-disabled")).toBe("true");
 		expect(screen.getByText("Delete a Base CV to make room for another upload.")).toBeTruthy();
-		expect(screen.getByText("20 / 20")).toBeTruthy();
+		expect(screen.getByText("20 of 20 Base CVs")).toBeTruthy();
 	});
 
 	it("renders the complete Generated CV table schema and agreed metadata formats", async () => {
@@ -1124,6 +1463,28 @@ describe("DocumentsRoute", () => {
 		});
 	});
 
+	it("isolates a Base CV list failure from the Generated CV table", async () => {
+		setAccessToken("test-token");
+		vi.spyOn(api, "getBaseCvs").mockRejectedValue(new Error("Base CV service unavailable."));
+		vi.spyOn(api, "getGeneratedCvsPage").mockResolvedValue({
+			items: [generatedCv()],
+			total: 1,
+			page: 0,
+			size: 10,
+		});
+		const data = await documentsLoader({
+			request: new Request(
+				"http://localhost/documents?tab=generated&page=1&sort=created&direction=desc",
+			),
+			params: {},
+		} as LoaderFunctionArgs);
+
+		expect(data.baseCvs).toEqual([]);
+		expect(data.baseCvsError).toBe("Base CV service unavailable.");
+		expect(data.generatedCvs).toHaveLength(1);
+		expect(data.generatedCvsError).toBeNull();
+	});
+
 	it("does not refetch Recent files when the Generated CV table sort changes", async () => {
 		const loaderData: DocumentsLoaderData = {
 			baseCvs: [],
@@ -1365,6 +1726,38 @@ describe("DocumentsRoute", () => {
 		});
 	});
 
+	it("normalizes a page beyond the Base CV library to the last existing page", async () => {
+		setAccessToken("test-token");
+		vi.spyOn(api, "getBaseCvs").mockResolvedValue(
+			Array.from({ length: 14 }, (_, index) =>
+				baseCv({
+					baseCvId: index + 1,
+					originalFilename: `profile-${index + 1}.pdf`,
+					createdAt: `2026-07-${String(index + 1).padStart(2, "0")}T12:00:00Z`,
+				}),
+			),
+		);
+		const router = createMemoryRouter(
+			[
+				documentsRoute({
+					loader: documentsLoader,
+				}),
+			],
+			{
+				initialEntries: ["/documents?tab=base&page=9&sort=uploaded&direction=desc"],
+			},
+		);
+		render(<RouterProvider router={router} />);
+
+		await waitFor(() => {
+			expect(router.state.location.search).toBe(
+				"?tab=base&page=2&sort=uploaded&direction=desc",
+			);
+			expect(router.state.historyAction).toBe("REPLACE");
+		});
+		expect(await screen.findByText("11–14 of 14")).toBeTruthy();
+	});
+
 	it("keeps Base CV management available when Generated CVs fail to load", async () => {
 		renderDocuments({
 			baseCvs: [baseCv()],
@@ -1377,7 +1770,7 @@ describe("DocumentsRoute", () => {
 			button: 0,
 			ctrlKey: false,
 		});
-		expect(await screen.findByText("engineering-profile.pdf")).toBeTruthy();
+		expect(await screen.findByText("engineering-profile")).toBeTruthy();
 		expect(screen.getByRole("button", { name: "Upload a Base CV" })).toBeTruthy();
 		expect(screen.getByRole("button", { name: "Download engineering-profile.pdf" })).toBeTruthy();
 	});
@@ -1702,7 +2095,7 @@ describe("DocumentsRoute", () => {
 
 		renderBaseDocuments({ baseCvs: [baseCv()] });
 
-		await screen.findByText("engineering-profile.pdf");
+		await screen.findByText("engineering-profile");
 		fireEvent.click(screen.getByRole("button", { name: "Preview engineering-profile.pdf" }));
 
 		expect(await screen.findByRole("dialog", { name: "engineering-profile.pdf" })).toBeTruthy();
@@ -1728,7 +2121,7 @@ describe("DocumentsRoute", () => {
 			],
 		});
 
-		await screen.findByText("resume.docx");
+		await screen.findByText("resume");
 		fireEvent.click(screen.getByRole("button", { name: "Preview resume.docx" }));
 
 		expect(await screen.findByRole("dialog", { name: "resume.docx" })).toBeTruthy();
@@ -1753,7 +2146,7 @@ describe("DocumentsRoute", () => {
 			],
 		});
 
-		await screen.findByText("resume.docx");
+		await screen.findByText("resume");
 		fireEvent.click(screen.getByRole("button", { name: "Preview resume.docx" }));
 
 		expect(await screen.findByText("Preview could not be loaded.")).toBeTruthy();
@@ -1795,7 +2188,7 @@ describe("DocumentsRoute", () => {
 			],
 		});
 
-		await screen.findByText("notes.md");
+		await screen.findByText("notes");
 		fireEvent.click(screen.getByRole("button", { name: "Preview notes.md" }));
 
 		expect(await screen.findByRole("heading", { name: "Candidate Evidence" })).toBeTruthy();
@@ -1838,7 +2231,7 @@ describe("DocumentsRoute", () => {
 			],
 		});
 
-		await screen.findByText("notes.md");
+		await screen.findByText("notes");
 		fireEvent.click(screen.getByRole("button", { name: "Preview notes.md" }));
 
 		expect(await screen.findByText("Preview could not be loaded.")).toBeTruthy();
@@ -1859,7 +2252,7 @@ describe("DocumentsRoute", () => {
 		vi.spyOn(URL, "revokeObjectURL").mockImplementation(() => undefined);
 
 		renderBaseDocuments({ baseCvs: [baseCv()] });
-		await screen.findByText("engineering-profile.pdf");
+		await screen.findByText("engineering-profile");
 		fireEvent.click(screen.getByRole("button", { name: "Preview engineering-profile.pdf" }));
 
 		expect(await screen.findByText("Page 1 of 3")).toBeTruthy();
@@ -1881,21 +2274,23 @@ describe("DocumentsRoute", () => {
 
 	it("does not open preview when Download or Delete is used", async () => {
 		const previewSpy = vi.spyOn(api, "getBaseCvPreview");
-		const confirmSpy = vi.spyOn(window, "confirm").mockReturnValue(false);
 		const action = vi.fn(async () => ({ ok: true, intent: "download", uri: "https://signed.example/cv" }));
 
 		renderBaseDocuments({ baseCvs: [baseCv()] }, action);
-		await screen.findByText("engineering-profile.pdf");
+		await screen.findByText("engineering-profile");
 
 		fireEvent.click(screen.getByRole("button", { name: "Download engineering-profile.pdf" }));
-		fireEvent.click(screen.getByRole("button", { name: "Delete engineering-profile.pdf" }));
+		fireEvent.click(screen.getByRole("button", { name: "More actions for engineering-profile.pdf" }));
+		fireEvent.click(await screen.findByRole("menuitem", { name: "Delete" }));
 
 		await waitFor(() => {
 			expect(action).toHaveBeenCalled();
 		});
 		expect(screen.queryByRole("dialog")).toBeNull();
 		expect(previewSpy).not.toHaveBeenCalled();
-		expect(confirmSpy).toHaveBeenCalled();
+		expect(
+			screen.getByRole("alertdialog", { name: "Delete engineering-profile.pdf?" }),
+		).toBeTruthy();
 	});
 
 	it("keeps the dialog open with retry actions when preview fails", async () => {
@@ -1904,7 +2299,7 @@ describe("DocumentsRoute", () => {
 			.mockImplementation(() => new Promise(() => undefined));
 
 		renderBaseDocuments({ baseCvs: [baseCv()] });
-		await screen.findByText("engineering-profile.pdf");
+		await screen.findByText("engineering-profile");
 		fireEvent.click(screen.getByRole("button", { name: "Preview engineering-profile.pdf" }));
 
 		expect(await screen.findByText("Preview could not be loaded.")).toBeTruthy();
@@ -1929,7 +2324,7 @@ describe("DocumentsRoute", () => {
 		const revokeObjectURL = vi.spyOn(URL, "revokeObjectURL").mockImplementation(() => undefined);
 
 		renderBaseDocuments({ baseCvs: [baseCv()] });
-		await screen.findByText("engineering-profile.pdf");
+		await screen.findByText("engineering-profile");
 		fireEvent.click(screen.getByRole("button", { name: "Preview engineering-profile.pdf" }));
 		expect(await screen.findByText("Page 1 of 3")).toBeTruthy();
 
@@ -1949,7 +2344,7 @@ describe("DocumentsRoute", () => {
 		vi.spyOn(URL, "revokeObjectURL").mockImplementation(() => undefined);
 
 		renderBaseDocuments({ baseCvs: [baseCv()] });
-		await screen.findByText("engineering-profile.pdf");
+		await screen.findByText("engineering-profile");
 		fireEvent.click(screen.getByRole("button", { name: "Preview engineering-profile.pdf" }));
 		expect(await screen.findByText("Page 1 of 3")).toBeTruthy();
 
@@ -2102,7 +2497,7 @@ describe("DocumentsRoute", () => {
 		vi.spyOn(URL, "revokeObjectURL").mockImplementation(() => undefined);
 
 		renderBaseDocuments({ baseCvs: [baseCv()] });
-		await screen.findByText("engineering-profile.pdf");
+		await screen.findByText("engineering-profile");
 		fireEvent.click(screen.getByRole("button", { name: "Preview engineering-profile.pdf" }));
 
 		const dialog = await screen.findByRole("dialog", { name: "engineering-profile.pdf" });
@@ -2125,7 +2520,7 @@ describe("DocumentsRoute", () => {
 
 		try {
 			renderBaseDocuments({ baseCvs: [baseCv()] });
-			await screen.findByText("engineering-profile.pdf");
+			await screen.findByText("engineering-profile");
 			fireEvent.click(screen.getByRole("button", { name: "Preview engineering-profile.pdf" }));
 
 			expect(await screen.findByRole("dialog", { name: "engineering-profile.pdf" })).toBeTruthy();

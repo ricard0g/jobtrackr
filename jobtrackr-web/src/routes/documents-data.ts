@@ -10,6 +10,7 @@ import type { BaseCv } from "@/types/base-cv";
 import type { GeneratedCvSummary } from "@/types/generated-cv";
 
 export const GENERATED_CV_PAGE_SIZE = 10;
+export const BASE_CV_PAGE_SIZE = 10;
 export const RECENT_GENERATED_CV_LIMIT = 5;
 export const DOCUMENTS_RECENT_ROUTE_ID = "documents-recent";
 
@@ -27,7 +28,7 @@ const documentsTabConfig = {
 export type DocumentsTab = keyof typeof documentsTabConfig;
 export type SortDirection = "asc" | "desc";
 export type GeneratedSortKey = (typeof documentsTabConfig.generated.sortKeys)[number];
-type BaseSortKey = (typeof documentsTabConfig.base.sortKeys)[number];
+export type BaseSortKey = (typeof documentsTabConfig.base.sortKeys)[number];
 
 export type DocumentsUrlState =
 	| {
@@ -91,6 +92,7 @@ export const ensureCanonicalDocumentsUrl = (request: Request) => {
 
 export type DocumentsLoaderData = {
 	baseCvs: BaseCv[];
+	baseCvsError?: string | null;
 	generatedCvs: GeneratedCvSummary[];
 	generatedCvsPage: number;
 	generatedCvsTotal: number;
@@ -125,6 +127,7 @@ const errorMessages: Record<string, string> = {
 	BASE_CV_LIMIT_REACHED: "You have reached the limit of 20 Base CVs. Delete one before uploading another.",
 	BASE_CV_NOT_FOUND: "This Base CV is no longer available.",
 	BASE_CV_STORAGE_UNAVAILABLE: "Document storage is temporarily unavailable. Please try again.",
+	BASE_CV_IN_USE: "This Base CV is in use by an active generation and cannot be deleted right now.",
 	GENERATED_CV_NOT_FOUND: "This Generated CV is no longer available.",
 	STORAGE_UNAVAILABLE: "Document storage is temporarily unavailable. Please try again.",
 };
@@ -195,6 +198,20 @@ const loadRecentGeneratedCvs = async () => {
 	}
 };
 
+const loadBaseCvs = async () => {
+	try {
+		return {
+			baseCvs: await api.getBaseCvs(),
+			baseCvsError: null as string | null,
+		};
+	} catch (error) {
+		return {
+			baseCvs: [] as BaseCv[],
+			baseCvsError: messageFromError(error, "Base CVs could not be loaded."),
+		};
+	}
+};
+
 export async function recentGeneratedCvsLoader(
 	{ request }: LoaderFunctionArgs,
 ): Promise<RecentGeneratedCvsData> {
@@ -216,9 +233,10 @@ export async function documentsLoader({ request }: LoaderFunctionArgs): Promise<
 	await requireSession();
 	const url = new URL(request.url);
 	const state = normalizeDocumentsState(url.search);
-	const baseCvs = await api.getBaseCvs();
-	const generated =
-		state.tab === "generated" ? await loadGeneratedCvsPage(state) : emptyGeneratedCvs;
+	const [base, generated] = await Promise.all([
+		loadBaseCvs(),
+		state.tab === "generated" ? loadGeneratedCvsPage(state) : Promise.resolve(emptyGeneratedCvs),
+	]);
 
 	if (state.tab === "generated" && generated.generatedCvsError == null) {
 		const lastPage = Math.max(1, Math.ceil(generated.generatedCvsTotal / GENERATED_CV_PAGE_SIZE));
@@ -229,7 +247,16 @@ export async function documentsLoader({ request }: LoaderFunctionArgs): Promise<
 		}
 	}
 
-	return { baseCvs, ...generated };
+	if (state.tab === "base" && base.baseCvsError == null) {
+		const lastPage = Math.max(1, Math.ceil(base.baseCvs.length / BASE_CV_PAGE_SIZE));
+		if (state.page > lastPage) {
+			throw replace(
+				`${url.pathname}${serializeDocumentsState({ ...state, page: lastPage })}${url.hash}`,
+			);
+		}
+	}
+
+	return { ...base, ...generated };
 }
 
 export async function documentsAction({ request }: ActionFunctionArgs): Promise<DocumentsActionData> {
