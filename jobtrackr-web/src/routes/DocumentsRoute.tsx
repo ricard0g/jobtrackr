@@ -579,7 +579,7 @@ function RecentFilesSection({
             aria-busy={loading}
             className="mb-6 min-h-[101px] rounded-[10px] bg-[#e8e8e8] px-3 py-2.5 shadow-recent-files"
         >
-            <h3 id="recent-files-heading" className="text-xs font-light text-dark-gray">
+            <h3 id="recent-files-heading" className="text-sm text-dark-gray">
                 Recent files
             </h3>
 
@@ -615,7 +615,7 @@ function RecentFilesSection({
                     </p>
                 </div>
             ) : (
-                <div className="scrollbar-hide mt-2 flex gap-2 overflow-x-auto pb-1">
+                <div className="scrollbar-hide mt-2 flex max-w-full gap-2 overflow-x-auto pb-1">
                     {visibleItems.map((generatedCv) => (
                         <button
                             key={generatedCv.generatedCvId}
@@ -624,7 +624,7 @@ function RecentFilesSection({
                             title={generatedCv.originalFilename}
                             onClick={() => onPreview(generatedCv)}
                             onKeyDown={(event) => previewOnKeyDown(event, generatedCv)}
-                            className="flex h-[54px] w-[206px] shrink-0 items-center gap-2 rounded-lg border border-light-gray bg-[#f1f2f4] px-2 text-left outline-none transition-colors hover:border-medium-gray hover:bg-white focus-visible:ring-2 focus-visible:ring-dark-accent"
+                            className="flex h-[54px] w-[19.5%] shrink-0 items-center gap-2 rounded-lg border border-light-gray bg-[#f1f2f4] px-2 text-left outline-none transition-colors hover:border-medium-gray hover:bg-white focus-visible:ring-2 focus-visible:ring-dark-accent"
                         >
                             <FileText
                                 aria-hidden="true"
@@ -632,10 +632,10 @@ function RecentFilesSection({
                                 className="shrink-0 text-dark-gray"
                             />
                             <span className="min-w-0">
-                                <span className="block truncate text-xs text-dark-gray">
+                                <span className="block truncate text-sm text-dark-gray">
                                     {generatedCv.originalFilename}
                                 </span>
-                                <span className="mt-0.5 block truncate text-[9px] text-medium-gray">
+                                <span className="mt-0.5 block truncate text-xs text-medium-gray">
                                     {formatDate(generatedCv.createdAt)} ·{" "}
                                     {formatBytes(generatedCv.byteSize)}
                                 </span>
@@ -1006,7 +1006,7 @@ export function DocumentsRoute() {
                 activationMode="manual"
                 className="mx-auto w-full max-w-[1400px] rounded-[10px] border border-light-gray bg-[#e8e8e8] p-3 shadow-cool-light-inner sm:p-6"
             >
-                <div className="mb-4 flex w-full sm:w-fit max-w-full items-center gap-2 rounded-[10px] border border-light-gray bg-[#f1f2f4] p-1.5 shadow-cool-light sm:mb-6">
+                <div className="mb-4 flex w-full sm:w-fit max-w-full items-center gap-2 rounded-[10px] border border-light-gray bg-[#f1f2f4] p-1.5 shadow-cool-light sm:mb-4">
                     <span className="hidden sm:inline-block shrink-0 px-2 font-display text-base text-dark-gray">
                         Your Documents
                     </span>
