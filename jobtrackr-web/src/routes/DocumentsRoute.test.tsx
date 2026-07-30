@@ -472,7 +472,7 @@ describe("DocumentsRoute", () => {
 
 		await waitFor(() => {
 			expect(router.state.location.pathname).toBe("/applications/3");
-			expect(router.state.location.state).toEqual({ returnTo: initialEntry });
+			expect(router.state.location.state).toBeNull();
 		});
 	});
 
@@ -918,6 +918,89 @@ describe("DocumentsRoute", () => {
 			expect(action).toHaveBeenCalledTimes(1);
 			expect(screen.queryByText("acme-backend-v2")).toBeNull();
 		});
+	});
+
+	it("submits Generated CV deletion without wrapping confirm in AlertDialogAction", async () => {
+		const action = vi.fn(async ({ request }: { request: Request }) => {
+			const formData = await request.formData();
+			expect(formData.get("intent")).toBe("delete-generated-cv");
+			expect(formData.get("generatedCvId")).toBe("101");
+			return { ok: true, intent: "delete-generated-cv" };
+		});
+
+		renderDocuments(
+			{
+				generatedCvs: [generatedCv()],
+				generatedCvsTotal: 1,
+			},
+			action,
+		);
+
+		fireEvent.click(
+			await screen.findByRole("button", { name: "More actions for acme-backend-v2.pdf" }),
+		);
+		fireEvent.click(
+			within(
+				await screen.findByRole("menu", {
+					name: "More actions for acme-backend-v2.pdf",
+				}),
+			).getByRole("menuitem", { name: "Delete" }),
+		);
+
+		const confirm = within(
+			await screen.findByRole("alertdialog", {
+				name: "Delete acme-backend-v2.pdf?",
+			}),
+		).getByRole("button", { name: "Delete Generated CV" });
+
+		// AlertDialogAction closes/unmounts the dialog on click and can swallow the
+		// nested form submit in the browser; confirm must be a plain button.
+		expect(confirm.getAttribute("data-slot")).toBe("button");
+		expect((confirm as HTMLButtonElement).type).toBe("button");
+
+		fireEvent.click(confirm);
+
+		await waitFor(() => {
+			expect(action).toHaveBeenCalledTimes(1);
+		});
+	});
+
+	it("does not show the empty-library state after deleting the last row while total stays positive", async () => {
+		const action = vi.fn(async () => ({ ok: true, intent: "delete-generated-cv" }));
+
+		renderDocuments(
+			{
+				generatedCvs: [generatedCv()],
+				generatedCvsTotal: 21,
+			},
+			action,
+		);
+
+		fireEvent.click(
+			await screen.findByRole("button", { name: "More actions for acme-backend-v2.pdf" }),
+		);
+		fireEvent.click(
+			within(
+				await screen.findByRole("menu", {
+					name: "More actions for acme-backend-v2.pdf",
+				}),
+			).getByRole("menuitem", { name: "Delete" }),
+		);
+		fireEvent.click(
+			within(
+				await screen.findByRole("alertdialog", {
+					name: "Delete acme-backend-v2.pdf?",
+				}),
+			).getByRole("button", { name: "Delete Generated CV" }),
+		);
+
+		await waitFor(() => {
+			expect(action).toHaveBeenCalledTimes(1);
+			expect(screen.queryByText("acme-backend-v2")).toBeNull();
+		});
+
+		expect(screen.queryByText("No Generated CVs yet")).toBeNull();
+		expect(screen.getByText(/of 20$/)).toBeTruthy();
 	});
 
 	it("keeps a Generated CV visible and toasts when deletion fails", async () => {

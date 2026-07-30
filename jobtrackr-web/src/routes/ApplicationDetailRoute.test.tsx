@@ -72,7 +72,7 @@ function BoardShell() {
     );
 }
 
-const renderApplicationDetail = (state?: unknown) => {
+const renderApplicationDetail = () => {
     const router = createMemoryRouter(
         [
             {
@@ -87,15 +87,9 @@ const renderApplicationDetail = (state?: unknown) => {
                     },
                 ],
             },
-            { path: "/documents", element: <div>Documents route</div> },
         ],
         {
-            initialEntries: [
-                {
-                    pathname: "/applications/3",
-                    state,
-                },
-            ],
+            initialEntries: ["/applications/3"],
         },
     );
     render(<RouterProvider router={router} />);
@@ -108,30 +102,8 @@ afterEach(() => {
 });
 
 describe("ApplicationDetailRoute return navigation", () => {
-    it("closes back to the exact canonical Documents view supplied by row navigation", async () => {
-        const returnTo =
-            "/documents?tab=generated&page=3&sort=company&direction=asc";
-        const router = renderApplicationDetail({ returnTo });
-
-        const dialog = await screen.findByRole("dialog", { name: "Backend Engineer" });
-        fireEvent.keyDown(dialog, { key: "Escape", code: "Escape" });
-
-        await waitFor(() => {
-            expect(router.state.location.pathname + router.state.location.search).toBe(returnTo);
-            expect(screen.getByText("Documents route")).toBeTruthy();
-        });
-    });
-
-    it.each([
-        ["direct navigation", undefined],
-        ["an external return URL", { returnTo: "https://evil.example/documents" }],
-        ["a non-Documents internal URL", { returnTo: "/auth/login" }],
-        [
-            "non-canonical Documents state",
-            { returnTo: "/documents?tab=generated&page=zero&sort=created&direction=desc" },
-        ],
-    ])("closes %s to the Kanban root", async (_description, state) => {
-        const router = renderApplicationDetail(state);
+    it("closes to the Kanban root", async () => {
+        const router = renderApplicationDetail();
 
         const dialog = await screen.findByRole("dialog", { name: "Backend Engineer" });
         fireEvent.keyDown(dialog, { key: "Escape", code: "Escape" });

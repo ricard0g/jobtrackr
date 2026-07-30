@@ -75,7 +75,8 @@ export function DocumentTable<Row, SortKey extends string>({
 	const totalPages = Math.max(1, Math.ceil(total / pageSize));
 	const firstResult = total === 0 ? 0 : (page - 1) * pageSize + 1;
 	const lastResult = total === 0 ? 0 : Math.min(page * pageSize, total);
-	const placeholderCount = error || rows.length === 0 ? 0 : Math.max(0, pageSize - rows.length);
+	const showEmptyLibrary = !error && total === 0;
+	const placeholderCount = error || showEmptyLibrary ? 0 : Math.max(0, pageSize - rows.length);
 
 	return (
 		<div className="relative isolate">
@@ -156,7 +157,7 @@ export function DocumentTable<Row, SortKey extends string>({
 										) : null}
 									</td>
 								</tr>
-							) : rows.length === 0 ? (
+							) : showEmptyLibrary ? (
 								<tr className="h-[510px]">
 									<td colSpan={columns.length} className="px-6 text-center">
 										{empty}

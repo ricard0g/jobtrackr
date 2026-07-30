@@ -41,7 +41,6 @@ import {
 } from "@/components/documents/DocumentTable";
 import {
     AlertDialog,
-    AlertDialogAction,
     AlertDialogCancel,
     AlertDialogContent,
     AlertDialogDescription,
@@ -209,13 +208,11 @@ function GeneratedCvActions({
     onPreview,
     onDeleted,
     onFailure,
-    returnTo,
 }: {
     generatedCv: GeneratedCvSummary;
     onPreview: (generatedCv: GeneratedCvSummary) => void;
     onDeleted: (generatedCvId: number) => void;
     onFailure: (message: string) => void;
-    returnTo: string;
 }) {
     const deleteFetcher = useFetcher<DocumentsActionData>();
     const downloadFetcher = useFetcher<DocumentsActionData>();
@@ -276,6 +273,16 @@ function GeneratedCvActions({
         setDeleteDialogOpen(true);
     };
 
+    const confirmDelete = () => {
+        const formData = new FormData();
+        formData.set("intent", "delete-generated-cv");
+        formData.set("generatedCvId", String(generatedCv.generatedCvId));
+        // Submit before closing: AlertDialogAction/Dialog.Close unmounts the portal
+        // content on click and can prevent a nested <form> submit from firing.
+        deleteFetcher.submit(formData, { method: "post", action: "/documents" });
+        setDeleteDialogOpen(false);
+    };
+
     const preview = () => {
         setMobileMenuOpen(false);
         onPreview(generatedCv);
@@ -293,7 +300,6 @@ function GeneratedCvActions({
                         >
                             <Link
                                 to={`/applications/${generatedCv.applicationId}`}
-                                state={{ returnTo }}
                                 aria-label={`Open application for ${generatedCv.originalFilename}`}
                             >
                                 <Link2 aria-hidden="true" />
@@ -410,7 +416,6 @@ function GeneratedCvActions({
                         >
                             <Link
                                 to={`/applications/${generatedCv.applicationId}`}
-                                state={{ returnTo }}
                                 onClick={() => setMobileMenuOpen(false)}
                             >
                                 <Link2 aria-hidden="true" />
@@ -491,28 +496,18 @@ function GeneratedCvActions({
                                 Cancel
                             </Button>
                         </AlertDialogCancel>
-                        <deleteFetcher.Form
-                            method="post"
-                            action="/documents"
-                            onSubmit={() => setDeleteDialogOpen(false)}
+                        <Button
+                            type="button"
+                            disabled={deleting}
+                            onClick={confirmDelete}
                         >
-                            <input type="hidden" name="intent" value="delete-generated-cv" />
-                            <input
-                                type="hidden"
-                                name="generatedCvId"
-                                value={generatedCv.generatedCvId}
-                            />
-                            <AlertDialogAction asChild>
-                                <Button type="submit" disabled={deleting}>
-                                    {deleting ? (
-                                        <LoaderCircle className="animate-spin" />
-                                    ) : (
-                                        <Trash2 aria-hidden="true" />
-                                    )}
-                                    Delete Generated CV
-                                </Button>
-                            </AlertDialogAction>
-                        </deleteFetcher.Form>
+                            {deleting ? (
+                                <LoaderCircle className="animate-spin" />
+                            ) : (
+                                <Trash2 aria-hidden="true" />
+                            )}
+                            Delete Generated CV
+                        </Button>
                     </AlertDialogFooter>
                 </AlertDialogContent>
             </AlertDialog>
@@ -552,7 +547,11 @@ function GeneratedCvSection({
     const pending =
         navigation.state !== "idle" &&
         targetState?.tab === "generated";
+    const removedFromPage = items.filter((item) =>
+        deletedIds.has(item.generatedCvId),
+    ).length;
     const visibleItems = items.filter((item) => !deletedIds.has(item.generatedCvId));
+    const visibleTotal = Math.max(0, total - removedFromPage);
     const showFailureToast = useCallback((message: string) => {
         nextToastIdRef.current += 1;
         setFailureToast({ id: nextToastIdRef.current, message });
@@ -641,7 +640,6 @@ function GeneratedCvSection({
                     generatedCv={generatedCv}
                     onPreview={onPreview}
                     onFailure={showFailureToast}
-                    returnTo={`${location.pathname}${location.search}${location.hash}`}
                     onDeleted={(generatedCvId) =>
                         setDeletedIds((previous) => new Set(previous).add(generatedCvId))
                     }
@@ -670,7 +668,7 @@ function GeneratedCvSection({
                 onSort={sort}
                 page={urlState.page}
                 pageSize={GENERATED_CV_PAGE_SIZE}
-                total={total}
+                total={visibleTotal}
                 onPageChange={(page) => navigateToState({ ...urlState, page })}
                 error={error}
                 onRetry={() => revalidator.revalidate()}
