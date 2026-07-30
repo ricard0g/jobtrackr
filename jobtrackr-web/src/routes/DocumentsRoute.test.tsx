@@ -1,12 +1,22 @@
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { createMemoryRouter, RouterProvider } from "react-router";
+import {
+	createMemoryRouter,
+	Outlet,
+	RouterProvider,
+	type LoaderFunctionArgs,
+	type RouteObject,
+} from "react-router";
 
 import { api, clearAccessToken, setAccessToken } from "@/lib/api";
-import { DocumentsRoute } from "@/routes/DocumentsRoute";
+import { DocumentsRoute, DocumentsRouteHydrateFallback } from "@/routes/DocumentsRoute";
 import {
 	documentsLoader,
+	DOCUMENTS_RECENT_ROUTE_ID,
 	ensureCanonicalDocumentsUrl,
+	recentGeneratedCvsLoader,
+	recentGeneratedCvsResourceLoader,
+	recentGeneratedCvsShouldRevalidate,
 	type DocumentsLoaderData,
 } from "@/routes/documents-data";
 import type { BaseCv } from "@/types/base-cv";
@@ -110,34 +120,85 @@ const generatedCv = (overrides: Partial<GeneratedCvSummary> = {}): GeneratedCvSu
 	...overrides,
 });
 
+const recentResourceLoaderArgs = {
+	request: new Request("http://localhost/resources/documents/recent"),
+	params: {},
+} as LoaderFunctionArgs;
+
+type DocumentsRouteTestData = Partial<DocumentsLoaderData> & {
+	recentGeneratedCvs?: GeneratedCvSummary[];
+	recentGeneratedCvsError?: string | null;
+};
+
+const documentsRoute = ({
+	loader,
+	recentLoader = () => ({ items: [], error: null }),
+	action,
+	hydrateFallback = false,
+}: {
+	loader: RouteObject["loader"];
+	recentLoader?: RouteObject["loader"];
+	action?: RouteObject["action"];
+	hydrateFallback?: boolean;
+}): RouteObject => ({
+	id: DOCUMENTS_RECENT_ROUTE_ID,
+	path: "/documents",
+	Component: Outlet,
+	loader: recentLoader,
+	action,
+	shouldRevalidate: recentGeneratedCvsShouldRevalidate,
+	HydrateFallback: hydrateFallback ? DocumentsRouteHydrateFallback : undefined,
+	children: [
+		{
+			index: true,
+			Component: DocumentsRoute,
+			loader,
+		},
+	],
+});
+
 const renderDocuments = (
-	data: Partial<DocumentsLoaderData> = {},
+	data: DocumentsRouteTestData = {},
 	action?: (args: { request: Request }) => Promise<unknown>,
 	initialEntry = "/documents",
 ) => {
+	const {
+		recentGeneratedCvs = [],
+		recentGeneratedCvsError = null,
+		...documentsData
+	} = data;
 	const loaderData: DocumentsLoaderData = {
 		baseCvs: [],
 		generatedCvs: [],
 		generatedCvsPage: 0,
 		generatedCvsTotal: 0,
 		generatedCvsError: null,
-		...data,
+		...documentsData,
 	};
 	const router = createMemoryRouter(
 		[
-			{
-				path: "/documents",
-				Component: DocumentsRoute,
+			documentsRoute({
 				loader: ({ request }) => {
 					ensureCanonicalDocumentsUrl(request);
 					return loaderData;
 				},
+				recentLoader: () => ({
+					items: recentGeneratedCvs,
+					error: recentGeneratedCvsError,
+				}),
 				action,
-			},
+			}),
 			{ path: "/generate", element: <div>Generate route</div> },
 			{
 				path: "/applications/:applicationId",
 				element: <div>Application detail route</div>,
+			},
+			{
+				path: "/resources/documents/recent",
+				loader: () => ({
+					items: recentGeneratedCvs,
+					error: recentGeneratedCvsError,
+				}),
 			},
 		],
 		{ initialEntries: [initialEntry] },
@@ -147,7 +208,7 @@ const renderDocuments = (
 };
 
 const renderBaseDocuments = (
-	data: Partial<DocumentsLoaderData> = {},
+	data: DocumentsRouteTestData = {},
 	action?: (args: { request: Request }) => Promise<unknown>,
 ) => renderDocuments(data, action, "/documents?tab=base");
 
@@ -166,7 +227,7 @@ describe("DocumentsRoute", () => {
 			"false",
 		);
 		expect(screen.getByRole("tabpanel", { name: "Generated CVs" })).toBeTruthy();
-		expect(screen.getByText("No Generated CVs yet")).toBeTruthy();
+		expect(screen.getAllByText("No Generated CVs yet")).toHaveLength(2);
 		expect(screen.queryByText("No Base CVs yet")).toBeNull();
 
 		await waitFor(() => {
@@ -268,8 +329,9 @@ describe("DocumentsRoute", () => {
 
 		expect(await screen.findByRole("heading", { name: "Documents" })).toBeTruthy();
 		expect(screen.getByRole("heading", { name: "Generated CVs" })).toBeTruthy();
-		expect(screen.getByText("No Generated CVs yet")).toBeTruthy();
-		expect(screen.getByRole("link", { name: "Generate" })).toBeTruthy();
+		const table = screen.getByRole("table", { name: "Generated CVs" });
+		expect(within(table).getByText("No Generated CVs yet")).toBeTruthy();
+		expect(within(table).getByRole("link", { name: "Generate" })).toBeTruthy();
 
 		fireEvent.mouseDown(screen.getByRole("tab", { name: "Base CVs" }), {
 			button: 0,
@@ -413,6 +475,174 @@ describe("DocumentsRoute", () => {
 
 		const section = screen.getByRole("heading", { name: "Generated CVs" }).closest("section");
 		expect(section).toBeTruthy();
+	});
+
+	it("renders up to five Recent files with full filenames, local dates, and compact sizes", async () => {
+		const recentGeneratedCvs = Array.from({ length: 6 }, (_, index) =>
+			generatedCv({
+				generatedCvId: index + 1,
+				originalFilename: `recent-${index + 1}.docx`,
+				format: "DOCX",
+				contentType:
+					"application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+				byteSize: index === 0 ? 12_800 : 2_202_010,
+				createdAt: `2026-07-${String(25 - index).padStart(2, "0")}T20:30:00Z`,
+			}),
+		);
+		renderDocuments({
+			generatedCvs: [generatedCv()],
+			generatedCvsTotal: 1,
+			recentGeneratedCvs,
+		});
+
+		const recent = await screen.findByRole("region", { name: "Recent files" });
+		expect(within(recent).getByRole("heading", { name: "Recent files" })).toBeTruthy();
+		expect(within(recent).queryByText(/Recent files \d/)).toBeNull();
+		expect(await within(recent).findAllByRole("button")).toHaveLength(5);
+		expect(within(recent).getByText("recent-1.docx")).toBeTruthy();
+		expect(within(recent).getByText(/Jul 25, 2026.*12.5 kB/)).toBeTruthy();
+		expect(
+			within(recent)
+				.getByRole("button", { name: "Preview recent-1.docx from Recent files" })
+				.getAttribute("title"),
+		).toBe("recent-1.docx");
+		expect(within(recent).queryByText("recent-6.docx")).toBeNull();
+		expect(within(recent).queryByRole("menu")).toBeNull();
+		expect(
+			within(recent).queryByRole("button", { name: /Download|More actions|Delete/ }),
+		).toBeNull();
+	});
+
+	it("opens Recent file previews with click, Enter, and Space", async () => {
+		vi.spyOn(api, "getGeneratedCvPreview").mockImplementation(
+			() => new Promise(() => undefined),
+		);
+		renderDocuments({
+			generatedCvs: [generatedCv()],
+			generatedCvsTotal: 1,
+			recentGeneratedCvs: [generatedCv()],
+		});
+
+		const recentCard = await screen.findByRole("button", {
+			name: "Preview acme-backend-v2.pdf from Recent files",
+		});
+		fireEvent.click(recentCard);
+		expect(await screen.findByRole("dialog", { name: "acme-backend-v2.pdf" })).toBeTruthy();
+		expect(api.getGeneratedCvPreview).toHaveBeenCalledWith(101, expect.any(AbortSignal));
+
+		fireEvent.click(screen.getByRole("button", { name: "Close" }));
+		fireEvent.keyDown(recentCard, { key: "Enter" });
+		expect(await screen.findByRole("dialog", { name: "acme-backend-v2.pdf" })).toBeTruthy();
+
+		fireEvent.click(screen.getByRole("button", { name: "Close" }));
+		fireEvent.keyDown(recentCard, { key: " " });
+		expect(await screen.findByRole("dialog", { name: "acme-backend-v2.pdf" })).toBeTruthy();
+	});
+
+	it("keeps a visible Recent files empty state linked to Generate", async () => {
+		renderDocuments();
+
+		const recent = await screen.findByRole("region", { name: "Recent files" });
+		expect(await within(recent).findByText("No Generated CVs yet")).toBeTruthy();
+		expect(within(recent).getByRole("link", { name: "Generate" })).toBeTruthy();
+	});
+
+	it("keeps Recent files usable when the Generated CV table fails", async () => {
+		vi.spyOn(api, "getGeneratedCvPreview").mockImplementation(
+			() => new Promise(() => undefined),
+		);
+		renderDocuments({
+			generatedCvsError: "Generated CVs could not be loaded.",
+			recentGeneratedCvs: [generatedCv()],
+		});
+
+		expect(await screen.findByText("Generated CVs could not be loaded.")).toBeTruthy();
+		fireEvent.click(
+			await screen.findByRole("button", {
+				name: "Preview acme-backend-v2.pdf from Recent files",
+			}),
+		);
+		expect(await screen.findByRole("dialog", { name: "acme-backend-v2.pdf" })).toBeTruthy();
+	});
+
+	it("retries a Recent files failure without replacing the usable table", async () => {
+		const loader = vi.fn(
+			(): DocumentsLoaderData => ({
+				baseCvs: [],
+				generatedCvs: [generatedCv()],
+				generatedCvsPage: 0,
+				generatedCvsTotal: 1,
+				generatedCvsError: null,
+			}),
+		);
+		let recentLoad = 0;
+		const retryLoader = vi.fn(() => {
+			recentLoad += 1;
+			return recentLoad === 1
+				? { items: [], error: "Recent files could not be loaded." }
+				: { items: [generatedCv()], error: null };
+		});
+		const router = createMemoryRouter(
+			[
+				documentsRoute({
+					loader,
+					recentLoader: retryLoader,
+				}),
+				{
+					path: "/resources/documents/recent",
+					loader: retryLoader,
+				},
+			],
+			{
+				initialEntries: ["/documents?tab=generated&page=1&sort=created&direction=desc"],
+			},
+		);
+		render(<RouterProvider router={router} />);
+
+		const recent = await screen.findByRole("region", { name: "Recent files" });
+		expect((await within(recent).findByRole("alert")).textContent).toContain(
+			"Recent files could not be loaded.",
+		);
+		expect(screen.getByText("acme-backend-v2")).toBeTruthy();
+
+		fireEvent.click(within(recent).getByRole("button", { name: "Retry" }));
+		await waitFor(() => {
+			expect(retryLoader).toHaveBeenCalledTimes(2);
+		});
+
+		expect(
+			await within(recent).findByRole("button", {
+				name: "Preview acme-backend-v2.pdf from Recent files",
+			}),
+		).toBeTruthy();
+		expect(loader).toHaveBeenCalledTimes(1);
+		expect(retryLoader).toHaveBeenCalledTimes(2);
+		expect(screen.getByText("acme-backend-v2")).toBeTruthy();
+	});
+
+	it("shows five Recent file skeletons while the Recent resource loader is pending", async () => {
+		const router = createMemoryRouter(
+			[
+				documentsRoute({
+					loader: (): DocumentsLoaderData => ({
+						baseCvs: [],
+						generatedCvs: [generatedCv()],
+						generatedCvsPage: 0,
+						generatedCvsTotal: 1,
+						generatedCvsError: null,
+					}),
+					recentLoader: () => new Promise(() => undefined),
+					hydrateFallback: true,
+				}),
+			],
+			{
+				initialEntries: ["/documents?tab=generated&page=1&sort=created&direction=desc"],
+			},
+		);
+		render(<RouterProvider router={router} />);
+
+		const recent = await screen.findByRole("region", { name: "Recent files" });
+		expect(within(recent).getAllByTestId("recent-file-skeleton")).toHaveLength(5);
 	});
 
 	it("keeps Generated CV rows and Name cells inert until Preview is explicitly selected", async () => {
@@ -687,15 +917,17 @@ describe("DocumentsRoute", () => {
 		};
 		const router = createMemoryRouter(
 			[
-				{
-					path: "/documents",
-					Component: DocumentsRoute,
+				documentsRoute({
 					loader: ({ request }) => {
 						ensureCanonicalDocumentsUrl(request);
 						loaderCall += 1;
 						return loaderCall === 1 ? initialData : nextLoad;
 					},
-				},
+					recentLoader: () => ({
+						items: [generatedCv()],
+						error: null,
+					}),
+				}),
 			],
 			{
 				initialEntries: ["/documents?tab=generated&page=1&sort=created&direction=desc"],
@@ -736,6 +968,197 @@ describe("DocumentsRoute", () => {
 		});
 	});
 
+	it("loads Recent files independently with a fixed newest-first request", async () => {
+		setAccessToken("test-token");
+		vi.spyOn(api, "getBaseCvs").mockResolvedValue([]);
+		const recentItems = Array.from({ length: 5 }, (_, index) =>
+			generatedCv({
+				generatedCvId: index + 1,
+				originalFilename: `recent-${index + 1}.pdf`,
+				createdAt: `2026-07-${String(25 - index).padStart(2, "0")}T10:00:00Z`,
+			}),
+		);
+		vi.spyOn(api, "getGeneratedCvsPage").mockImplementation(async (params) =>
+			params?.size === 5
+				? { items: recentItems, total: 12, page: 0, size: 5 }
+				: {
+						items: [
+							generatedCv({
+								generatedCvId: 201,
+								originalFilename: "sorted-table-row.pdf",
+							}),
+						],
+						total: 12,
+						page: 1,
+						size: 10,
+					},
+		);
+		const router = createMemoryRouter(
+			[
+				documentsRoute({
+					loader: documentsLoader,
+					recentLoader: recentGeneratedCvsLoader,
+				}),
+			],
+			{
+				initialEntries: ["/documents?tab=generated&page=2&sort=name&direction=asc"],
+			},
+		);
+		render(<RouterProvider router={router} />);
+
+		expect(await screen.findByText("sorted-table-row")).toBeTruthy();
+		expect(await screen.findByText("recent-1.pdf")).toBeTruthy();
+		expect(api.getGeneratedCvsPage).toHaveBeenCalledWith({
+			page: 1,
+			size: 10,
+			sort: "name",
+			direction: "asc",
+		});
+		expect(api.getGeneratedCvsPage).toHaveBeenCalledWith({
+			page: 0,
+			size: 5,
+			sort: "created",
+			direction: "desc",
+		});
+	});
+
+	it("does not refetch Recent files when the Generated CV table sort changes", async () => {
+		const loaderData: DocumentsLoaderData = {
+			baseCvs: [],
+			generatedCvs: [generatedCv()],
+			generatedCvsPage: 0,
+			generatedCvsTotal: 1,
+			generatedCvsError: null,
+		};
+		const loader = vi.fn(({ request }: { request: Request }) => {
+			ensureCanonicalDocumentsUrl(request);
+			return loaderData;
+		});
+		const recentLoader = vi.fn(() => ({
+			items: [generatedCv({ originalFilename: "stable-recent.pdf" })],
+			error: null,
+		}));
+		const router = createMemoryRouter(
+			[
+				documentsRoute({
+					loader,
+					recentLoader,
+				}),
+			],
+			{
+				initialEntries: ["/documents?tab=generated&page=1&sort=created&direction=desc"],
+			},
+		);
+		render(<RouterProvider router={router} />);
+
+		expect(await screen.findByText("stable-recent.pdf")).toBeTruthy();
+		const table = screen.getByRole("table", { name: "Generated CVs" });
+		fireEvent.click(
+			within(within(table).getByRole("columnheader", { name: /Name/ })).getByRole("button"),
+		);
+
+		await waitFor(() => {
+			expect(router.state.location.search).toBe(
+				"?tab=generated&page=1&sort=name&direction=asc",
+			);
+		});
+		expect(screen.getByText("stable-recent.pdf")).toBeTruthy();
+		expect(loader).toHaveBeenCalledTimes(2);
+		expect(recentLoader).toHaveBeenCalledTimes(1);
+	});
+
+	it("does not refetch Recent files when the Generated CV table retries", async () => {
+		let loaderCall = 0;
+		const loader = vi.fn((): DocumentsLoaderData => {
+			loaderCall += 1;
+			return {
+				baseCvs: [],
+				generatedCvs: loaderCall === 1 ? [] : [generatedCv()],
+				generatedCvsPage: 0,
+				generatedCvsTotal: loaderCall === 1 ? 0 : 1,
+				generatedCvsError:
+					loaderCall === 1 ? "Generated CVs could not be loaded." : null,
+			};
+		});
+		const recentLoader = vi.fn(() => ({
+			items: [generatedCv({ originalFilename: "stable-recent.pdf" })],
+			error: null,
+		}));
+		const router = createMemoryRouter(
+			[
+				documentsRoute({
+					loader,
+					recentLoader,
+				}),
+			],
+			{
+				initialEntries: ["/documents?tab=generated&page=1&sort=created&direction=desc"],
+			},
+		);
+		render(<RouterProvider router={router} />);
+
+		expect(await screen.findByText("stable-recent.pdf")).toBeTruthy();
+		const table = screen.getByRole("table", { name: "Generated CVs" });
+		fireEvent.click(within(table).getByRole("button", { name: "Retry" }));
+
+		expect(await within(table).findByText("acme-backend-v2")).toBeTruthy();
+		expect(screen.getByText("stable-recent.pdf")).toBeTruthy();
+		expect(loader).toHaveBeenCalledTimes(2);
+		expect(recentLoader).toHaveBeenCalledTimes(1);
+	});
+
+	it("loads Recent files through the real authenticated resource loader", async () => {
+		setAccessToken("test-token");
+		const recentItems = Array.from({ length: 6 }, (_, index) =>
+			generatedCv({
+				generatedCvId: index + 1,
+				originalFilename: `recent-${index + 1}.pdf`,
+			}),
+		);
+		vi.spyOn(api, "getGeneratedCvsPage").mockResolvedValue({
+			items: recentItems,
+			total: 6,
+			page: 0,
+			size: 5,
+		});
+
+		const result = await recentGeneratedCvsResourceLoader(recentResourceLoaderArgs);
+
+		expect(result).toEqual({
+			items: recentItems.slice(0, 5),
+			error: null,
+		});
+		expect(api.getGeneratedCvsPage).toHaveBeenCalledWith({
+			page: 0,
+			size: 5,
+			sort: "created",
+			direction: "desc",
+		});
+	});
+
+	it("returns a scoped Recent files error from the real resource loader", async () => {
+		setAccessToken("test-token");
+		vi.spyOn(api, "getGeneratedCvsPage").mockRejectedValue("network unavailable");
+
+		await expect(recentGeneratedCvsResourceLoader(recentResourceLoaderArgs)).resolves.toEqual({
+			items: [],
+			error: "Recent files could not be loaded.",
+		});
+	});
+
+	it("redirects an unauthenticated Recent files resource request to login", async () => {
+		vi.spyOn(globalThis, "fetch").mockRejectedValue(new Error("refresh unavailable"));
+
+		try {
+			await recentGeneratedCvsResourceLoader(recentResourceLoaderArgs);
+			throw new Error("Expected an unauthenticated redirect.");
+		} catch (error) {
+			expect(error).toBeInstanceOf(Response);
+			expect((error as Response).status).toBe(302);
+			expect((error as Response).headers.get("Location")).toBe("/auth/login");
+		}
+	});
+
 	it("normalizes a page beyond the Generated CV library to the last existing page", async () => {
 		setAccessToken("test-token");
 		vi.spyOn(api, "getBaseCvs").mockResolvedValue([]);
@@ -751,11 +1174,9 @@ describe("DocumentsRoute", () => {
 		});
 		const router = createMemoryRouter(
 			[
-				{
-					path: "/documents",
-					Component: DocumentsRoute,
+				documentsRoute({
 					loader: documentsLoader,
-				},
+				}),
 			],
 			{
 				initialEntries: ["/documents?tab=generated&page=9&sort=created&direction=desc"],
@@ -770,18 +1191,19 @@ describe("DocumentsRoute", () => {
 			expect(router.state.historyAction).toBe("REPLACE");
 		});
 		expect(await screen.findByText("11–14 of 14")).toBeTruthy();
-		expect(api.getGeneratedCvsPage).toHaveBeenNthCalledWith(1, {
+		expect(api.getGeneratedCvsPage).toHaveBeenCalledWith({
 			page: 8,
 			size: 10,
 			sort: "created",
 			direction: "desc",
 		});
-		expect(api.getGeneratedCvsPage).toHaveBeenNthCalledWith(2, {
+		expect(api.getGeneratedCvsPage).toHaveBeenCalledWith({
 			page: 1,
 			size: 10,
 			sort: "created",
 			direction: "desc",
 		});
+		expect(api.getGeneratedCvsPage).toHaveBeenCalledTimes(2);
 	});
 
 	it("normalizes an empty Generated CV library to page one", async () => {
@@ -795,11 +1217,9 @@ describe("DocumentsRoute", () => {
 		}));
 		const router = createMemoryRouter(
 			[
-				{
-					path: "/documents",
-					Component: DocumentsRoute,
+				documentsRoute({
 					loader: documentsLoader,
-				},
+				}),
 			],
 			{
 				initialEntries: ["/documents?tab=generated&page=4&sort=company&direction=asc"],
@@ -812,7 +1232,8 @@ describe("DocumentsRoute", () => {
 				"?tab=generated&page=1&sort=company&direction=asc",
 			);
 		});
-		expect(await screen.findByText("No Generated CVs yet")).toBeTruthy();
+		const table = await screen.findByRole("table", { name: "Generated CVs" });
+		expect(await within(table).findByText("No Generated CVs yet")).toBeTruthy();
 		expect(screen.getByText("0–0 of 0")).toBeTruthy();
 	});
 
@@ -920,6 +1341,88 @@ describe("DocumentsRoute", () => {
 		});
 	});
 
+	it("removes a deleted Generated CV from Recent files and refills the strip", async () => {
+		let deletedOnServer = false;
+		const deleted = generatedCv({
+			generatedCvId: 101,
+			originalFilename: "delete-me.pdf",
+		});
+		const initialRecent = [
+			deleted,
+			...Array.from({ length: 4 }, (_, index) =>
+				generatedCv({
+					generatedCvId: 102 + index,
+					originalFilename: `keep-${index + 1}.pdf`,
+				}),
+			),
+		];
+		const refilledRecent = [
+			...initialRecent.slice(1),
+			generatedCv({
+				generatedCvId: 106,
+				originalFilename: "refilled.pdf",
+			}),
+		];
+		const loader = vi.fn((): DocumentsLoaderData => {
+			return {
+				baseCvs: [],
+				generatedCvs: deletedOnServer ? [] : [deleted],
+				generatedCvsPage: 0,
+				generatedCvsTotal: deletedOnServer ? 0 : 1,
+				generatedCvsError: null,
+			};
+		});
+		const recentLoader = vi.fn(() => ({
+			items: deletedOnServer ? refilledRecent : initialRecent,
+			error: null,
+		}));
+		const action = vi.fn(async () => {
+			deletedOnServer = true;
+			return { ok: true, intent: "delete-generated-cv" };
+		});
+		const router = createMemoryRouter(
+			[
+				documentsRoute({
+					loader,
+					recentLoader,
+					action,
+				}),
+			],
+			{
+				initialEntries: ["/documents?tab=generated&page=1&sort=created&direction=desc"],
+			},
+		);
+		render(<RouterProvider router={router} />);
+
+		fireEvent.click(
+			await screen.findByRole("button", { name: "More actions for delete-me.pdf" }),
+		);
+		fireEvent.click(
+			within(
+				await screen.findByRole("menu", {
+					name: "More actions for delete-me.pdf",
+				}),
+			).getByRole("menuitem", { name: "Delete" }),
+		);
+		fireEvent.click(
+			within(
+				await screen.findByRole("alertdialog", {
+					name: "Delete delete-me.pdf?",
+				}),
+			).getByRole("button", { name: "Delete Generated CV" }),
+		);
+
+		await screen.findByRole("region", { name: "Recent files" });
+		await waitFor(() => {
+			const recent = screen.getByRole("region", { name: "Recent files" });
+			expect(within(recent).queryByText("delete-me.pdf")).toBeNull();
+			expect(within(recent).getByText("refilled.pdf")).toBeTruthy();
+		});
+		expect(action).toHaveBeenCalledTimes(1);
+		expect(loader).toHaveBeenCalledTimes(2);
+		expect(recentLoader).toHaveBeenCalledTimes(2);
+	});
+
 	it("submits Generated CV deletion without wrapping confirm in AlertDialogAction", async () => {
 		const action = vi.fn(async ({ request }: { request: Request }) => {
 			const formData = await request.formData();
@@ -999,7 +1502,8 @@ describe("DocumentsRoute", () => {
 			expect(screen.queryByText("acme-backend-v2")).toBeNull();
 		});
 
-		expect(screen.queryByText("No Generated CVs yet")).toBeNull();
+		const table = screen.getByRole("table", { name: "Generated CVs" });
+		expect(within(table).queryByText("No Generated CVs in your library")).toBeNull();
 		expect(screen.getByText(/of 20$/)).toBeTruthy();
 	});
 

@@ -47,6 +47,11 @@
         inset 0px 4px 4px rgba(255, 255, 255, 1),
         inset 0px -2px 4px rgba(0, 0, 0, 0.05),
         2px 4px 8px rgba(0, 0, 0, 0.15);
+    --shadow-recent-files:
+        inset 1px 1px 2px rgba(255, 255, 255, 0.5),
+        inset -1px -1px 2px rgba(163, 177, 198, 0.3),
+        -8px -8px 16px rgba(255, 255, 255, 0.9),
+        6px 6px 20px rgba(163, 177, 198, 0.6);
     --shadow-cool-strong:
         inset 0px 8px 8px rgba(255, 255, 255, 1),
         inset 0px -6px 6px rgba(0, 0, 0, 0.1),

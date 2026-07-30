@@ -28,7 +28,7 @@ import {
     useLocation,
     useNavigate,
     useNavigation,
-    useRevalidator,
+    useRouteLoaderData,
 } from "react-router";
 
 import {
@@ -68,13 +68,16 @@ import type { BaseCv } from "@/types/base-cv";
 import type { GeneratedCvSummary } from "@/types/generated-cv";
 import {
     defaultDocumentsState,
+    DOCUMENTS_RECENT_ROUTE_ID,
     GENERATED_CV_PAGE_SIZE,
     normalizeDocumentsState,
+    RECENT_GENERATED_CV_LIMIT,
     serializeDocumentsState,
     type DocumentsActionData,
     type DocumentsLoaderData,
     type DocumentsUrlState,
     type GeneratedSortKey,
+    type RecentGeneratedCvsData,
 } from "@/routes/documents-data";
 
 const MAX_BASE_CVS = 20;
@@ -515,21 +518,154 @@ function GeneratedCvActions({
     );
 }
 
+function RecentFileSkeletonStrip() {
+    return (
+        <div className="scrollbar-hide mt-2 flex gap-2 overflow-x-auto">
+            {Array.from({ length: RECENT_GENERATED_CV_LIMIT }, (_, index) => (
+                <div
+                    key={index}
+                    data-testid="recent-file-skeleton"
+                    className="h-[54px] w-[206px] shrink-0 animate-pulse rounded-lg border border-light-gray bg-[#f1f2f4]"
+                />
+            ))}
+        </div>
+    );
+}
+
+function RecentFilesSkeleton() {
+    return (
+        <section
+            aria-labelledby="recent-files-loading-heading"
+            className="mb-6 min-h-[101px] rounded-[10px] bg-[#e8e8e8] px-3 py-2.5 shadow-recent-files"
+        >
+            <h2 id="recent-files-loading-heading" className="text-xs font-light text-dark-gray">
+                Recent files
+            </h2>
+            <RecentFileSkeletonStrip />
+        </section>
+    );
+}
+
+function RecentFilesSection({
+    items,
+    error,
+    loading,
+    deletedIds,
+    onPreview,
+    onRetry,
+}: {
+    items: GeneratedCvSummary[];
+    error: string | null;
+    loading: boolean;
+    deletedIds: Set<number>;
+    onPreview: (generatedCv: GeneratedCvSummary) => void;
+    onRetry: () => void;
+}) {
+    const visibleItems = items
+        .filter((item) => !deletedIds.has(item.generatedCvId))
+        .slice(0, RECENT_GENERATED_CV_LIMIT);
+    const previewOnKeyDown = (
+        event: KeyboardEvent<HTMLButtonElement>,
+        generatedCv: GeneratedCvSummary,
+    ) => {
+        if (event.key !== "Enter" && event.key !== " ") return;
+        event.preventDefault();
+        onPreview(generatedCv);
+    };
+
+    return (
+        <section
+            aria-labelledby="recent-files-heading"
+            aria-busy={loading}
+            className="mb-6 min-h-[101px] rounded-[10px] bg-[#e8e8e8] px-3 py-2.5 shadow-recent-files"
+        >
+            <h3 id="recent-files-heading" className="text-xs font-light text-dark-gray">
+                Recent files
+            </h3>
+
+            {loading && items.length === 0 && !error ? (
+                <RecentFileSkeletonStrip />
+            ) : error ? (
+                <div className="flex h-[54px] items-center justify-between gap-3 text-xs">
+                    <p role="alert" className="text-medium-gray">
+                        {error}
+                    </p>
+                    <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        disabled={loading}
+                        onClick={onRetry}
+                    >
+                        {loading ? (
+                            <LoaderCircle className="animate-spin" />
+                        ) : null}
+                        Retry
+                    </Button>
+                </div>
+            ) : visibleItems.length === 0 ? (
+                <div className="flex h-[54px] items-center gap-2 text-xs text-medium-gray">
+                    <FileText aria-hidden="true" size={24} className="shrink-0 opacity-70" />
+                    <p>
+                        <span className="font-medium text-dark-gray">No Generated CVs yet</span>
+                        {" · "}
+                        <Link to="/generate" className="underline underline-offset-2">
+                            Generate
+                        </Link>
+                    </p>
+                </div>
+            ) : (
+                <div className="scrollbar-hide mt-2 flex gap-2 overflow-x-auto pb-1">
+                    {visibleItems.map((generatedCv) => (
+                        <button
+                            key={generatedCv.generatedCvId}
+                            type="button"
+                            aria-label={`Preview ${generatedCv.originalFilename} from Recent files`}
+                            title={generatedCv.originalFilename}
+                            onClick={() => onPreview(generatedCv)}
+                            onKeyDown={(event) => previewOnKeyDown(event, generatedCv)}
+                            className="flex h-[54px] w-[206px] shrink-0 items-center gap-2 rounded-lg border border-light-gray bg-[#f1f2f4] px-2 text-left outline-none transition-colors hover:border-medium-gray hover:bg-white focus-visible:ring-2 focus-visible:ring-dark-accent"
+                        >
+                            <FileText
+                                aria-hidden="true"
+                                size={24}
+                                className="shrink-0 text-dark-gray"
+                            />
+                            <span className="min-w-0">
+                                <span className="block truncate text-xs text-dark-gray">
+                                    {generatedCv.originalFilename}
+                                </span>
+                                <span className="mt-0.5 block truncate text-[9px] text-medium-gray">
+                                    {formatDate(generatedCv.createdAt)} ·{" "}
+                                    {formatBytes(generatedCv.byteSize)}
+                                </span>
+                            </span>
+                        </button>
+                    ))}
+                </div>
+            )}
+        </section>
+    );
+}
+
 function GeneratedCvSection({
     items,
     total,
     error,
+    recentGeneratedCvs,
     onPreview,
 }: {
     items: GeneratedCvSummary[];
     total: number;
     error: string | null;
+    recentGeneratedCvs: RecentGeneratedCvsData;
     onPreview: (generatedCv: GeneratedCvSummary) => void;
 }) {
     const location = useLocation();
     const navigate = useNavigate();
     const navigation = useNavigation();
-    const revalidator = useRevalidator();
+    const recentFetcher = useFetcher<RecentGeneratedCvsData>();
+    const recent = recentFetcher.data ?? recentGeneratedCvs;
     const [deletedIds, setDeletedIds] = useState<Set<number>>(() => new Set());
     const [failureToast, setFailureToast] = useState<{ id: number; message: string } | null>(null);
     const nextToastIdRef = useRef(0);
@@ -556,6 +692,10 @@ function GeneratedCvSection({
         nextToastIdRef.current += 1;
         setFailureToast({ id: nextToastIdRef.current, message });
     }, []);
+
+    const handleDeleted = (generatedCvId: number) => {
+        setDeletedIds((previous) => new Set(previous).add(generatedCvId));
+    };
 
     const navigateToState = (
         nextState: Extract<DocumentsUrlState, { tab: "generated" }>,
@@ -640,9 +780,7 @@ function GeneratedCvSection({
                     generatedCv={generatedCv}
                     onPreview={onPreview}
                     onFailure={showFailureToast}
-                    onDeleted={(generatedCvId) =>
-                        setDeletedIds((previous) => new Set(previous).add(generatedCvId))
-                    }
+                    onDeleted={handleDeleted}
                 />
             ),
         },
@@ -658,6 +796,15 @@ function GeneratedCvSection({
                     Generated CVs
                 </h2>
 
+                <RecentFilesSection
+                    items={recent.items}
+                    error={recent.error}
+                    loading={recentFetcher.state !== "idle"}
+                    deletedIds={deletedIds}
+                    onPreview={onPreview}
+                    onRetry={() => recentFetcher.load("/resources/documents/recent")}
+                />
+
                 <DocumentTable
                 label="Generated CVs"
                 columns={columns}
@@ -671,8 +818,8 @@ function GeneratedCvSection({
                 total={visibleTotal}
                 onPageChange={(page) => navigateToState({ ...urlState, page })}
                 error={error}
-                onRetry={() => revalidator.revalidate()}
-                retrying={revalidator.state !== "idle"}
+                onRetry={() => navigateToState(urlState)}
+                retrying={pending}
                 pending={pending}
                 empty={
                     <div className="flex flex-col items-center text-medium-gray">
@@ -706,9 +853,30 @@ function GeneratedCvSection({
     );
 }
 
+export function DocumentsRouteHydrateFallback() {
+    return (
+        <div className="h-full overflow-y-auto px-3 pb-12 pt-2 sm:px-4 sm:pt-5">
+            <div className="mx-auto w-full max-w-[1400px] rounded-[10px] border border-light-gray bg-[#e8e8e8] p-3 shadow-cool-light-inner sm:p-6">
+                <div
+                    aria-hidden="true"
+                    className="mb-6 h-[41px] w-full max-w-[394px] animate-pulse rounded-[10px] bg-[#f1f2f4] shadow-cool-light"
+                />
+                <RecentFilesSkeleton />
+                <div
+                    aria-hidden="true"
+                    className="h-[604px] animate-pulse rounded-[10px] bg-[#f1f2f4] shadow-cool-light"
+                />
+            </div>
+        </div>
+    );
+}
+
 export function DocumentsRoute() {
     const { baseCvs, generatedCvs, generatedCvsTotal, generatedCvsError } =
         useLoaderData() as DocumentsLoaderData;
+    const recentGeneratedCvs = useRouteLoaderData(
+        DOCUMENTS_RECENT_ROUTE_ID,
+    ) as RecentGeneratedCvsData;
     const uploadFetcher = useFetcher<DocumentsActionData>();
     const previewDownloadFetcher = useFetcher<DocumentsActionData>();
     const location = useLocation();
@@ -872,6 +1040,7 @@ export function DocumentsRoute() {
                         items={generatedCvs}
                         total={generatedCvsTotal}
                         error={generatedCvsError}
+                        recentGeneratedCvs={recentGeneratedCvs}
                         onPreview={openGeneratedCvPreview}
                     />
                 </Tabs.Content>

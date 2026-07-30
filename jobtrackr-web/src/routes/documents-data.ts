@@ -10,6 +10,8 @@ import type { BaseCv } from "@/types/base-cv";
 import type { GeneratedCvSummary } from "@/types/generated-cv";
 
 export const GENERATED_CV_PAGE_SIZE = 10;
+export const RECENT_GENERATED_CV_LIMIT = 5;
+export const DOCUMENTS_RECENT_ROUTE_ID = "documents-recent";
 
 const documentsTabConfig = {
 	generated: {
@@ -95,6 +97,11 @@ export type DocumentsLoaderData = {
 	generatedCvsError: string | null;
 };
 
+export type RecentGeneratedCvsData = {
+	items: GeneratedCvSummary[];
+	error: string | null;
+};
+
 export type DocumentsActionIntent =
 	| "upload"
 	| "delete"
@@ -167,6 +174,42 @@ const loadGeneratedCvsPage = async (
 		};
 	}
 };
+
+const loadRecentGeneratedCvs = async () => {
+	try {
+		const page = await api.getGeneratedCvsPage({
+			page: 0,
+			size: RECENT_GENERATED_CV_LIMIT,
+			sort: "created",
+			direction: "desc",
+		});
+		return {
+			items: page.items.slice(0, RECENT_GENERATED_CV_LIMIT),
+			error: null as string | null,
+		};
+	} catch (error) {
+		return {
+			items: [] as GeneratedCvSummary[],
+			error: messageFromError(error, "Recent files could not be loaded."),
+		};
+	}
+};
+
+export async function recentGeneratedCvsLoader(
+	{ request }: LoaderFunctionArgs,
+): Promise<RecentGeneratedCvsData> {
+	ensureCanonicalDocumentsUrl(request);
+	await requireSession();
+	return loadRecentGeneratedCvs();
+}
+
+export async function recentGeneratedCvsResourceLoader(
+	_args: LoaderFunctionArgs,
+): Promise<RecentGeneratedCvsData> {
+	void _args;
+	await requireSession();
+	return loadRecentGeneratedCvs();
+}
 
 export async function documentsLoader({ request }: LoaderFunctionArgs): Promise<DocumentsLoaderData> {
 	ensureCanonicalDocumentsUrl(request);
@@ -263,4 +306,21 @@ export function documentsShouldRevalidate({
 		return false;
 	}
 	return defaultShouldRevalidate;
+}
+
+export function recentGeneratedCvsShouldRevalidate({
+	formData,
+	currentUrl,
+	defaultShouldRevalidate,
+}: ShouldRevalidateFunctionArgs) {
+	if (formData?.get("intent") === "delete-generated-cv") {
+		return true;
+	}
+	const canonicalCurrentSearch = serializeDocumentsState(
+		normalizeDocumentsState(currentUrl.search),
+	);
+	if (currentUrl.search !== canonicalCurrentSearch) {
+		return defaultShouldRevalidate;
+	}
+	return false;
 }
