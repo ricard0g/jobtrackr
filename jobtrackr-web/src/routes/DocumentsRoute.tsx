@@ -177,7 +177,7 @@ function BaseCvActions({
 
     return (
         <TooltipProvider delayDuration={0}>
-            <div className="flex items-center justify-center gap-1">
+            <div className="flex items-center justify-center gap-1.5">
                 <Tooltip>
                     <TooltipTrigger asChild>
                         <Button
@@ -236,7 +236,7 @@ function BaseCvActions({
                         role="menu"
                         aria-label={`More actions for ${baseCv.originalFilename}`}
                         align="end"
-                        className="w-36 min-w-0 bg-[#f1f2f4] p-2 shadow-cool-light"
+                        className="w-40 min-w-0 bg-[#f1f2f4] p-2.5 shadow-cool-light"
                     >
                         <Button
                             type="button"
@@ -374,7 +374,7 @@ function GeneratedCvActions({
 
     return (
         <TooltipProvider delayDuration={0}>
-            <div className="hidden items-center justify-center gap-1 md:flex">
+            <div className="hidden items-center justify-center gap-1.5 md:flex">
                 <Tooltip>
                     <TooltipTrigger asChild>
                         <Button
@@ -450,7 +450,7 @@ function GeneratedCvActions({
                         role="menu"
                         aria-label={`More actions for ${generatedCv.originalFilename}`}
                         align="end"
-                        className="w-36 min-w-0 bg-[#f1f2f4] p-2 shadow-cool-light"
+                        className="w-40 min-w-0 bg-[#f1f2f4] p-2.5 shadow-cool-light"
                     >
                         <Button
                             type="button"
@@ -489,7 +489,7 @@ function GeneratedCvActions({
                         role="menu"
                         aria-label={`More actions for ${generatedCv.originalFilename} on small screens`}
                         align="end"
-                        className="w-44 min-w-0 bg-[#f1f2f4] p-2 shadow-cool-light"
+                        className="w-48 min-w-0 bg-[#f1f2f4] p-2.5 shadow-cool-light"
                     >
                         <Button
                             asChild
@@ -601,12 +601,12 @@ function GeneratedCvActions({
 
 function RecentFileSkeletonStrip() {
     return (
-        <div className="scrollbar-hide mt-2 flex gap-2 overflow-x-auto">
+        <div className="mt-2 grid grid-cols-5 gap-2.5">
             {Array.from({ length: RECENT_GENERATED_CV_LIMIT }, (_, index) => (
                 <div
                     key={index}
                     data-testid="recent-file-skeleton"
-                    className="h-[54px] w-[206px] shrink-0 animate-pulse rounded-lg border border-light-gray bg-[#f1f2f4]"
+                    className="h-[52px] min-w-0 animate-pulse rounded-lg border border-light-gray bg-[#f1f2f4]"
                 />
             ))}
         </div>
@@ -617,7 +617,7 @@ function RecentFilesSkeleton() {
     return (
         <section
             aria-labelledby="recent-files-loading-heading"
-            className="mb-6 min-h-[101px] rounded-[10px] bg-[#e8e8e8] px-3 py-2.5 shadow-recent-files"
+            className="mb-5 min-h-[102px] rounded-[12px] bg-[#e8e8e8] px-4 py-2.5 shadow-recent-files"
         >
             <h2 id="recent-files-loading-heading" className="text-xs font-light text-dark-gray">
                 Recent files
@@ -658,7 +658,7 @@ function RecentFilesSection({
         <section
             aria-labelledby="recent-files-heading"
             aria-busy={loading}
-            className="mb-6 min-h-[101px] rounded-[10px] bg-[#e8e8e8] px-3 py-2.5 shadow-recent-files"
+            className="mb-5 min-h-[102px] rounded-[12px] bg-[#e8e8e8] px-4 py-2.5 shadow-recent-files"
         >
             <h3 id="recent-files-heading" className="text-sm text-dark-gray">
                 Recent files
@@ -667,7 +667,7 @@ function RecentFilesSection({
             {loading && items.length === 0 && !error ? (
                 <RecentFileSkeletonStrip />
             ) : error ? (
-                <div className="flex h-[54px] items-center justify-between gap-3 text-xs">
+                <div className="flex h-[52px] items-center justify-between gap-3 text-xs">
                     <p role="alert" className="text-medium-gray">
                         {error}
                     </p>
@@ -685,7 +685,7 @@ function RecentFilesSection({
                     </Button>
                 </div>
             ) : visibleItems.length === 0 ? (
-                <div className="flex h-[54px] items-center gap-2 text-xs text-medium-gray">
+                <div className="flex h-[52px] items-center gap-2.5 text-xs text-medium-gray">
                     <FileText aria-hidden="true" size={24} className="shrink-0 opacity-70" />
                     <p>
                         <span className="font-medium text-dark-gray">No Generated CVs yet</span>
@@ -696,7 +696,7 @@ function RecentFilesSection({
                     </p>
                 </div>
             ) : (
-                <div className="scrollbar-hide mt-2 flex max-w-full gap-2 overflow-x-auto pb-1">
+                <div className="mt-2 grid grid-cols-5 gap-2.5">
                     {visibleItems.map((generatedCv) => (
                         <button
                             key={generatedCv.generatedCvId}
@@ -705,7 +705,7 @@ function RecentFilesSection({
                             title={generatedCv.originalFilename}
                             onClick={() => onPreview(generatedCv)}
                             onKeyDown={(event) => previewOnKeyDown(event, generatedCv)}
-                            className="flex h-[54px] w-[19.5%] shrink-0 items-center gap-2 rounded-lg border border-light-gray bg-[#f1f2f4] px-2 text-left outline-none transition-colors hover:border-medium-gray hover:bg-white focus-visible:ring-2 focus-visible:ring-dark-accent"
+                            className="flex h-[52px] min-w-0 items-center gap-2.5 rounded-lg border border-light-gray bg-[#f1f2f4] px-2.5 text-left outline-none transition-colors hover:border-medium-gray hover:bg-white focus-visible:ring-2 focus-visible:ring-dark-accent"
                         >
                             <FileText
                                 aria-hidden="true"
@@ -909,7 +909,8 @@ function BaseCvSection({
             key: "actions",
             label: "Actions",
             className: "w-[18%]",
-            cellClassName: "sticky right-0 z-10 bg-[#f1f2f4]",
+            cellClassName:
+                "sticky right-0 z-10 bg-[#f1f2f4] md:static md:bg-transparent",
             render: (baseCv) => (
                 <BaseCvActions
                     baseCv={baseCv}
@@ -932,17 +933,10 @@ function BaseCvSection({
 
     return (
         <ToastProvider swipeDirection="right">
-            <section aria-labelledby="base-cvs-heading" className="rounded-[10px] py-4">
+            <section aria-labelledby="base-cvs-heading" className="rounded-[12px] py-3">
                 <h2 id="base-cvs-heading" className="sr-only">
                     Base CVs
                 </h2>
-                <div className="mb-3 flex justify-end">
-                    <p className="text-sm font-semibold text-darkest-accent" aria-live="polite">
-                        {error == null
-                            ? `${items.length} of ${MAX_BASE_CVS} Base CVs`
-                            : "Base CV quota unavailable"}
-                    </p>
-                </div>
                 <div
                     role="button"
                     tabIndex={atLimit || uploading ? -1 : 0}
@@ -968,13 +962,20 @@ function BaseCvSection({
                         }
                     }}
                     onDrop={onDrop}
-                    className={`flex min-h-[165px] flex-col items-center justify-center rounded-[10px] border border-dashed p-6 text-center transition-colors ${dropZoneState}`}
+                    className={`flex min-h-40 flex-col items-center justify-center rounded-[12px] border border-dashed p-5 text-center transition-colors ${dropZoneState}`}
                 >
                     {uploading ? (
                         <LoaderCircle className="mb-3 animate-spin text-dark-accent" size={32} />
                     ) : (
                         <UploadCloud className="mb-3 text-dark-accent" size={32} />
                     )}
+                    <div className="mb-3 flex justify-end">
+                        <p className="text-sm font-semibold text-darkest-accent" aria-live="polite">
+                            {error == null
+                                ? `${items.length} of ${MAX_BASE_CVS} Base CVs`
+                                : "Base CV quota unavailable"}
+                        </p>
+                    </div>
                     <p className="font-semibold text-dark-gray">
                         {uploading
                             ? "Uploading Base CV…"
@@ -1030,7 +1031,7 @@ function BaseCvSection({
                     retrying={revalidator.state !== "idle"}
                     empty={
                         <div className="flex flex-col items-center text-medium-gray">
-                            <File className="mb-2 opacity-70" size={28} />
+                            <File className="mb-2.5 opacity-70" size={32} />
                             <h3 className="text-sm font-semibold text-dark-gray">No Base CVs yet</h3>
                             <p className="mt-1 max-w-md text-sm">
                                 Upload a source document to make it available for future CV Generation.
@@ -1072,6 +1073,7 @@ function GeneratedCvSection({
     const location = useLocation();
     const navigate = useNavigate();
     const navigation = useNavigation();
+    const revalidator = useRevalidator();
     const recentFetcher = useFetcher<RecentGeneratedCvsData>();
     // Keep Retry fetcher data only while the parent recent loader is still in error.
     const recent =
@@ -1079,6 +1081,8 @@ function GeneratedCvSection({
             ? recentFetcher.data
             : recentGeneratedCvs;
     const [deletedIds, setDeletedIds] = useState<Set<number>>(() => new Set());
+    const [optimisticRemoved, setOptimisticRemoved] = useState(0);
+    const syncedTotalRef = useRef(total);
     const [failureToast, setFailureToast] = useState<{ id: number; message: string } | null>(null);
     const nextToastIdRef = useRef(0);
     const normalizedState = normalizeDocumentsState(location.search);
@@ -1095,18 +1099,22 @@ function GeneratedCvSection({
     const pending =
         navigation.state !== "idle" &&
         targetState?.tab === "generated";
-    const removedFromPage = items.filter((item) =>
-        deletedIds.has(item.generatedCvId),
-    ).length;
     const visibleItems = items.filter((item) => !deletedIds.has(item.generatedCvId));
-    const visibleTotal = Math.max(0, total - removedFromPage);
+    const visibleTotal = Math.max(0, total - optimisticRemoved);
     const showFailureToast = useCallback((message: string) => {
         nextToastIdRef.current += 1;
         setFailureToast({ id: nextToastIdRef.current, message });
     }, []);
 
+    useEffect(() => {
+        if (syncedTotalRef.current === total) return;
+        syncedTotalRef.current = total;
+        setOptimisticRemoved(0);
+    }, [total]);
+
     const handleDeleted = (generatedCvId: number) => {
         setDeletedIds((previous) => new Set(previous).add(generatedCvId));
+        setOptimisticRemoved((count) => count + 1);
     };
 
     const navigateToState = (
@@ -1178,8 +1186,8 @@ function GeneratedCvSection({
         {
             key: "actions",
             label: "Actions",
-            className: "max-w-[72px] md:w-[18%]",
-            headerClassName: "[padding-inline:8px] md:[padding-inline:20px]",
+            className: "max-w-[80px] md:w-[18%]",
+            headerClassName: "[padding-inline:10px] md:[padding-inline:24px]",
             cellClassName:
                 "sticky right-0 z-10 bg-[#f1f2f4] md:static md:bg-transparent",
             render: (generatedCv) => (
@@ -1197,7 +1205,7 @@ function GeneratedCvSection({
         <ToastProvider swipeDirection="right">
             <section
                 aria-labelledby="generated-cvs-heading"
-                className="rounded-[10px] py-4"
+                className="rounded-[12px] py-3"
             >
                 <h2 id="generated-cvs-heading" className="sr-only">
                     Generated CVs
@@ -1213,34 +1221,34 @@ function GeneratedCvSection({
                 />
 
                 <DocumentTable
-                label="Generated CVs"
-                columns={columns}
-                rows={visibleItems}
-                rowKey={(generatedCv) => generatedCv.generatedCvId}
-                sortKey={urlState.sort}
-                direction={urlState.direction}
-                onSort={sort}
-                page={urlState.page}
-                pageSize={GENERATED_CV_PAGE_SIZE}
-                total={visibleTotal}
-                onPageChange={(page) => navigateToState({ ...urlState, page })}
-                error={error}
-                onRetry={() => navigateToState(urlState)}
-                retrying={pending}
-                pending={pending}
-                empty={
-                    <div className="flex flex-col items-center text-medium-gray">
-                    <File className="mb-2 opacity-70" size={28} />
-                    <h3 className="text-sm font-semibold text-dark-gray">No Generated CVs yet</h3>
-                    <p className="mt-1 max-w-md text-sm">
-                        Create tailored documents from{" "}
-                        <Link to="/generate" className="underline underline-offset-2">
-                            Generate
-                        </Link>
-                        .
-                    </p>
-                    </div>
-                }
+                    label="Generated CVs"
+                    columns={columns}
+                    rows={visibleItems}
+                    rowKey={(generatedCv) => generatedCv.generatedCvId}
+                    sortKey={urlState.sort}
+                    direction={urlState.direction}
+                    onSort={sort}
+                    page={urlState.page}
+                    pageSize={GENERATED_CV_PAGE_SIZE}
+                    total={visibleTotal}
+                    onPageChange={(page) => navigateToState({ ...urlState, page })}
+                    error={error}
+                    onRetry={() => revalidator.revalidate()}
+                    retrying={revalidator.state !== "idle"}
+                    pending={pending}
+                    empty={
+                        <div className="flex flex-col items-center text-medium-gray">
+                            <File className="mb-2.5 opacity-70" size={32} />
+                            <h3 className="text-sm font-semibold text-dark-gray">No Generated CVs yet</h3>
+                            <p className="mt-1 max-w-md text-sm">
+                                Create tailored documents from{" "}
+                                <Link to="/generate" className="underline underline-offset-2">
+                                    Generate
+                                </Link>
+                                .
+                            </p>
+                        </div>
+                    }
                 />
             </section>
             <Toast
@@ -1262,16 +1270,16 @@ function GeneratedCvSection({
 
 export function DocumentsRouteHydrateFallback() {
     return (
-        <div className="h-full overflow-y-auto px-3 pb-12 pt-2 sm:px-4 sm:pt-5">
-            <div className="mx-auto w-full max-w-[1156px] rounded-[10px] bg-[#e8e8e8] p-3 shadow-cool-light-inner sm:p-6">
+        <div className="h-full overflow-y-auto px-4 pb-12 pt-3 sm:px-6 sm:pt-5">
+            <div className="mx-auto w-full max-w-[1440px] rounded-[12px] bg-[#e8e8e8] p-4 shadow-cool-light-inner sm:p-6">
                 <div
                     aria-hidden="true"
-                    className="mb-6 h-[41px] w-full max-w-[394px] animate-pulse rounded-[10px] bg-[#f1f2f4] shadow-cool-light"
+                    className="mb-5 h-10 w-full max-w-[440px] animate-pulse rounded-[12px] bg-[#f1f2f4] shadow-cool-light"
                 />
                 <RecentFilesSkeleton />
                 <div
                     aria-hidden="true"
-                    className="h-[604px] animate-pulse rounded-[10px] bg-[#f1f2f4] shadow-cool-light"
+                    className="h-[560px] animate-pulse rounded-[12px] bg-[#f1f2f4] shadow-cool-light"
                 />
             </div>
         </div>
@@ -1359,36 +1367,36 @@ export function DocumentsRoute() {
     };
 
     return (
-        <div className="h-full overflow-y-auto px-3 pb-12 pt-2 sm:px-4 sm:pt-5">
+        <div className="h-full overflow-y-auto px-4 pb-12 pt-3 sm:px-6 sm:pt-5">
             <h1 className="sr-only">Documents</h1>
             <Tabs.Root
                 value={urlState.tab}
                 onValueChange={changeTab}
                 orientation="horizontal"
                 activationMode="manual"
-                className="mx-auto w-full max-w-[1156px] rounded-[10px] bg-[#e8e8e8] p-3 shadow-cool-light-inner sm:p-6"
+                className="mx-auto w-full max-w-[1440px] rounded-[12px] bg-[#e8e8e8] p-4 shadow-cool-light-inner sm:p-6"
             >
-                <div className="mb-4 flex w-full sm:w-fit max-w-full items-center gap-2 rounded-[10px] border border-light-gray bg-[#f1f2f4] p-1.5 shadow-cool-light sm:mb-4">
-                    <span className="hidden sm:inline-block shrink-0 px-2 font-display text-base text-dark-gray">
+                <div className="mb-4 flex w-full sm:w-fit max-w-full items-center gap-2.5 rounded-[12px] border border-light-gray bg-[#f1f2f4] p-1.5 shadow-cool-light sm:mb-4">
+                    <span className="hidden sm:inline-block shrink-0 px-2.5 font-display text-base text-dark-gray">
                         Your Documents
                     </span>
-                    <span aria-hidden="true" className="hidden sm:inline-block h-7 w-px shrink-0 bg-light-gray" />
+                    <span aria-hidden="true" className="hidden sm:inline-block h-8 w-px shrink-0 bg-light-gray" />
                     <Tabs.List
                         aria-label="Your Documents"
                         className="flex min-w-0 w-full sm:w-auto items-center rounded-md bg-[#d9d9d9] p-1 shadow-inner"
                     >
                         <Tabs.Trigger
                             value="generated"
-                            className="flex justify-center sm:justify-start h-7 min-w-0 w-full sm:w-auto items-center gap-1.5 rounded px-2 font-display text-base text-medium-gray outline-none transition-colors hover:text-dark-gray focus-visible:ring-2 focus-visible:ring-dark-accent data-[state=active]:bg-[#f1f2f4] data-[state=active]:text-darkest-accent data-[state=active]:shadow-light sm:px-3"
+                            className="flex justify-center sm:justify-start h-8 min-w-0 w-full sm:w-auto items-center gap-2 rounded px-2.5 font-display text-base text-medium-gray outline-none transition-colors hover:text-dark-gray focus-visible:ring-2 focus-visible:ring-dark-accent data-[state=active]:bg-[#f1f2f4] data-[state=active]:text-darkest-accent data-[state=active]:shadow-light sm:px-3.5"
                         >
-                            <Files aria-hidden="true" size={14} className="shrink-0" />
+                            <Files aria-hidden="true" size={16} className="shrink-0" />
                             <span className="truncate w-full">Generated CVs</span>
                         </Tabs.Trigger>
                         <Tabs.Trigger
                             value="base"
-                            className="flex justify-center sm:justify-start h-7 min-w-0 w-full sm:w-auto items-center gap-1.5 rounded px-2 font-display text-base text-medium-gray outline-none transition-colors hover:text-dark-gray focus-visible:ring-2 focus-visible:ring-dark-accent data-[state=active]:bg-[#f1f2f4] data-[state=active]:text-darkest-accent data-[state=active]:shadow-light sm:px-3"
+                            className="flex justify-center sm:justify-start h-8 min-w-0 w-full sm:w-auto items-center gap-2 rounded px-2.5 font-display text-base text-medium-gray outline-none transition-colors hover:text-dark-gray focus-visible:ring-2 focus-visible:ring-dark-accent data-[state=active]:bg-[#f1f2f4] data-[state=active]:text-darkest-accent data-[state=active]:shadow-light sm:px-3.5"
                         >
-                            <FileText aria-hidden="true" size={14} className="shrink-0" />
+                            <FileText aria-hidden="true" size={16} className="shrink-0" />
                             <span className="truncate">Base CVs</span>
                         </Tabs.Trigger>
                     </Tabs.List>

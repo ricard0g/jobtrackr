@@ -379,7 +379,7 @@ describe("DocumentsRoute", () => {
 
 		expect(within(table).getByText("profile-12")).toBeTruthy();
 		expect(within(table).queryByText("profile-01")).toBeNull();
-		expect(screen.getByText("1–10 of 12")).toBeTruthy();
+		expect(screen.getByText("1 of 2")).toBeTruthy();
 
 		fireEvent.click(within(table).getByRole("button", { name: "Name" }));
 		await waitFor(() => {
@@ -395,7 +395,7 @@ describe("DocumentsRoute", () => {
 				"?tab=base&page=2&sort=name&direction=asc",
 			);
 		});
-		expect(screen.getByText("11–12 of 12")).toBeTruthy();
+		expect(screen.getByText("2 of 2")).toBeTruthy();
 		expect(within(table).getByText("profile-11")).toBeTruthy();
 
 		fireEvent.click(within(table).getByRole("button", { name: "Name" }));
@@ -1653,7 +1653,7 @@ describe("DocumentsRoute", () => {
 			);
 			expect(router.state.historyAction).toBe("REPLACE");
 		});
-		expect(await screen.findByText("11–14 of 14")).toBeTruthy();
+		expect(await screen.findByText("2 of 2")).toBeTruthy();
 		expect(api.getGeneratedCvsPage).toHaveBeenCalledWith({
 			page: 8,
 			size: 10,
@@ -1697,10 +1697,10 @@ describe("DocumentsRoute", () => {
 		});
 		const table = await screen.findByRole("table", { name: "Generated CVs" });
 		expect(await within(table).findByText("No Generated CVs yet")).toBeTruthy();
-		expect(screen.getByText("0–0 of 0")).toBeTruthy();
+		expect(screen.getByText("0 of 0")).toBeTruthy();
 	});
 
-	it("shows ten-row pagination with a result range and replace navigation", async () => {
+	it("shows ten-row pagination with page counts and replace navigation", async () => {
 		const router = renderDocuments(
 			{
 				generatedCvs: [generatedCv()],
@@ -1711,7 +1711,7 @@ describe("DocumentsRoute", () => {
 			"/documents?tab=generated&page=2&sort=created&direction=desc",
 		);
 
-		expect(await screen.findByText("11–20 of 25")).toBeTruthy();
+		expect(await screen.findByText("2 of 3")).toBeTruthy();
 		const previous = screen.getByRole("button", { name: "Previous page" });
 		const next = screen.getByRole("button", { name: "Next page" });
 		expect(previous.hasAttribute("disabled")).toBe(false);
@@ -1755,7 +1755,7 @@ describe("DocumentsRoute", () => {
 			);
 			expect(router.state.historyAction).toBe("REPLACE");
 		});
-		expect(await screen.findByText("11–14 of 14")).toBeTruthy();
+		expect(await screen.findByText("2 of 2")).toBeTruthy();
 	});
 
 	it("keeps Base CV management available when Generated CVs fail to load", async () => {
@@ -1999,10 +1999,10 @@ describe("DocumentsRoute", () => {
 
 		const table = screen.getByRole("table", { name: "Generated CVs" });
 		expect(within(table).queryByText("No Generated CVs in your library")).toBeNull();
-		expect(screen.getByText(/of 20$/)).toBeTruthy();
+		expect(screen.getByText("1 of 2")).toBeTruthy();
 	});
 
-	it("clamps the result range when a delete empties the current page", async () => {
+	it("clamps the page label when a delete empties the current page", async () => {
 		const onlyOnPageTwo = generatedCv({
 			generatedCvId: 111,
 			originalFilename: "last-on-page.pdf",
@@ -2019,7 +2019,7 @@ describe("DocumentsRoute", () => {
 			"/documents?tab=generated&page=2&sort=created&direction=desc",
 		);
 
-		expect(await screen.findByText("11–11 of 11")).toBeTruthy();
+		expect(await screen.findByText("2 of 2")).toBeTruthy();
 
 		fireEvent.click(
 			await screen.findByRole("button", { name: "More actions for last-on-page.pdf" }),
@@ -2044,8 +2044,85 @@ describe("DocumentsRoute", () => {
 			expect(screen.queryByText("last-on-page")).toBeNull();
 		});
 
-		expect(screen.queryByText("11–10 of 10")).toBeNull();
-		expect(screen.getByText("1–10 of 10")).toBeTruthy();
+		expect(screen.queryByText("2 of 1")).toBeNull();
+		expect(screen.getByText("1 of 1")).toBeTruthy();
+	});
+
+	it("keeps the optimistic Generated CV page count after paging before revalidation", async () => {
+		const pageOneItems = Array.from({ length: 10 }, (_, index) =>
+			generatedCv({
+				generatedCvId: index + 1,
+				originalFilename: `page-one-${index + 1}.pdf`,
+			}),
+		);
+		const pageTwoItems = Array.from({ length: 10 }, (_, index) =>
+			generatedCv({
+				generatedCvId: index + 11,
+				originalFilename: `page-two-${index + 1}.pdf`,
+			}),
+		);
+		const action = vi.fn(async () => ({ ok: true, intent: "delete-generated-cv" }));
+		const router = createMemoryRouter(
+			[
+				documentsRoute({
+					loader: ({ request }) => {
+						ensureCanonicalDocumentsUrl(request);
+						const page = Number(new URL(request.url).searchParams.get("page") ?? "1");
+						return {
+							baseCvs: [],
+							baseCvsError: null,
+							generatedCvs: page === 2 ? pageTwoItems : pageOneItems,
+							generatedCvsPage: page - 1,
+							// Stale total: delete already succeeded, but revalidation has not updated total yet.
+							generatedCvsTotal: 21,
+							generatedCvsError: null,
+						};
+					},
+					action,
+				}),
+			],
+			{
+				initialEntries: ["/documents?tab=generated&page=1&sort=created&direction=desc"],
+			},
+		);
+		render(<RouterProvider router={router} />);
+
+		expect(await screen.findByText("1 of 3")).toBeTruthy();
+
+		fireEvent.click(
+			await screen.findByRole("button", { name: "More actions for page-one-1.pdf" }),
+		);
+		fireEvent.click(
+			within(
+				await screen.findByRole("menu", {
+					name: "More actions for page-one-1.pdf",
+				}),
+			).getByRole("menuitem", { name: "Delete" }),
+		);
+		fireEvent.click(
+			within(
+				await screen.findByRole("alertdialog", {
+					name: "Delete page-one-1.pdf?",
+				}),
+			).getByRole("button", { name: "Delete Generated CV" }),
+		);
+
+		await waitFor(() => {
+			expect(action).toHaveBeenCalledTimes(1);
+			expect(screen.queryByText("page-one-1")).toBeNull();
+			expect(screen.getByText("1 of 2")).toBeTruthy();
+		});
+
+		fireEvent.click(screen.getByRole("button", { name: "Next page" }));
+		await waitFor(() => {
+			expect(router.state.location.search).toBe(
+				"?tab=generated&page=2&sort=created&direction=desc",
+			);
+		});
+
+		expect(await screen.findByText("page-two-1")).toBeTruthy();
+		expect(screen.queryByText("2 of 3")).toBeNull();
+		expect(screen.getByText("2 of 2")).toBeTruthy();
 	});
 
 	it("keeps a Generated CV visible and toasts when deletion fails", async () => {

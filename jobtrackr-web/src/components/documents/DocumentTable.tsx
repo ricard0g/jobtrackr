@@ -74,8 +74,6 @@ export function DocumentTable<Row, SortKey extends string>({
 }: DocumentTableProps<Row, SortKey>) {
 	const totalPages = Math.max(1, Math.ceil(total / pageSize));
 	const safePage = Math.min(Math.max(1, page), total === 0 ? 1 : totalPages);
-	const firstResult = total === 0 ? 0 : (safePage - 1) * pageSize + 1;
-	const lastResult = total === 0 ? 0 : Math.min(safePage * pageSize, total);
 	const showEmptyLibrary = !error && total === 0;
 	const placeholderCount = error || showEmptyLibrary ? 0 : Math.max(0, pageSize - rows.length);
 
@@ -84,14 +82,14 @@ export function DocumentTable<Row, SortKey extends string>({
 			<div
 				aria-hidden="true"
 				data-slot="document-table-body-surface"
-				className="pointer-events-none absolute inset-x-0 top-[42px] bottom-0 rounded-[10px] bg-[#f1f2f4] py-0.5 shadow-cool-light"
+				className="pointer-events-none absolute inset-x-0 top-[44px] bottom-0 rounded-[12px] bg-[#f1f2f4] py-0.5 shadow-cool-light"
 			/>
 			<div className="overflow-x-auto">
-				<div className="relative min-w-[1080px]">
+				<div className="relative min-w-[1360px]">
 					<div
 						aria-hidden="true"
 						data-slot="document-table-head-surface"
-						className="pointer-events-none absolute inset-x-[10px] top-0 h-[42px] rounded-t-[10px] bg-[#f1f2f4] shadow-cool-light-table-head"
+						className="pointer-events-none absolute inset-x-3 top-0 h-[44px] rounded-t-[12px] bg-[#f1f2f4] shadow-cool-light-table-head"
 					/>
 					<table
 						aria-label={label}
@@ -99,7 +97,7 @@ export function DocumentTable<Row, SortKey extends string>({
 						className="relative w-full table-fixed border-collapse text-center text-base text-dark-gray"
 					>
 						<thead>
-							<tr className="h-[42px]">
+							<tr className="h-[44px]">
 								{columns.map((column) => {
 									const active = column.sortable && column.key === sortKey;
 									const ariaSort = column.sortable
@@ -114,14 +112,14 @@ export function DocumentTable<Row, SortKey extends string>({
 											key={column.key}
 											scope="col"
 											aria-sort={ariaSort}
-											className={`px-5 font-normal text-medium-gray ${column.className ?? ""} ${column.headerClassName ?? ""}`}
+											className={`px-6 font-normal text-medium-gray ${column.className ?? ""} ${column.headerClassName ?? ""}`}
 										>
 											{column.sortable ? (
 												<button
 													type="button"
 													disabled={pending}
 													onClick={() => onSort(column.key)}
-													className="flex items-center mx-auto gap-1 rounded-sm outline-none hover:text-black focus-visible:ring-2 focus-visible:ring-dark-accent disabled:cursor-wait"
+													className="flex items-center mx-auto gap-1.5 rounded-sm outline-none hover:text-black focus-visible:ring-2 focus-visible:ring-dark-accent disabled:cursor-wait"
 												>
 													{column.label}
 													{sortIcon(Boolean(active), direction)}
@@ -138,8 +136,8 @@ export function DocumentTable<Row, SortKey extends string>({
 							className={`transition-opacity ${pending ? "opacity-50" : "opacity-100"}`}
 						>
 							{error ? (
-								<tr className="h-[510px]">
-									<td colSpan={columns.length} className="px-6 text-center">
+								<tr className="h-[480px]">
+									<td colSpan={columns.length} className="px-8 text-center">
 										<p role="alert" className="text-medium-gray">
 											{error}
 										</p>
@@ -159,8 +157,8 @@ export function DocumentTable<Row, SortKey extends string>({
 									</td>
 								</tr>
 							) : showEmptyLibrary ? (
-								<tr className="h-[510px]">
-									<td colSpan={columns.length} className="px-6 text-center">
+								<tr className="h-[480px]">
+									<td colSpan={columns.length} className="px-8 text-center">
 										{empty}
 									</td>
 								</tr>
@@ -169,12 +167,12 @@ export function DocumentTable<Row, SortKey extends string>({
 									{rows.map((row) => (
 										<tr
 											key={rowKey(row)}
-											className="h-[51px] border-b border-black/20 last:border-b-0"
+											className="h-12 border-b border-black/20 last:border-b-0"
 										>
 											{columns.map((column) => (
 												<td
 													key={column.key}
-													className={`truncate px-5 ${column.className ?? ""} ${column.cellClassName ?? ""}`}
+													className={`truncate px-6 ${column.className ?? ""} ${column.cellClassName ?? ""}`}
 												>
 													{column.render(row)}
 												</td>
@@ -185,7 +183,7 @@ export function DocumentTable<Row, SortKey extends string>({
 										<tr
 											key={`placeholder-${index}`}
 											aria-hidden="true"
-											className="h-[51px] border-b border-black/10 last:border-b-0"
+											className="h-12 border-b border-black/10 last:border-b-0"
 										>
 											<td colSpan={columns.length} />
 										</tr>
@@ -196,11 +194,11 @@ export function DocumentTable<Row, SortKey extends string>({
 					</table>
 				</div>
 			</div>
-			<div className="relative flex items-center justify-between gap-4 border-t border-black/20 px-5 py-3 text-sm">
+			<div className="relative flex items-center justify-between gap-4 border-t border-black/20 px-6 py-2.5 text-sm">
 				<p aria-live="polite" className="text-medium-gray">
-					{firstResult}–{lastResult} of {total}
+					{total === 0 ? "0 of 0" : `${safePage} of ${totalPages}`}
 				</p>
-				<div className="flex items-center gap-2">
+				<div className="flex items-center gap-2.5">
 					<Button
 						type="button"
 						variant="ghost"
