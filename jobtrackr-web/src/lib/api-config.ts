@@ -12,4 +12,4 @@ const resolvedOrigin = (
 
 export const API_ORIGIN = resolvedOrigin;
 export const API_BASE_URL = resolvedOrigin ? `${resolvedOrigin}/api/v1` : "/api/v1";
-export const AUTH_BASE_URL = resolvedOrigin ? `${resolvedOrigin}/auth` : "/auth";
+export const AUTH_BASE_URL = resolvedOrigin ? `${resolvedOrigin}/api/v1/auth` : "/api/v1/auth";

@@ -65,7 +65,7 @@ class AuthControllerTest {
                 "refresh-token-value",
                 OffsetDateTime.now().plusDays(7)));
 
-        mockMvc.perform(post("/auth/register")
+        mockMvc.perform(post("/api/v1/auth/register")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
                                 {
@@ -102,7 +102,7 @@ class AuthControllerTest {
                 "refresh-token-value",
                 OffsetDateTime.now().plusDays(7)));
 
-        mockMvc.perform(post("/auth/login")
+        mockMvc.perform(post("/api/v1/auth/login")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
                                 {
@@ -137,7 +137,7 @@ class AuthControllerTest {
                 "new-refresh-token",
                 OffsetDateTime.now().plusDays(7)));
 
-        mockMvc.perform(post("/auth/refresh").cookie(new jakarta.servlet.http.Cookie("refresh_token", "old-refresh-token")))
+        mockMvc.perform(post("/api/v1/auth/refresh").cookie(new jakarta.servlet.http.Cookie("refresh_token", "old-refresh-token")))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.accessToken").value("new-access-token"))
                 .andExpect(cookie().exists("refresh_token"));
@@ -147,7 +147,7 @@ class AuthControllerTest {
     void refresh_withoutRefreshCookie_shouldReturn401() throws Exception {
         when(authService.refresh(null)).thenThrow(new InvalidRefreshTokenException("Refresh token is missing"));
 
-        mockMvc.perform(post("/auth/refresh"))
+        mockMvc.perform(post("/api/v1/auth/refresh"))
                 .andExpect(status().isUnauthorized())
                 .andExpect(jsonPath("$.code").value("INVALID_REFRESH_TOKEN"));
     }
@@ -156,7 +156,7 @@ class AuthControllerTest {
     void logout_shouldClearRefreshCookie() throws Exception {
         doNothing().when(authService).logout(any());
 
-        mockMvc.perform(post("/auth/logout").cookie(new jakarta.servlet.http.Cookie("refresh_token", "refresh-token")))
+        mockMvc.perform(post("/api/v1/auth/logout").cookie(new jakarta.servlet.http.Cookie("refresh_token", "refresh-token")))
                 .andExpect(status().isNoContent())
                 .andExpect(cookie().maxAge("refresh_token", 0));
 

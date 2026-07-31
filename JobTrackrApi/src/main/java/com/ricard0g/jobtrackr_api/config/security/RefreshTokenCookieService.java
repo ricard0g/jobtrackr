@@ -15,7 +15,7 @@ import lombok.RequiredArgsConstructor;
 @RequiredArgsConstructor
 public class RefreshTokenCookieService {
 
-    private static final String AUTH_COOKIE_PATH = "/auth";
+    private static final String AUTH_COOKIE_PATH = "/api/v1/auth";
 
     private final JwtProperties jwtProperties;
 

@@ -57,7 +57,7 @@ Companies are **not** preloaded on the board. The create-application dialog lazy
 
 - `API_ORIGIN` from `VITE_API_ORIGIN`, or legacy `VITE_API_URL` with `/api/v1` stripped, or `http://localhost:8080`.
 - `API_BASE_URL = ${API_ORIGIN}/api/v1`
-- `AUTH_BASE_URL = ${API_ORIGIN}/auth`
+- `AUTH_BASE_URL = ${API_ORIGIN}/api/v1/auth`
 
 The access token is stored in module memory only. Refresh token is held by the backend as an HttpOnly cookie. Refresh and logout include credentials and CSRF.
 

@@ -182,7 +182,7 @@ echo ""
 echo "Verify:"
 echo "  curl -s -o /dev/null -w '%{http_code}\n' '$NGROK_URL/' -H 'ngrok-skip-browser-warning: true'"
 if [[ "$MOCK_MODE" == false ]]; then
-	echo "  curl -s '$NGROK_URL/auth/csrf' -H 'ngrok-skip-browser-warning: true'"
+	echo "  curl -s '$NGROK_URL/api/v1/auth/csrf' -H 'ngrok-skip-browser-warning: true'"
 fi
 echo ""
 echo "Stop with: ./scripts/cloud-tunnel-down.sh"

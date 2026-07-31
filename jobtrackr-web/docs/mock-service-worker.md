@@ -27,7 +27,7 @@ To reset the mock backend, delete that localStorage key and reload the page.
 
 The mock routes mirror the current `JobTrackrApi` contract:
 
-- `/auth/csrf`, `/auth/register`, `/auth/login`, `/auth/refresh`, `/auth/logout`
+- `/api/v1/auth/csrf`, `/api/v1/auth/register`, `/api/v1/auth/login`, `/api/v1/auth/refresh`, `/api/v1/auth/logout`
 - `/api/v1/user`
 - `/api/v1/applications` including detail, create, PUT, PATCH, status PATCH, status history, create-and-attach tag, and delete
 - `/api/v1/companies` including detail, create, PUT, and delete
