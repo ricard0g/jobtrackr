@@ -38,6 +38,7 @@ import {
 } from "@/components/documents/DocumentPreviewDialog";
 import {
     DocumentTable,
+    DocumentTableSkeleton,
     type DocumentTableColumn,
 } from "@/components/documents/DocumentTable";
 import {
@@ -236,7 +237,7 @@ function BaseCvActions({
                         role="menu"
                         aria-label={`More actions for ${baseCv.originalFilename}`}
                         align="end"
-                        className="w-40 min-w-0 bg-[#f1f2f4] p-2.5 shadow-cool-light"
+                        className="w-40 min-w-0 bg-documents-surface p-2.5 shadow-cool-light"
                     >
                         <Button
                             type="button"
@@ -450,7 +451,7 @@ function GeneratedCvActions({
                         role="menu"
                         aria-label={`More actions for ${generatedCv.originalFilename}`}
                         align="end"
-                        className="w-40 min-w-0 bg-[#f1f2f4] p-2.5 shadow-cool-light"
+                        className="w-40 min-w-0 bg-documents-surface p-2.5 shadow-cool-light"
                     >
                         <Button
                             type="button"
@@ -489,7 +490,7 @@ function GeneratedCvActions({
                         role="menu"
                         aria-label={`More actions for ${generatedCv.originalFilename} on small screens`}
                         align="end"
-                        className="w-48 min-w-0 bg-[#f1f2f4] p-2.5 shadow-cool-light"
+                        className="w-48 min-w-0 bg-documents-surface p-2.5 shadow-cool-light"
                     >
                         <Button
                             asChild
@@ -599,14 +600,19 @@ function GeneratedCvActions({
     );
 }
 
+const recentFilesStripClassName =
+    "mt-2 flex gap-2.5 overflow-x-auto pb-1 md:grid md:grid-cols-5 md:overflow-visible md:pb-0";
+const recentFileCardClassName =
+    "flex h-[52px] w-[min(220px,70vw)] shrink-0 items-center gap-2.5 rounded-lg border border-light-gray bg-documents-surface px-2.5 text-left outline-none transition-colors hover:border-medium-gray hover:bg-white focus-visible:ring-2 focus-visible:ring-dark-accent md:w-auto md:min-w-0";
+
 function RecentFileSkeletonStrip() {
     return (
-        <div className="mt-2 grid grid-cols-5 gap-2.5">
+        <div className={recentFilesStripClassName} data-slot="recent-files-strip">
             {Array.from({ length: RECENT_GENERATED_CV_LIMIT }, (_, index) => (
                 <div
                     key={index}
                     data-testid="recent-file-skeleton"
-                    className="h-[52px] min-w-0 animate-pulse rounded-lg border border-light-gray bg-[#f1f2f4]"
+                    className="h-[52px] w-[min(220px,70vw)] shrink-0 animate-pulse rounded-lg border border-light-gray bg-documents-surface md:w-auto md:min-w-0"
                 />
             ))}
         </div>
@@ -617,13 +623,30 @@ function RecentFilesSkeleton() {
     return (
         <section
             aria-labelledby="recent-files-loading-heading"
-            className="mb-5 min-h-[102px] rounded-[12px] bg-[#e8e8e8] px-4 py-2.5 shadow-recent-files"
+            className="mb-5 min-h-[102px] rounded-[12px] bg-documents-panel px-4 py-2.5 shadow-recent-files"
         >
             <h2 id="recent-files-loading-heading" className="text-xs font-light text-dark-gray">
                 Recent files
             </h2>
             <RecentFileSkeletonStrip />
         </section>
+    );
+}
+
+function BaseCvUploadSkeleton() {
+    return (
+        <div
+            aria-busy="true"
+            aria-label="Base CV upload"
+            className="mb-5 flex min-h-40 w-full flex-col items-center justify-center rounded-[12px] border border-dashed border-dark-accent bg-documents-panel p-5 text-center"
+        >
+            <UploadCloud aria-hidden="true" className="mb-3 text-dark-accent" size={32} />
+            <p className="font-semibold text-dark-gray">Drop one file here or choose a file</p>
+            <p className="mt-1 text-sm text-medium-gray">PDF, Markdown or DOCX · 10 MB maximum</p>
+            <p className="sr-only" role="status">
+                Documents are still loading. Upload will be available when ready.
+            </p>
+        </div>
     );
 }
 
@@ -658,7 +681,7 @@ function RecentFilesSection({
         <section
             aria-labelledby="recent-files-heading"
             aria-busy={loading}
-            className="mb-5 min-h-[102px] rounded-[12px] bg-[#e8e8e8] px-4 py-2.5 shadow-recent-files"
+            className="mb-5 min-h-[102px] rounded-[12px] bg-documents-panel px-4 py-2.5 shadow-recent-files"
         >
             <h3 id="recent-files-heading" className="text-sm text-dark-gray">
                 Recent files
@@ -696,7 +719,7 @@ function RecentFilesSection({
                     </p>
                 </div>
             ) : (
-                <div className="mt-2 grid grid-cols-5 gap-2.5">
+                <div className={recentFilesStripClassName} data-slot="recent-files-strip">
                     {visibleItems.map((generatedCv) => (
                         <button
                             key={generatedCv.generatedCvId}
@@ -705,7 +728,7 @@ function RecentFilesSection({
                             title={generatedCv.originalFilename}
                             onClick={() => onPreview(generatedCv)}
                             onKeyDown={(event) => previewOnKeyDown(event, generatedCv)}
-                            className="flex h-[52px] min-w-0 items-center gap-2.5 rounded-lg border border-light-gray bg-[#f1f2f4] px-2.5 text-left outline-none transition-colors hover:border-medium-gray hover:bg-white focus-visible:ring-2 focus-visible:ring-dark-accent"
+                            className={recentFileCardClassName}
                         >
                             <FileText
                                 aria-hidden="true"
@@ -910,7 +933,7 @@ function BaseCvSection({
             label: "Actions",
             className: "w-[18%]",
             cellClassName:
-                "sticky right-0 z-10 bg-[#f1f2f4] md:static md:bg-transparent",
+                "sticky right-0 z-10 bg-documents-surface md:static md:bg-transparent",
             render: (baseCv) => (
                 <BaseCvActions
                     baseCv={baseCv}
@@ -929,7 +952,7 @@ function BaseCvSection({
                 ? "cursor-wait border-dark-accent bg-lightest-accent"
                 : dragging
                     ? "border-dark-accent bg-lightest-accent ring-2 ring-dark-accent/20"
-                    : "cursor-pointer border-dark-accent bg-[#e8e8e8] hover:bg-lightest-accent";
+                    : "cursor-pointer border-dark-accent bg-documents-panel hover:bg-lightest-accent";
 
     return (
         <ToastProvider swipeDirection="right">
@@ -962,7 +985,7 @@ function BaseCvSection({
                         }
                     }}
                     onDrop={onDrop}
-                    className={`flex min-h-40 flex-col items-center justify-center rounded-[12px] border border-dashed p-5 text-center transition-colors ${dropZoneState}`}
+                    className={`flex min-h-40 w-full flex-col items-center justify-center rounded-[12px] border border-dashed p-5 text-center transition-colors ${dropZoneState}`}
                 >
                     {uploading ? (
                         <LoaderCircle className="mb-3 animate-spin text-dark-accent" size={32} />
@@ -1189,7 +1212,7 @@ function GeneratedCvSection({
             className: "max-w-[80px] md:w-[18%]",
             headerClassName: "[padding-inline:10px] md:[padding-inline:24px]",
             cellClassName:
-                "sticky right-0 z-10 bg-[#f1f2f4] md:static md:bg-transparent",
+                "sticky right-0 z-10 bg-documents-surface md:static md:bg-transparent",
             render: (generatedCv) => (
                 <GeneratedCvActions
                     generatedCv={generatedCv}
@@ -1269,18 +1292,27 @@ function GeneratedCvSection({
 }
 
 export function DocumentsRouteHydrateFallback() {
+    const location = useLocation();
+    const tab = normalizeDocumentsState(location.search).tab;
+
     return (
         <div className="h-full overflow-y-auto px-4 pb-12 pt-3 sm:px-6 sm:pt-5">
-            <div className="mx-auto w-full max-w-[1440px] rounded-[12px] bg-[#e8e8e8] p-4 shadow-cool-light-inner sm:p-6">
+            <div className="mx-auto w-full max-w-[1440px] rounded-[12px] bg-documents-panel p-4 shadow-cool-light-inner sm:p-6">
                 <div
                     aria-hidden="true"
-                    className="mb-5 h-10 w-full max-w-[440px] animate-pulse rounded-[12px] bg-[#f1f2f4] shadow-cool-light"
+                    className="mb-5 h-10 w-full max-w-[440px] animate-pulse rounded-[12px] bg-documents-surface shadow-cool-light"
                 />
-                <RecentFilesSkeleton />
-                <div
-                    aria-hidden="true"
-                    className="h-[560px] animate-pulse rounded-[12px] bg-[#f1f2f4] shadow-cool-light"
-                />
+                {tab === "base" ? (
+                    <>
+                        <BaseCvUploadSkeleton />
+                        <DocumentTableSkeleton label="Base CVs" />
+                    </>
+                ) : (
+                    <>
+                        <RecentFilesSkeleton />
+                        <DocumentTableSkeleton label="Generated CVs" />
+                    </>
+                )}
             </div>
         </div>
     );
@@ -1374,27 +1406,27 @@ export function DocumentsRoute() {
                 onValueChange={changeTab}
                 orientation="horizontal"
                 activationMode="manual"
-                className="mx-auto w-full max-w-[1440px] rounded-[12px] bg-[#e8e8e8] p-4 shadow-cool-light-inner sm:p-6"
+                className="mx-auto w-full max-w-[1440px] rounded-[12px] bg-documents-panel p-4 shadow-cool-light-inner sm:p-6"
             >
-                <div className="mb-4 flex w-full sm:w-fit max-w-full items-center gap-2.5 rounded-[12px] border border-light-gray bg-[#f1f2f4] p-1.5 shadow-cool-light sm:mb-4">
+                <div className="mb-4 flex w-full sm:w-fit max-w-full items-center gap-2.5 rounded-[12px] border border-light-gray bg-documents-surface p-1.5 shadow-cool-light sm:mb-4">
                     <span className="hidden sm:inline-block shrink-0 px-2.5 font-display text-base text-dark-gray">
                         Your Documents
                     </span>
                     <span aria-hidden="true" className="hidden sm:inline-block h-8 w-px shrink-0 bg-light-gray" />
                     <Tabs.List
                         aria-label="Your Documents"
-                        className="flex min-w-0 w-full sm:w-auto items-center rounded-md bg-[#d9d9d9] p-1 shadow-inner"
+                        className="flex min-w-0 w-full sm:w-auto items-center rounded-md bg-documents-tab-track p-1 shadow-inner"
                     >
                         <Tabs.Trigger
                             value="generated"
-                            className="flex justify-center sm:justify-start h-8 min-w-0 w-full sm:w-auto items-center gap-2 rounded px-2.5 font-display text-base text-medium-gray outline-none transition-colors hover:text-dark-gray focus-visible:ring-2 focus-visible:ring-dark-accent data-[state=active]:bg-[#f1f2f4] data-[state=active]:text-darkest-accent data-[state=active]:shadow-light sm:px-3.5"
+                            className="flex justify-center sm:justify-start h-8 min-w-0 w-full sm:w-auto items-center gap-2 rounded px-2.5 font-display text-base text-medium-gray outline-none transition-colors hover:text-dark-gray focus-visible:ring-2 focus-visible:ring-dark-accent data-[state=active]:bg-documents-surface data-[state=active]:text-darkest-accent data-[state=active]:shadow-light sm:px-3.5"
                         >
                             <Files aria-hidden="true" size={16} className="shrink-0" />
                             <span className="truncate w-full">Generated CVs</span>
                         </Tabs.Trigger>
                         <Tabs.Trigger
                             value="base"
-                            className="flex justify-center sm:justify-start h-8 min-w-0 w-full sm:w-auto items-center gap-2 rounded px-2.5 font-display text-base text-medium-gray outline-none transition-colors hover:text-dark-gray focus-visible:ring-2 focus-visible:ring-dark-accent data-[state=active]:bg-[#f1f2f4] data-[state=active]:text-darkest-accent data-[state=active]:shadow-light sm:px-3.5"
+                            className="flex justify-center sm:justify-start h-8 min-w-0 w-full sm:w-auto items-center gap-2 rounded px-2.5 font-display text-base text-medium-gray outline-none transition-colors hover:text-dark-gray focus-visible:ring-2 focus-visible:ring-dark-accent data-[state=active]:bg-documents-surface data-[state=active]:text-darkest-accent data-[state=active]:shadow-light sm:px-3.5"
                         >
                             <FileText aria-hidden="true" size={16} className="shrink-0" />
                             <span className="truncate">Base CVs</span>

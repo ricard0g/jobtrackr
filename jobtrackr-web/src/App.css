@@ -17,6 +17,9 @@
     --color-silver: #999;
     --color-light-gray: #ccc;
     --color-off-white: #f5f5f5;
+    --color-documents-panel: #e8e8e8;
+    --color-documents-surface: #f1f2f4;
+    --color-documents-tab-track: #d9d9d9;
 
     /* Accent */
     --color-darkest-accent: #0d3a28;

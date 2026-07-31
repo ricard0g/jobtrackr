@@ -417,6 +417,11 @@ describe("DocumentsRoute", () => {
 					`?tab=base&page=1&sort=${sort}&direction=asc`,
 				);
 			});
+			await waitFor(() => {
+				expect(
+					within(table).getByRole("columnheader", { name: column }).getAttribute("aria-sort"),
+				).toBe("ascending");
+			});
 		}
 		fireEvent.click(within(table).getByRole("button", { name: "Uploaded" }));
 		await waitFor(() => {
@@ -783,14 +788,14 @@ describe("DocumentsRoute", () => {
 			'[data-slot="document-table-head-surface"]',
 		);
 		expect(headerSurface).toBeTruthy();
-		expect(headerSurface?.className).toContain("inset-x-[10px]");
+		expect(headerSurface?.className.split(/\s+/)).toContain("inset-x-3");
 		expect(headerSurface?.className.split(/\s+/)).toContain(
 			"shadow-cool-light-table-head",
 		);
 
 		const actionsHeader = within(table).getByRole("columnheader", { name: "Actions" });
 		expect(actionsHeader.className).not.toContain("sticky");
-		expect(actionsHeader.className.split(/\s+/)).toContain("max-w-[72px]");
+		expect(actionsHeader.className.split(/\s+/)).toContain("max-w-[80px]");
 		expect(actionsHeader.className.split(/\s+/)).toContain("md:w-[18%]");
 		const actionsCell = screen
 			.getByRole("button", { name: "Preview acme-backend-v2.pdf" })
@@ -1084,6 +1089,88 @@ describe("DocumentsRoute", () => {
 
 		const recent = await screen.findByRole("region", { name: "Recent files" });
 		expect(within(recent).getAllByTestId("recent-file-skeleton")).toHaveLength(5);
+	});
+
+	it("shows five Recent card skeletons and ten Generated table-row skeletons on initial load", async () => {
+		const router = createMemoryRouter(
+			[
+				documentsRoute({
+					loader: () => new Promise(() => undefined),
+					recentLoader: () => new Promise(() => undefined),
+					hydrateFallback: true,
+				}),
+			],
+			{
+				initialEntries: ["/documents?tab=generated&page=1&sort=created&direction=desc"],
+			},
+		);
+		render(<RouterProvider router={router} />);
+
+		expect(await screen.findAllByTestId("recent-file-skeleton")).toHaveLength(5);
+		expect(screen.getAllByTestId("document-table-row-skeleton")).toHaveLength(10);
+		expect(screen.getByRole("table", { name: "Generated CVs" }).getAttribute("aria-busy")).toBe(
+			"true",
+		);
+	});
+
+	it("keeps the Base CV upload zone present with ten table-row skeletons on initial Base load", async () => {
+		const router = createMemoryRouter(
+			[
+				documentsRoute({
+					loader: () => new Promise(() => undefined),
+					recentLoader: () => new Promise(() => undefined),
+					hydrateFallback: true,
+				}),
+			],
+			{
+				initialEntries: ["/documents?tab=base&page=1&sort=uploaded&direction=desc"],
+			},
+		);
+		render(<RouterProvider router={router} />);
+
+		const upload = await screen.findByLabelText("Base CV upload");
+		expect(upload.className).toContain("w-full");
+		expect(upload.getAttribute("aria-busy")).toBe("true");
+		expect(screen.getByRole("status").textContent).toMatch(/still loading/i);
+		expect(screen.getAllByTestId("document-table-row-skeleton")).toHaveLength(10);
+		expect(screen.getByRole("table", { name: "Base CVs" }).getAttribute("aria-busy")).toBe(
+			"true",
+		);
+		expect(screen.queryByTestId("recent-file-skeleton")).toBeNull();
+	});
+
+	it("keeps semantic tables in horizontal overflow and Recent files scrollable on narrow layouts", async () => {
+		renderDocuments({
+			generatedCvs: [generatedCv()],
+			generatedCvsTotal: 1,
+			recentGeneratedCvs: [generatedCv()],
+		});
+
+		const table = await screen.findByRole("table", { name: "Generated CVs" });
+		const scroll = table.closest('[data-slot="document-table-scroll"]');
+		expect(scroll?.className.split(/\s+/)).toContain("overflow-x-auto");
+		expect(scroll?.firstElementChild?.className.split(/\s+/)).toContain("min-w-[1360px]");
+
+		const recentStrip = document.querySelector('[data-slot="recent-files-strip"]');
+		expect(recentStrip?.className.split(/\s+/)).toContain("overflow-x-auto");
+		expect(recentStrip?.className.split(/\s+/)).toContain("md:grid");
+		expect(recentStrip?.className.split(/\s+/)).toContain("md:grid-cols-5");
+		expect(recentStrip?.className.split(/\s+/)).toContain("md:overflow-visible");
+
+		renderBaseDocuments({ baseCvs: [baseCv()] });
+		const upload = await screen.findByRole("button", { name: "Upload a Base CV" });
+		expect(upload.className).toContain("w-full");
+		expect(upload.className).toContain("min-h-40");
+	});
+
+	it("reserves a stable ten-row Generated CV table body when fewer rows are present", async () => {
+		renderDocuments({
+			generatedCvs: [generatedCv(), generatedCv({ generatedCvId: 102, originalFilename: "second.pdf" })],
+			generatedCvsTotal: 2,
+		});
+
+		await screen.findByRole("table", { name: "Generated CVs" });
+		expect(screen.getAllByTestId("document-table-row-placeholder")).toHaveLength(8);
 	});
 
 	it("keeps Generated CV rows and Name cells inert until Preview is explicitly selected", async () => {

@@ -2,7 +2,7 @@ import { ChevronDown, ChevronUp, ChevronsUpDown, LoaderCircle } from "lucide-rea
 import type { ReactNode } from "react";
 
 import { Button } from "@/components/ui/button";
-import type { SortDirection } from "@/routes/documents-data";
+import { GENERATED_CV_PAGE_SIZE, type SortDirection } from "@/routes/documents-data";
 
 type StaticDocumentTableColumn<Row> = {
 	key: string;
@@ -54,6 +54,75 @@ const sortIcon = (active: boolean, direction: SortDirection) => {
 	);
 };
 
+export function DocumentTableSkeleton({
+	label,
+	rowCount = GENERATED_CV_PAGE_SIZE,
+}: {
+	label: string;
+	rowCount?: number;
+}) {
+	return (
+		<div className="relative isolate" data-slot="document-table-skeleton">
+			<div
+				aria-hidden="true"
+				data-slot="document-table-body-surface"
+				className="pointer-events-none absolute inset-x-0 top-[44px] bottom-0 rounded-[12px] bg-documents-surface py-0.5 shadow-cool-light"
+			/>
+			<div className="overflow-x-auto" data-slot="document-table-scroll">
+				<div className="relative min-w-[1360px]">
+					<div
+						aria-hidden="true"
+						data-slot="document-table-head-surface"
+						className="pointer-events-none absolute inset-x-3 top-0 h-[44px] rounded-t-[12px] bg-documents-surface shadow-cool-light-table-head"
+					/>
+					<table
+						aria-label={label}
+						aria-busy="true"
+						className="relative w-full table-fixed border-collapse text-center text-base text-dark-gray"
+					>
+						<thead>
+							<tr className="h-[44px]">
+								<th scope="col" className="px-6 font-normal text-medium-gray">
+									Name
+								</th>
+								<th scope="col" className="px-6 font-normal text-medium-gray">
+									Type
+								</th>
+								<th scope="col" className="px-6 font-normal text-medium-gray">
+									Size
+								</th>
+								<th scope="col" className="px-6 font-normal text-medium-gray">
+									Date
+								</th>
+								<th scope="col" className="px-6 font-normal text-medium-gray">
+									Actions
+								</th>
+							</tr>
+						</thead>
+						<tbody>
+							{Array.from({ length: rowCount }, (_, index) => (
+								<tr
+									key={index}
+									data-testid="document-table-row-skeleton"
+									aria-hidden="true"
+									className="h-12 border-b border-black/10 last:border-b-0"
+								>
+									<td colSpan={5} className="px-6">
+										<div className="mx-auto h-3 w-3/4 max-w-md animate-pulse rounded bg-documents-panel" />
+									</td>
+								</tr>
+							))}
+						</tbody>
+					</table>
+				</div>
+			</div>
+			<div className="relative flex items-center justify-between gap-4 border-t border-black/20 px-6 py-2.5 text-sm">
+				<p className="text-medium-gray">Loading…</p>
+			</div>
+		</div>
+	);
+}
+
 export function DocumentTable<Row, SortKey extends string>({
 	label,
 	columns,
@@ -82,14 +151,14 @@ export function DocumentTable<Row, SortKey extends string>({
 			<div
 				aria-hidden="true"
 				data-slot="document-table-body-surface"
-				className="pointer-events-none absolute inset-x-0 top-[44px] bottom-0 rounded-[12px] bg-[#f1f2f4] py-0.5 shadow-cool-light"
+				className="pointer-events-none absolute inset-x-0 top-[44px] bottom-0 rounded-[12px] bg-documents-surface py-0.5 shadow-cool-light"
 			/>
-			<div className="overflow-x-auto">
+			<div className="overflow-x-auto" data-slot="document-table-scroll">
 				<div className="relative min-w-[1360px]">
 					<div
 						aria-hidden="true"
 						data-slot="document-table-head-surface"
-						className="pointer-events-none absolute inset-x-3 top-0 h-[44px] rounded-t-[12px] bg-[#f1f2f4] shadow-cool-light-table-head"
+						className="pointer-events-none absolute inset-x-3 top-0 h-[44px] rounded-t-[12px] bg-documents-surface shadow-cool-light-table-head"
 					/>
 					<table
 						aria-label={label}
@@ -183,6 +252,7 @@ export function DocumentTable<Row, SortKey extends string>({
 										<tr
 											key={`placeholder-${index}`}
 											aria-hidden="true"
+											data-testid="document-table-row-placeholder"
 											className="h-12 border-b border-black/10 last:border-b-0"
 										>
 											<td colSpan={columns.length} />
