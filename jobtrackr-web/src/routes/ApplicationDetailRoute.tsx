@@ -53,7 +53,6 @@ import type {
     ApplicationDetailActionData,
     ApplicationDetailLoaderData,
 } from "./application-detail-data";
-
 type DrawerMode = "view" | "edit";
 
 type InterviewFormValues = {

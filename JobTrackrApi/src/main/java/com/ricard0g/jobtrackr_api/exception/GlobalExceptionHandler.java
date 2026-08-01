@@ -94,6 +94,13 @@ public class GlobalExceptionHandler {
                 .body(ErrorResponse.of("INVALID_APPLICATION_SALARY_RANGE", exception.getMessage()));
     }
 
+    @ExceptionHandler(InvalidGeneratedCvOrderingException.class)
+    public ResponseEntity<ErrorResponse> handleInvalidGeneratedCvOrdering(
+            final InvalidGeneratedCvOrderingException exception) {
+        return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                .body(ErrorResponse.of("INVALID_GENERATED_CV_ORDERING", exception.getMessage()));
+    }
+
     @ExceptionHandler(TagNotFoundException.class)
     public ResponseEntity<ErrorResponse> handleTagNotFound(final TagNotFoundException exception) {
         return ResponseEntity.status(HttpStatus.NOT_FOUND)

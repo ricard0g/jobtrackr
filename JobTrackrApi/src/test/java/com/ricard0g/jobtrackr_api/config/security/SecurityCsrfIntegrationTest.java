@@ -96,7 +96,7 @@ class SecurityCsrfIntegrationTest {
 
     @Test
     void getAuthCsrf_shouldReturnToken() throws Exception {
-        mockMvc.perform(get("/auth/csrf"))
+        mockMvc.perform(get("/api/v1/auth/csrf"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.token").isNotEmpty())
                 .andExpect(jsonPath("$.headerName").isNotEmpty());
@@ -104,7 +104,7 @@ class SecurityCsrfIntegrationTest {
 
     @Test
     void refresh_withoutCsrfToken_shouldReturnForbidden() throws Exception {
-        mockMvc.perform(post("/auth/refresh")
+        mockMvc.perform(post("/api/v1/auth/refresh")
                         .cookie(new jakarta.servlet.http.Cookie("refresh_token", "refresh-token-value")))
                 .andExpect(status().isForbidden())
                 .andExpect(jsonPath("$.code").value("CSRF_TOKEN_INVALID"));
@@ -112,7 +112,7 @@ class SecurityCsrfIntegrationTest {
 
     @Test
     void refresh_withCsrfToken_shouldPassCsrfValidation() throws Exception {
-        mockMvc.perform(post("/auth/refresh")
+        mockMvc.perform(post("/api/v1/auth/refresh")
                         .with(csrf())
                         .cookie(new jakarta.servlet.http.Cookie("refresh_token", "refresh-token-value")))
                 .andExpect(status().isUnauthorized())
@@ -121,7 +121,7 @@ class SecurityCsrfIntegrationTest {
 
     @Test
     void logout_withoutCsrfToken_shouldReturnForbidden() throws Exception {
-        mockMvc.perform(post("/auth/logout")
+        mockMvc.perform(post("/api/v1/auth/logout")
                         .cookie(new jakarta.servlet.http.Cookie("refresh_token", "refresh-token-value")))
                 .andExpect(status().isForbidden())
                 .andExpect(jsonPath("$.code").value("CSRF_TOKEN_INVALID"));

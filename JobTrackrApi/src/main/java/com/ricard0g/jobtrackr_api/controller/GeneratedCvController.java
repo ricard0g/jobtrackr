@@ -4,9 +4,6 @@ import java.security.Principal;
 import java.util.List;
 import java.util.UUID;
 
-import org.springframework.data.domain.Pageable;
-import org.springframework.data.domain.Sort;
-import org.springframework.data.web.PageableDefault;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
@@ -14,14 +11,19 @@ import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 import com.ricard0g.jobtrackr_api.dto.GeneratedCvDto.GeneratedCvDtos;
+import com.ricard0g.jobtrackr_api.exception.InvalidGeneratedCvOrderingException;
 import com.ricard0g.jobtrackr_api.service.ApplicationCvService;
+import com.ricard0g.jobtrackr_api.service.GeneratedCvListQuery;
 import com.ricard0g.jobtrackr_api.util.PreviewHttpHeaders;
 
+import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Positive;
+import jakarta.validation.constraints.PositiveOrZero;
 import lombok.RequiredArgsConstructor;
 
 @RestController
@@ -30,20 +32,30 @@ import lombok.RequiredArgsConstructor;
 @Validated
 public class GeneratedCvController {
 
-    private static final int DEFAULT_PAGE_SIZE = 20;
+    private static final String DEFAULT_PAGE = "0";
+    private static final String DEFAULT_PAGE_SIZE = "10";
+    private static final String DEFAULT_SORT = "created";
+    private static final String DEFAULT_DIRECTION = "desc";
+    private static final int MAX_PAGE_SIZE = 100;
 
     private final ApplicationCvService applicationCvService;
 
     @GetMapping("/generated-cvs")
     public ResponseEntity<GeneratedCvDtos.PageResponse> listForUser(
             final Principal principal,
-            @PageableDefault(
-                            size = DEFAULT_PAGE_SIZE,
-                            sort = {"createdAt", "applicationCvId"},
-                            direction = Sort.Direction.DESC)
-                    final Pageable pageable) {
+            @RequestParam(defaultValue = DEFAULT_PAGE) @PositiveOrZero final int page,
+            @RequestParam(defaultValue = DEFAULT_PAGE_SIZE) @Positive @Max(MAX_PAGE_SIZE)
+                    final int size,
+            @RequestParam(defaultValue = DEFAULT_SORT) final String sort,
+            @RequestParam(defaultValue = DEFAULT_DIRECTION) final String direction) {
         final UUID userId = AuthenticatedUserId.from(principal);
-        return ResponseEntity.ok(applicationCvService.listForUser(userId, pageable));
+        try {
+            final GeneratedCvListQuery query =
+                    GeneratedCvListQuery.fromPublicValues(page, size, sort, direction);
+            return ResponseEntity.ok(applicationCvService.listForUser(userId, query));
+        } catch (final IllegalArgumentException exception) {
+            throw new InvalidGeneratedCvOrderingException();
+        }
     }
 
     @GetMapping("/applications/{applicationId}/generated-cvs")

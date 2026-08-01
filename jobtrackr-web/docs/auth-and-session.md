@@ -15,7 +15,7 @@ Frontend source:
 
 ## Auth Endpoints
 
-Base path: `/auth`
+Base path: `/api/v1/auth`
 
 | Method | Path | Body | Response | Notes |
 | --- | --- | --- | --- | --- |
@@ -63,9 +63,10 @@ type AuthResponse = {
 - Frontend stores access token in module memory via `setAccessToken`.
 - API calls to `/api/v1/**` send `Authorization: Bearer <token>`.
 - Refresh token is an HttpOnly cookie written by the backend.
-- Refresh cookie path is `/auth`.
+- Refresh cookie path is `/api/v1/auth`.
 - Refresh cookie name, secure flag, and SameSite are driven by backend `JwtProperties`.
-- Refresh token rotation happens on every `/auth/refresh`.
+- Refresh token rotation happens on every `/api/v1/auth/refresh`.
+- CSRF cookie path is `/api/v1/`.
 
 ## CSRF
 
@@ -76,11 +77,11 @@ Backend CSRF config:
 - Cookie path: `/`
 - Cookie is not HttpOnly.
 - Requests with a Bearer `Authorization` header are ignored by CSRF.
-- `/auth/register`, `/auth/login`, and `/actuator/health` are ignored by CSRF.
+- `/api/v1/auth/register`, `/api/v1/auth/login`, and `/actuator/health` are ignored by CSRF.
 
 Frontend behavior:
 
-- `getCsrfToken()` calls `/auth/csrf` with `credentials: "include"`.
+- `getCsrfToken()` calls `/api/v1/auth/csrf` with `credentials: "include"`.
 - Refresh and logout call `getCsrfToken()` and include the CSRF header.
 - Login and register do not include CSRF.
 

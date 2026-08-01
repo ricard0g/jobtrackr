@@ -18,7 +18,7 @@ flowchart LR
   Phone --> Ngrok
   Ngrok --> Nginx
   Nginx -->|"/" and assets| Vite
-  Nginx -->|"/api/v1" and "/auth"| Api
+  Nginx -->|"/api/v1"| Api
   Api --> Db
 ```
 
@@ -80,10 +80,10 @@ flowchart LR
    ).replace(/\/$/, "");
 
    export const API_BASE_URL = resolvedOrigin ? `${resolvedOrigin}/api/v1` : "/api/v1";
-   export const AUTH_BASE_URL = resolvedOrigin ? `${resolvedOrigin}/auth` : "/auth";
+   export const AUTH_BASE_URL = resolvedOrigin ? `${resolvedOrigin}/api/v1/auth` : "/api/v1/auth";
    ```
 
-   **Why:** On a phone, `localhost:8080` refers to the phone itself. Through nginx, `/auth` and `/api/v1` hit the real API on the same ngrok origin. Without relative paths, login may fail with **Error 500** (`Failed to fetch`).
+   **Why:** On a phone, `localhost:8080` refers to the phone itself. Through nginx, `/api/v1` hits the real API on the same ngrok origin. Without relative paths, login may fail with **Error 500** (`Failed to fetch`).
 
 ## Quick start
 
@@ -206,13 +206,13 @@ NGROK_URL="<https-url>"
 curl -s -o /dev/null -w "%{http_code}\n" "$NGROK_URL/" -H "ngrok-skip-browser-warning: true"
 
 # API routing (full stack)
-curl -s "$NGROK_URL/auth/csrf" -H "ngrok-skip-browser-warning: true"
+curl -s "$NGROK_URL/api/v1/auth/csrf" -H "ngrok-skip-browser-warning: true"
 
 # MSW service worker (mock mode)
 curl -sI "$NGROK_URL/mockServiceWorker.js" -H "ngrok-skip-browser-warning: true" | grep -i content-type
 ```
 
-Expect `200` for the app, JSON for `/auth/csrf` (full stack), and `text/javascript` for the service worker (mock mode).
+Expect `200` for the app, JSON for `/api/v1/auth/csrf` (full stack), and `text/javascript` for the service worker (mock mode).
 
 ## Tell the user
 

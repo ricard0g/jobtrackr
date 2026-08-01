@@ -20,7 +20,7 @@ from r2_put import head_object, put_object
 ROOT = Path(__file__).resolve().parents[2]
 FIXTURES = Path(__file__).resolve().parent / "fixtures"
 API_ORIGIN = os.environ.get("VITE_API_ORIGIN", "http://localhost:8080").rstrip("/")
-AUTH_BASE = f"{API_ORIGIN}/auth"
+AUTH_BASE = f"{API_ORIGIN}/api/v1/auth"
 API_BASE = f"{API_ORIGIN}/api/v1"
 GOTENBERG_HEALTH = os.environ.get("GOTENBERG_BASE_URL", "http://localhost:3000").rstrip("/") + "/health"
 PAGE_SIZE = 20

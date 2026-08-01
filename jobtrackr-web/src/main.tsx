@@ -1,6 +1,6 @@
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
-import { createBrowserRouter, RouterProvider } from "react-router";
+import { createBrowserRouter, Outlet, RouterProvider } from "react-router";
 
 import "./index.css";
 import App from "./App.tsx";
@@ -19,8 +19,16 @@ import {
 import { loginAction, publicAuthLoader, registerAction } from "@/routes/auth-data";
 import { LoginPage, RegisterPage } from "@/routes/auth";
 import { KanbanRoute } from "@/routes/KanbanRoute";
-import { DocumentsRoute } from "@/routes/DocumentsRoute";
-import { documentsAction, documentsLoader, documentsShouldRevalidate } from "@/routes/documents-data";
+import { DocumentsRoute, DocumentsRouteHydrateFallback } from "@/routes/DocumentsRoute";
+import {
+	documentsAction,
+	documentsLoader,
+	documentsShouldRevalidate,
+	DOCUMENTS_RECENT_ROUTE_ID,
+	recentGeneratedCvsLoader,
+	recentGeneratedCvsResourceLoader,
+	recentGeneratedCvsShouldRevalidate,
+} from "@/routes/documents-data";
 import { GenerateRoute } from "@/routes/GenerateRoute";
 import { generateAction, generateLoader } from "@/routes/generate-data";
 
@@ -68,12 +76,26 @@ const router = createBrowserRouter([
 				],
 			},
 			{
+				id: DOCUMENTS_RECENT_ROUTE_ID,
 				path: "documents",
-				Component: DocumentsRoute,
-				loader: documentsLoader,
+				Component: Outlet,
+				loader: recentGeneratedCvsLoader,
 				action: documentsAction,
-				shouldRevalidate: documentsShouldRevalidate,
+				shouldRevalidate: recentGeneratedCvsShouldRevalidate,
+				HydrateFallback: DocumentsRouteHydrateFallback,
 				ErrorBoundary: RootErrorBoundary,
+				children: [
+					{
+						index: true,
+						Component: DocumentsRoute,
+						loader: documentsLoader,
+						shouldRevalidate: documentsShouldRevalidate,
+					},
+				],
+			},
+			{
+				path: "resources/documents/recent",
+				loader: recentGeneratedCvsResourceLoader,
 			},
 			{
 				path: "generate",

@@ -1,17 +1,107 @@
-import type { ActionFunctionArgs, ShouldRevalidateFunctionArgs } from "react-router";
+import {
+	replace,
+	type ActionFunctionArgs,
+	type LoaderFunctionArgs,
+	type ShouldRevalidateFunctionArgs,
+} from "react-router";
 
 import { api, ApiError, requireSession } from "@/lib/api";
 import type { BaseCv } from "@/types/base-cv";
 import type { GeneratedCvSummary } from "@/types/generated-cv";
 
-export const GENERATED_CV_PAGE_SIZE = 20;
+export const GENERATED_CV_PAGE_SIZE = 10;
+export const BASE_CV_PAGE_SIZE = 10;
+export const RECENT_GENERATED_CV_LIMIT = 5;
+export const DOCUMENTS_RECENT_ROUTE_ID = "documents-recent";
+
+const documentsTabConfig = {
+	generated: {
+		defaultSort: "created",
+		sortKeys: ["name", "type", "size", "created", "version", "company"],
+	},
+	base: {
+		defaultSort: "uploaded",
+		sortKeys: ["name", "type", "size", "uploaded"],
+	},
+} as const;
+
+export type DocumentsTab = keyof typeof documentsTabConfig;
+export type SortDirection = "asc" | "desc";
+export type GeneratedSortKey = (typeof documentsTabConfig.generated.sortKeys)[number];
+export type BaseSortKey = (typeof documentsTabConfig.base.sortKeys)[number];
+
+export type DocumentsUrlState =
+	| {
+			tab: "generated";
+			page: number;
+			sort: GeneratedSortKey;
+			direction: SortDirection;
+	  }
+	| {
+			tab: "base";
+			page: number;
+			sort: BaseSortKey;
+			direction: SortDirection;
+	  };
+
+export const defaultDocumentsState = (tab: DocumentsTab): DocumentsUrlState =>
+	tab === "base"
+		? { tab, page: 1, sort: documentsTabConfig.base.defaultSort, direction: "desc" }
+		: { tab, page: 1, sort: documentsTabConfig.generated.defaultSort, direction: "desc" };
+
+export const serializeDocumentsState = ({ tab, page, sort, direction }: DocumentsUrlState) => {
+	const search = new URLSearchParams();
+	search.set("tab", tab);
+	search.set("page", String(page));
+	search.set("sort", sort);
+	search.set("direction", direction);
+	return `?${search.toString()}`;
+};
+
+const normalizedPage = (value: string | null) => {
+	const page = Number(value);
+	return Number.isInteger(page) && page > 0 ? page : 1;
+};
+
+const normalizedDirection = (value: string | null): SortDirection =>
+	value === "asc" || value === "desc" ? value : "desc";
+
+export const normalizeDocumentsState = (search: string): DocumentsUrlState => {
+	const params = new URLSearchParams(search);
+	const page = normalizedPage(params.get("page"));
+	const direction = normalizedDirection(params.get("direction"));
+	const requestedSort = params.get("sort");
+
+	if (params.get("tab") === "base") {
+		const config = documentsTabConfig.base;
+		const sort = config.sortKeys.find((sortKey) => sortKey === requestedSort) ?? config.defaultSort;
+		return { tab: "base", page, sort, direction };
+	}
+
+	const config = documentsTabConfig.generated;
+	const sort = config.sortKeys.find((sortKey) => sortKey === requestedSort) ?? config.defaultSort;
+	return { tab: "generated", page, sort, direction };
+};
+
+export const ensureCanonicalDocumentsUrl = (request: Request) => {
+	const url = new URL(request.url);
+	const canonicalSearch = serializeDocumentsState(normalizeDocumentsState(url.search));
+	if (url.search === canonicalSearch) return;
+	throw replace(`${url.pathname}${canonicalSearch}${url.hash}`);
+};
 
 export type DocumentsLoaderData = {
 	baseCvs: BaseCv[];
+	baseCvsError?: string | null;
 	generatedCvs: GeneratedCvSummary[];
 	generatedCvsPage: number;
 	generatedCvsTotal: number;
 	generatedCvsError: string | null;
+};
+
+export type RecentGeneratedCvsData = {
+	items: GeneratedCvSummary[];
+	error: string | null;
 };
 
 export type DocumentsActionIntent =
@@ -37,6 +127,7 @@ const errorMessages: Record<string, string> = {
 	BASE_CV_LIMIT_REACHED: "You have reached the limit of 20 Base CVs. Delete one before uploading another.",
 	BASE_CV_NOT_FOUND: "This Base CV is no longer available.",
 	BASE_CV_STORAGE_UNAVAILABLE: "Document storage is temporarily unavailable. Please try again.",
+	BASE_CV_IN_USE: "This Base CV is in use by an active generation and cannot be deleted right now.",
 	GENERATED_CV_NOT_FOUND: "This Generated CV is no longer available.",
 	STORAGE_UNAVAILABLE: "Document storage is temporarily unavailable. Please try again.",
 };
@@ -54,9 +145,23 @@ const actionError = (intent: DocumentsActionIntent, error: unknown): DocumentsAc
 	error: messageFromError(error, "The operation could not be completed."),
 });
 
-const loadGeneratedCvsPage = async () => {
+const emptyGeneratedCvs = {
+	generatedCvs: [] as GeneratedCvSummary[],
+	generatedCvsPage: 0,
+	generatedCvsTotal: 0,
+	generatedCvsError: null as string | null,
+};
+
+const loadGeneratedCvsPage = async (
+	state: Extract<DocumentsUrlState, { tab: "generated" }>,
+) => {
 	try {
-		const page = await api.getGeneratedCvsPage({ page: 0, size: GENERATED_CV_PAGE_SIZE });
+		const page = await api.getGeneratedCvsPage({
+			page: state.page - 1,
+			size: GENERATED_CV_PAGE_SIZE,
+			sort: state.sort,
+			direction: state.direction,
+		});
 		return {
 			generatedCvs: page.items,
 			generatedCvsPage: page.page,
@@ -73,11 +178,85 @@ const loadGeneratedCvsPage = async () => {
 	}
 };
 
-export async function documentsLoader(): Promise<DocumentsLoaderData> {
+const loadRecentGeneratedCvs = async () => {
+	try {
+		const page = await api.getGeneratedCvsPage({
+			page: 0,
+			size: RECENT_GENERATED_CV_LIMIT,
+			sort: "created",
+			direction: "desc",
+		});
+		return {
+			items: page.items.slice(0, RECENT_GENERATED_CV_LIMIT),
+			error: null as string | null,
+		};
+	} catch (error) {
+		return {
+			items: [] as GeneratedCvSummary[],
+			error: messageFromError(error, "Recent files could not be loaded."),
+		};
+	}
+};
+
+const loadBaseCvs = async () => {
+	try {
+		return {
+			baseCvs: await api.getBaseCvs(),
+			baseCvsError: null as string | null,
+		};
+	} catch (error) {
+		return {
+			baseCvs: [] as BaseCv[],
+			baseCvsError: messageFromError(error, "Base CVs could not be loaded."),
+		};
+	}
+};
+
+export async function recentGeneratedCvsLoader(
+	{ request }: LoaderFunctionArgs,
+): Promise<RecentGeneratedCvsData> {
+	ensureCanonicalDocumentsUrl(request);
 	await requireSession();
-	const baseCvs = await api.getBaseCvs();
-	const generated = await loadGeneratedCvsPage();
-	return { baseCvs, ...generated };
+	return loadRecentGeneratedCvs();
+}
+
+export async function recentGeneratedCvsResourceLoader(
+	_args: LoaderFunctionArgs,
+): Promise<RecentGeneratedCvsData> {
+	void _args;
+	await requireSession();
+	return loadRecentGeneratedCvs();
+}
+
+export async function documentsLoader({ request }: LoaderFunctionArgs): Promise<DocumentsLoaderData> {
+	ensureCanonicalDocumentsUrl(request);
+	await requireSession();
+	const url = new URL(request.url);
+	const state = normalizeDocumentsState(url.search);
+	const [base, generated] = await Promise.all([
+		loadBaseCvs(),
+		state.tab === "generated" ? loadGeneratedCvsPage(state) : Promise.resolve(emptyGeneratedCvs),
+	]);
+
+	if (state.tab === "generated" && generated.generatedCvsError == null) {
+		const lastPage = Math.max(1, Math.ceil(generated.generatedCvsTotal / GENERATED_CV_PAGE_SIZE));
+		if (state.page > lastPage) {
+			throw replace(
+				`${url.pathname}${serializeDocumentsState({ ...state, page: lastPage })}${url.hash}`,
+			);
+		}
+	}
+
+	if (state.tab === "base" && base.baseCvsError == null) {
+		const lastPage = Math.max(1, Math.ceil(base.baseCvs.length / BASE_CV_PAGE_SIZE));
+		if (state.page > lastPage) {
+			throw replace(
+				`${url.pathname}${serializeDocumentsState({ ...state, page: lastPage })}${url.hash}`,
+			);
+		}
+	}
+
+	return { ...base, ...generated };
 }
 
 export async function documentsAction({ request }: ActionFunctionArgs): Promise<DocumentsActionData> {
@@ -154,4 +333,21 @@ export function documentsShouldRevalidate({
 		return false;
 	}
 	return defaultShouldRevalidate;
+}
+
+export function recentGeneratedCvsShouldRevalidate({
+	formData,
+	currentUrl,
+	defaultShouldRevalidate,
+}: ShouldRevalidateFunctionArgs) {
+	if (formData?.get("intent") === "delete-generated-cv") {
+		return true;
+	}
+	const canonicalCurrentSearch = serializeDocumentsState(
+		normalizeDocumentsState(currentUrl.search),
+	);
+	if (currentUrl.search !== canonicalCurrentSearch) {
+		return defaultShouldRevalidate;
+	}
+	return false;
 }
