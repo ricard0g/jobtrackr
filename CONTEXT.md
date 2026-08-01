@@ -29,5 +29,5 @@ The fixed section order and presentation contract for a Generated CV: Profession
 _Avoid_: Fancy layout, Canva template, free-form sections
 
 **Grounded Tailoring**:
-Drafting that reorders, emphasizes, and may adopt job-description phrasing only when Candidate Evidence already supports the underlying fact. It does not invent employers, metrics, skills, or duties.
-_Avoid_: Keyword stuffing, verbatim paste without evidence, loose title matching
+Drafting that reorders, emphasizes, and may adopt job-description phrasing only when Candidate Evidence already supports the underlying fact. It does not invent employers, metrics, skills, or duties. Quantified results appear only when the number exists in Candidate Evidence.
+_Avoid_: Keyword stuffing, verbatim paste without evidence, loose title matching, estimated metrics
