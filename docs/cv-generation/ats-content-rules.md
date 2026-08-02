@@ -15,7 +15,7 @@ Glossary terms match `CONTEXT.md`: **Base CV**, **Candidate Evidence**, **Genera
 | Truth bounds (no invented facts/metrics/skills) | Deterministic | Validation against Candidate Evidence |
 | Job Description role | Targeting only | JD analysis feeds ordering and phrasing cues; never candidate facts |
 
-ATS Structure details (core order, conditional trailing order, DOCX pixel fidelity, PDF/Markdown style fidelity) live in `CONTEXT.md` and the structure ADR. This playbook does not redefine layout; it defines how content is chosen and worded inside that contract.
+ATS Structure details (core order, conditional trailing order, DOCX pixel fidelity, PDF/Markdown style fidelity) live in `CONTEXT.md` and [ADR-0005](../adr/0005-enforce-ats-structure-and-grounded-tailoring.md). This playbook does not redefine layout; it defines how content is chosen and worded inside that contract.
 
 ## Grounded Tailoring (non-negotiable)
 
@@ -88,12 +88,14 @@ Trailing **order** is ATS Structure (schema/renderers), not a drafting choice.
 
 Content selection and section meaning must be identical across DOCX, PDF, and Markdown. Presentation fidelity is an Output Format concern (DOCX pixel-faithful; PDF/Markdown as close as the medium allows).
 
-For drafting, prefer ATS-safe wording habits drawn from the research pack:
+For drafting, prefer ATS-safe wording habits drawn from the research pack (Indeed tips + strategy/checklist formatting rules that affect content choice):
 
-- Standard section meaning under ATS Structure labels (Professional Summary, Experience, Education, Skills, …).
-- Explicit skill phrases rather than hoping parsers infer them.
+- Use clear, standard section meaning under ATS Structure labels (Professional Summary, Experience, Education, Skills, …)—parsers and humans both rely on those labels.
+- Weave evidenced JD keywords naturally into Professional Summary, Skills, and Experience; do not stuff.
+- Prefer one- or two-word skill phrases and explicit tool names over hoping parsers infer them.
+- Include both acronym and full term when grounded (`Full Term (ACRONYM)`).
 - Plain language; avoid special characters that break parsers.
-- Single-column, no tables/graphics/headers/footers in rendered Output Formats (enforced by renderers).
+- Single-column layout, standard bullets, and no tables/graphics/headers/footers in rendered Output Formats (enforced by renderers; DOCX is the preferred ATS-safe Output Format when the posting allows).
 
 ## Pre-submit content checklist (Generated CV)
 
