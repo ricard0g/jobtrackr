@@ -25,7 +25,7 @@ The file representation of a Generated CV, such as PDF, DOCX, or Markdown. Secti
 _Avoid_: Template, layout, format-specific section structure
 
 **ATS Structure**:
-The fixed section order and presentation contract for a Generated CV: Professional Summary, Experience, Education, Skills as the always-on core, with conditional trailing sections only when evidence supports them. Presentation (alignment, weights, labels, fonts) follows the project's ATS resume template. Structure and presentation are enforced deterministically in schema and renderers; content selection follows Grounded Tailoring in drafting.
+The fixed section order and presentation contract for a Generated CV. Always-on core: Professional Summary, Experience, Education, Skills. Conditional trailing order when present: Awards/Volunteer, then Projects, Certifications, Languages, then Values Alignment. Presentation (alignment, weights, labels, fonts) follows the project's ATS resume template. Structure and presentation are enforced deterministically in schema and renderers; content selection follows Grounded Tailoring in drafting.
 _Avoid_: Fancy layout, Canva template, free-form sections, prompt-only layout
 
 **Grounded Tailoring**:
