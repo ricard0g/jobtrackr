@@ -65,8 +65,7 @@ def test_markdown_contains_name_and_email():
 
 
 def test_docx_reopen_finds_name_and_email():
-    data = render_docx(_sample_cv())
-    doc = Document(io.BytesIO(data))
+    doc = _docx_from_sample()
     text = "\n".join(p.text for p in doc.paragraphs)
     assert "Ada Lovelace" in text
     assert "ada@example.com" in text
@@ -74,12 +73,21 @@ def test_docx_reopen_finds_name_and_email():
 
 
 def test_docx_core_section_order_is_ats_structure():
-    texts = [p.text.strip() for p in _docx_from_sample().paragraphs]
-    summary = texts.index("PROFESSIONAL SUMMARY")
-    experience = texts.index("EXPERIENCE")
-    education = texts.index("EDUCATION")
-    skills = texts.index("SKILLS")
-    assert summary < experience < education < skills
+    doc = _docx_from_sample()
+    headings = {
+        p.text.strip(): p
+        for p in doc.paragraphs
+        if p.text.strip()
+        in {"PROFESSIONAL SUMMARY", "EXPERIENCE", "EDUCATION", "SKILLS"}
+    }
+    assert list(headings) == [
+        "PROFESSIONAL SUMMARY",
+        "EXPERIENCE",
+        "EDUCATION",
+        "SKILLS",
+    ]
+    for para in headings.values():
+        assert para.runs and para.runs[0].bold is True
 
 
 def test_docx_header_is_centered_with_optional_portfolio_line():
