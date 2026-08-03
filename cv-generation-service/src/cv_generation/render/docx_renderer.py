@@ -48,6 +48,11 @@ def render_docx(cv: CanonicalCV) -> bytes:
         _heading(doc, "Skills")
         doc.add_paragraph(", ".join(cv.skills))
 
+    if cv.awards:
+        _heading(doc, "Awards/Volunteer")
+        for award in cv.awards:
+            _add_dated_line(doc, label=award.title, dates=award.date or "")
+
     if cv.projects:
         _heading(doc, "Projects")
         for proj in cv.projects:
@@ -67,6 +72,13 @@ def render_docx(cv: CanonicalCV) -> bytes:
     if cv.languages:
         _heading(doc, "Languages")
         doc.add_paragraph(", ".join(cv.languages))
+
+    if cv.values_alignment:
+        _heading(doc, "Values Alignment")
+        for item in cv.values_alignment:
+            p = doc.add_paragraph()
+            _apply_ats_run(p.add_run(item.value), bold=True)
+            _apply_ats_run(p.add_run(f" — {item.behaviour}"))
 
     buffer = io.BytesIO()
     doc.save(buffer)

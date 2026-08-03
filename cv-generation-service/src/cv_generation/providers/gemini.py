@@ -54,10 +54,10 @@ class GeminiProvider(DraftingProvider):
             "additional_information": additional_information,
             "deterministic_hints": deterministic_hints,
             "rules": [
-                "Extract all supported work experience, education, projects, skills, certifications, and languages",
+                "Extract all supported work experience, education, awards/volunteer work, projects, skills, certifications, and languages",
                 "Preserve employer, institution, title, date, link, and metric text without invention",
                 "Treat additional_information as authoritative over conflicting Base CV facts when present",
-                "Structure free-form employment, education, and project facts from additional_information",
+                "Structure free-form employment, education, award/volunteer, and project facts from additional_information",
                 "Use deterministic hints only when they are supported by base_cv_text or additional_information",
                 "Do not tailor, summarize away, or reorder evidence for a job description",
                 "Use null or empty lists when a field is absent",

@@ -6,6 +6,7 @@ import re
 from typing import Any
 
 from cv_generation.models.canonical_cv import (
+    AwardItem,
     CanonicalCV,
     ContactInfo,
     EducationItem,
@@ -145,6 +146,15 @@ class FakeProvider(DraftingProvider):
                 )
             )
 
+        awards = [
+            AwardItem(
+                title=str(item.get("title") or "").strip(),
+                date=item.get("date"),
+            )
+            for item in (evidence.get("awards") or [])
+            if isinstance(item, dict) and str(item.get("title") or "").strip()
+        ]
+
         summary = evidence.get("professional_summary")
         if not summary and experience:
             titles = ", ".join(e.title for e in experience[:2])
@@ -164,6 +174,7 @@ class FakeProvider(DraftingProvider):
             skills=ordered,
             experience=experience,
             education=education,
+            awards=awards,
             projects=projects,
             certifications=list(evidence.get("certifications") or []),
             languages=list(evidence.get("spoken_languages") or []),

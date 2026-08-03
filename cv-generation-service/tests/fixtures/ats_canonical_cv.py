@@ -3,10 +3,13 @@
 from __future__ import annotations
 
 from cv_generation.models.canonical_cv import (
+    AwardItem,
     CanonicalCV,
     ContactInfo,
     EducationItem,
     ExperienceItem,
+    ProjectItem,
+    ValuesAlignmentItem,
 )
 
 
@@ -44,3 +47,28 @@ def ats_core_canonical_cv() -> CanonicalCV:
         ],
         output_language="en",
     )
+
+
+def ats_trailing_canonical_cv() -> CanonicalCV:
+    """Core ATS CV plus every conditional trailing section populated."""
+    cv = ats_core_canonical_cv()
+    cv.awards = [
+        AwardItem(title="Ada Lovelace Award", date="2022"),
+        AwardItem(title="Volunteer tutor, Coding Club"),
+    ]
+    cv.projects = [
+        ProjectItem(
+            name="Difference Engine",
+            description="Mechanical calculation prototype",
+            bullets=["Designed punched-card programs"],
+        )
+    ]
+    cv.certifications = ["AWS Certified Developer"]
+    cv.languages = ["English", "French"]
+    cv.values_alignment = [
+        ValuesAlignmentItem(
+            value="Curiosity",
+            behaviour="Documented novel algorithms for the Analytical Engine",
+        )
+    ]
+    return cv

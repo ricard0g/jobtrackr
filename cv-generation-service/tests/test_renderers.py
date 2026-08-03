@@ -9,7 +9,14 @@ from docx.enum.text import WD_ALIGN_PARAGRAPH, WD_TAB_ALIGNMENT
 from docx.oxml.ns import qn
 from docx.shared import Pt
 
-from cv_generation.models.canonical_cv import CanonicalCV, ContactInfo, EducationItem
+from cv_generation.models.canonical_cv import (
+    AwardItem,
+    CanonicalCV,
+    ContactInfo,
+    EducationItem,
+    ProjectItem,
+    ValuesAlignmentItem,
+)
 from cv_generation.render.docx_renderer import (
     ATS_BODY_FONT,
     ATS_BODY_SIZE,
@@ -18,7 +25,15 @@ from cv_generation.render.docx_renderer import (
     render_docx,
 )
 from cv_generation.render.markdown import render_markdown
-from fixtures.ats_canonical_cv import ats_core_canonical_cv
+from fixtures.ats_canonical_cv import ats_core_canonical_cv, ats_trailing_canonical_cv
+
+_TRAILING_HEADINGS = (
+    "AWARDS/VOLUNTEER",
+    "PROJECTS",
+    "CERTIFICATIONS",
+    "LANGUAGES",
+    "VALUES ALIGNMENT",
+)
 
 
 def _docx_from_cv(cv: CanonicalCV | None = None) -> Document:
@@ -178,3 +193,68 @@ def test_docx_omits_empty_core_sections_but_keeps_relative_order():
     assert "EXPERIENCE" not in texts
     assert "EDUCATION" not in texts
     assert texts.index("PROFESSIONAL SUMMARY") < texts.index("SKILLS")
+
+
+def test_docx_trailing_section_order_when_all_present():
+    doc = _docx_from_cv(ats_trailing_canonical_cv())
+    texts = [p.text.strip() for p in doc.paragraphs]
+    trailing = [t for t in texts if t in _TRAILING_HEADINGS]
+    assert trailing == list(_TRAILING_HEADINGS)
+    assert texts.index("SKILLS") < texts.index("AWARDS/VOLUNTEER")
+    for heading in _TRAILING_HEADINGS:
+        run = next(p.runs[0] for p in doc.paragraphs if p.text.strip() == heading)
+        assert run.bold is True
+        assert run.font.name == ATS_BODY_FONT
+        assert run.font.size == ATS_BODY_SIZE
+
+
+def test_docx_omits_empty_trailing_sections_but_keeps_relative_order():
+    cv = ats_core_canonical_cv()
+    cv.projects = [ProjectItem(name="Difference Engine")]
+    cv.languages = ["English"]
+    texts = [p.text.strip() for p in _docx_from_cv(cv).paragraphs]
+    present = [t for t in texts if t in _TRAILING_HEADINGS]
+    assert present == ["PROJECTS", "LANGUAGES"]
+    assert "AWARDS/VOLUNTEER" not in texts
+    assert "CERTIFICATIONS" not in texts
+    assert "VALUES ALIGNMENT" not in texts
+    assert texts.index("SKILLS") < texts.index("PROJECTS") < texts.index("LANGUAGES")
+
+
+def test_docx_awards_use_item_left_date_right_when_dated():
+    cv = ats_core_canonical_cv()
+    cv.awards = [
+        AwardItem(title="Ada Lovelace Award", date="2022"),
+        AwardItem(title="Volunteer tutor, Coding Club"),
+    ]
+    doc = _docx_from_cv(cv)
+    dated = _paragraph_starting_with(doc, "Ada Lovelace Award")
+    undated = _paragraph_starting_with(doc, "Volunteer tutor, Coding Club")
+
+    assert "2022" in dated.text
+    assert "\t" in dated.text
+    tabs = list(dated.paragraph_format.tab_stops)
+    assert len(tabs) == 1
+    assert tabs[0].alignment == WD_TAB_ALIGNMENT.RIGHT
+    assert tabs[0].position == ATS_RIGHT_TAB
+    content_runs = [r for r in dated.runs if r.text and r.text != "\t"]
+    assert content_runs
+    assert all(r.bold and r.italic for r in content_runs)
+
+    assert "\t" not in undated.text
+    assert undated.text.strip() == "Volunteer tutor, Coding Club"
+
+
+def test_docx_values_alignment_renders_value_and_behaviour():
+    cv = ats_core_canonical_cv()
+    cv.values_alignment = [
+        ValuesAlignmentItem(
+            value="Curiosity",
+            behaviour="Documented novel algorithms for the Analytical Engine",
+        )
+    ]
+    texts = [p.text.strip() for p in _docx_from_cv(cv).paragraphs]
+    assert "VALUES ALIGNMENT" in texts
+    assert any(
+        "Curiosity" in t and "Documented novel algorithms" in t for t in texts
+    )
