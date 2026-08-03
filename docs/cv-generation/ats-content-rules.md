@@ -97,6 +97,17 @@ For drafting, prefer ATS-safe wording habits drawn from the research pack (Indee
 - Plain language; avoid special characters that break parsers.
 - Single-column layout, standard bullets, and no tables/graphics/headers/footers in rendered Output Formats (enforced by renderers; DOCX is the preferred ATS-safe Output Format when the posting allows).
 
+## Length and one-page fit
+
+Generated CVs must fit **one page** (US Letter, ATS template margins/typography). Prefer conversion density over completeness:
+
+- Professional Summary: 2–3 sentences only.
+- Experience: about 3–4 strong bullets on the most JD-relevant roles; thin or omit low-signal roles.
+- Keep Skills to a tight JD-ordered line; omit empty trailing sections.
+- If content still overflows one page, drop the least JD-relevant experience bullets and optional trailing sections before inventing brevity that removes evidenced fit.
+
+Do not dump the full Candidate Evidence corpus onto the page.
+
 ## Pre-submit content checklist (Generated CV)
 
 Use before accepting a draft as ready:
@@ -111,6 +122,7 @@ Use before accepting a draft as ready:
 8. No invented employers, skills, dates, duties, or logistics.
 9. Contact/portfolio links from evidence are preserved.
 10. Empty optional sections are omitted.
+11. Draft fits one page under ATS Structure density rules.
 
 ## How agents and prompts should use this file
 

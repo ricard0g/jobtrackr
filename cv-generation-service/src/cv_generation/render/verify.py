@@ -8,7 +8,9 @@ import re
 from cv_generation.models.errors import ErrorCode, ServiceError
 from cv_generation.models.specification import OutputFormat
 
-_MAX_PDF_PAGES = 2
+# Final safety net. One-page densification is enforced earlier via draft prompts +
+# validate→revise budget checks; verify only catches runaway renders.
+_MAX_PAGES = 1
 _MAX_NON_PDF_CHARS = 12_000
 
 
@@ -54,10 +56,10 @@ def verify_rendered(
                 ErrorCode.GENERATION_VALIDATION_FAILED,
                 "Rendered PDF could not be verified",
             )
-        if page_count > _MAX_PDF_PAGES:
+        if page_count > _MAX_PAGES:
             raise ServiceError(
                 ErrorCode.DOCUMENT_TOO_LONG,
-                f"Rendered PDF exceeds {_MAX_PDF_PAGES} pages",
+                f"Rendered PDF exceeds {_MAX_PAGES} page",
             )
     elif len(text) > _MAX_NON_PDF_CHARS:
         raise ServiceError(
@@ -66,7 +68,7 @@ def verify_rendered(
         )
 
 
-def _pdf_page_count(data: bytes) -> int | None:
+def pdf_page_count(data: bytes) -> int | None:
     try:
         from pypdf import PdfReader
 
@@ -74,6 +76,10 @@ def _pdf_page_count(data: bytes) -> int | None:
         return len(reader.pages)
     except Exception:  # noqa: BLE001
         return None
+
+
+def _pdf_page_count(data: bytes) -> int | None:
+    return pdf_page_count(data)
 
 
 def _extract_text(data: bytes, output_format: OutputFormat) -> str:

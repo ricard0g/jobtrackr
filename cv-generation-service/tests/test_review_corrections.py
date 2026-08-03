@@ -64,7 +64,7 @@ def test_pdf_page_limit_enforced():
     from pypdf import PdfWriter
 
     writer = PdfWriter()
-    for _ in range(3):
+    for _ in range(2):
         writer.add_blank_page(width=612, height=792)
     buffer = io.BytesIO()
     writer.write(buffer)

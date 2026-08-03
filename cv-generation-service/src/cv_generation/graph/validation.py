@@ -19,6 +19,13 @@ _SENSITIVE_RE = re.compile(
     re.IGNORECASE,
 )
 
+# Deterministic one-page content budget (feeds revise before render/verify).
+_MAX_SUMMARY_CHARS = 450
+_MAX_EXPERIENCE_ROLES = 4
+_MAX_BULLETS_PER_ROLE = 4
+_MAX_TOTAL_EXPERIENCE_BULLETS = 12
+_MAX_DRAFT_BODY_CHARS = 3_500
+
 
 def _phrase_in_corpus(phrase: str, corpus: str) -> bool:
     """Require whole-phrase match, not an accidental substring of another token."""
@@ -85,18 +92,60 @@ def validate_canonical_cv(
     ):
         issues.append("numeric ATS scores are forbidden")
 
-    for field in (cv.professional_summary or "", *[b for exp in cv.experience for b in exp.bullets]):
+    visible_text_fields = [
+        *(cv.professional_summary or "",),
+        *(b for exp in cv.experience for b in exp.bullets),
+        *(
+            text
+            for exp in cv.experience
+            for group in exp.bullet_groups
+            for text in (group.heading, *group.bullets)
+        ),
+        *(award.title for award in cv.awards),
+        *(
+            text
+            for item in cv.values_alignment
+            for text in (item.value, item.behaviour)
+        ),
+    ]
+    for field in visible_text_fields:
         if _SENSITIVE_RE.search(field):
             issues.append("sensitive personal attributes must be omitted")
             break
 
-    # Fabricated metrics: numbers in bullets that aren't in corpus
-    for exp in cv.experience:
-        for bullet in exp.bullets:
-            if _METRIC_RE.search(bullet):
-                nums = re.findall(r"\d+(?:\.\d+)?%?", bullet)
-                if nums and not any(n in corpus for n in nums):
-                    issues.append(f"metric not grounded in evidence: {bullet[:80]}")
+    # Fabricated metrics: numbers in user-visible prose that aren't in corpus
+    metric_fields = [
+        *(b for exp in cv.experience for b in exp.bullets),
+        *(
+            text
+            for exp in cv.experience
+            for group in exp.bullet_groups
+            for text in (group.heading, *group.bullets)
+        ),
+        *(award.title for award in cv.awards),
+        *(item.behaviour for item in cv.values_alignment),
+    ]
+    for field in metric_fields:
+        if _METRIC_RE.search(field):
+            nums = re.findall(r"\d+(?:\.\d+)?%?", field)
+            if nums and not any(n in corpus for n in nums):
+                issues.append(f"metric not grounded in evidence: {field[:80]}")
+
+    evidence_awards = {
+        str(item.get("title") or "").strip().lower()
+        for item in (evidence.get("awards") or [])
+        if isinstance(item, dict) and str(item.get("title") or "").strip()
+    }
+    for award in cv.awards:
+        title = award.title.strip()
+        if title.lower() not in evidence_awards and not _phrase_in_corpus(title, corpus):
+            issues.append(f"award not in evidence: {title}")
+
+    for item in cv.values_alignment:
+        if not _phrase_in_corpus(item.behaviour, corpus):
+            issues.append(
+                f"values alignment behaviour not grounded in evidence: {item.behaviour[:80]}"
+            )
 
     # JD skills must not be injected if absent from evidence
     if jd_analysis:
@@ -125,5 +174,84 @@ def validate_canonical_cv(
 
     if not (cv.experience or cv.education or cv.projects):
         issues.append("CV must include at least one experience, education, or project entry")
+
+    issues.extend(_one_page_budget_issues(cv))
+
+    return issues
+
+
+def draft_body_char_count(cv: CanonicalCV) -> int:
+    """Approximate drafted body size excluding contact chrome."""
+    parts: list[str] = [
+        cv.professional_summary or "",
+        ", ".join(cv.skills),
+        ", ".join(cv.languages),
+        ", ".join(cv.certifications),
+    ]
+    for exp in cv.experience:
+        parts.extend(exp.bullets)
+        for group in exp.bullet_groups:
+            parts.append(group.heading)
+            parts.extend(group.bullets)
+    for edu in cv.education:
+        parts.extend(edu.details)
+        parts.extend(
+            bit for bit in (edu.institution, edu.degree, edu.field, edu.end_date) if bit
+        )
+    for proj in cv.projects:
+        parts.append(proj.name)
+        if proj.description:
+            parts.append(proj.description)
+        parts.extend(proj.bullets)
+    for award in cv.awards:
+        parts.append(award.title)
+    for item in cv.values_alignment:
+        parts.extend((item.value, item.behaviour))
+    return sum(len(part) for part in parts if part)
+
+
+def _experience_bullet_count(exp) -> int:
+    return len(exp.bullets) + sum(len(group.bullets) for group in exp.bullet_groups)
+
+
+def _one_page_budget_issues(cv: CanonicalCV) -> list[str]:
+    """Actionable densification issues so revise can shorten before render."""
+    issues: list[str] = []
+    summary = (cv.professional_summary or "").strip()
+    if len(summary) > _MAX_SUMMARY_CHARS:
+        issues.append(
+            "one-page budget: professional summary must be 2-3 short sentences "
+            f"(max {_MAX_SUMMARY_CHARS} characters)"
+        )
+
+    if len(cv.experience) > _MAX_EXPERIENCE_ROLES:
+        issues.append(
+            "one-page budget: keep at most "
+            f"{_MAX_EXPERIENCE_ROLES} experience roles; omit lowest-signal roles"
+        )
+
+    total_bullets = 0
+    for exp in cv.experience:
+        count = _experience_bullet_count(exp)
+        total_bullets += count
+        if count > _MAX_BULLETS_PER_ROLE:
+            issues.append(
+                "one-page budget: use at most "
+                f"{_MAX_BULLETS_PER_ROLE} bullets per role ({exp.company})"
+            )
+
+    if total_bullets > _MAX_TOTAL_EXPERIENCE_BULLETS:
+        issues.append(
+            "one-page budget: total experience bullets must be <= "
+            f"{_MAX_TOTAL_EXPERIENCE_BULLETS}; keep strongest JD-relevant bullets only"
+        )
+
+    body_chars = draft_body_char_count(cv)
+    if body_chars > _MAX_DRAFT_BODY_CHARS:
+        issues.append(
+            "one-page budget: drafted body exceeds "
+            f"{_MAX_DRAFT_BODY_CHARS} characters ({body_chars}); "
+            "shorten summary/bullets and drop low-signal trailing sections"
+        )
 
     return issues

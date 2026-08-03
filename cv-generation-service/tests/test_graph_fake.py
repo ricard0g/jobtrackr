@@ -8,7 +8,14 @@ from cv_generation.graph.nodes import node_analyze_jd, node_merge_user_evidence,
 from cv_generation.graph.state import GraphState
 from cv_generation.graph.validation import validate_canonical_cv
 from cv_generation.graph.workflow import run_generation
-from cv_generation.models.canonical_cv import CanonicalCV, ContactInfo
+from cv_generation.models.canonical_cv import (
+    AwardItem,
+    CanonicalCV,
+    ContactInfo,
+    ExperienceBulletGroup,
+    ExperienceItem,
+    ValuesAlignmentItem,
+)
 from cv_generation.models.candidate_evidence import CandidateEvidence
 from cv_generation.models.errors import ErrorCode, ServiceError
 from cv_generation.models.specification import OutputFormat
@@ -216,6 +223,169 @@ def test_validation_rejects_fabricated_skill():
         jd_analysis={"keywords": ["Kubernetes", "Python"]},
     )
     assert any("Kubernetes" in i for i in issues)
+
+
+def test_validation_checks_metrics_and_sensitive_text_in_bullet_groups():
+    evidence = {
+        "raw_text": "Jane Doe jane@example.com worked at Acme.",
+        "skills": ["Python"],
+        "experience": [{"company": "Acme", "title": "Engineer"}],
+        "full_name": "Jane Doe",
+        "contact": {"email": "jane@example.com"},
+    }
+    cv = CanonicalCV(
+        full_name="Jane Doe",
+        contact=ContactInfo(email="jane@example.com"),
+        skills=["Python"],
+        experience=[
+            ExperienceItem(
+                company="Acme",
+                title="Engineer",
+                bullets=[],
+                bullet_groups=[
+                    ExperienceBulletGroup(
+                        heading="Delivery",
+                        bullets=["Increased throughput by 40%", "Age: 29"],
+                    )
+                ],
+            )
+        ],
+    )
+    issues = validate_canonical_cv(cv, evidence)
+    assert any("metric not grounded" in i for i in issues)
+    assert any("sensitive personal attributes" in i for i in issues)
+
+
+def test_validation_covers_awards_values_and_theme_headings():
+    evidence = {
+        "raw_text": "Jane Doe jane@example.com worked at Acme mentoring juniors.",
+        "skills": ["Python"],
+        "experience": [{"company": "Acme", "title": "Engineer"}],
+        "awards": [{"title": "Acme Mentor Award", "date": "2023"}],
+        "full_name": "Jane Doe",
+        "contact": {"email": "jane@example.com"},
+    }
+    cv = CanonicalCV(
+        full_name="Jane Doe",
+        contact=ContactInfo(email="jane@example.com"),
+        skills=["Python"],
+        experience=[
+            ExperienceItem(
+                company="Acme",
+                title="Engineer",
+                bullet_groups=[
+                    ExperienceBulletGroup(
+                        heading="Nationality: British",
+                        bullets=["Mentored juniors"],
+                    )
+                ],
+            )
+        ],
+        awards=[
+            AwardItem(title="Invented Cloud Award"),
+            AwardItem(title="Age: 42 volunteer"),
+        ],
+        values_alignment=[
+            ValuesAlignmentItem(
+                value="Integrity",
+                behaviour="Increased retention by 25%",
+            )
+        ],
+    )
+    issues = validate_canonical_cv(cv, evidence)
+    assert any("award not in evidence" in i for i in issues)
+    assert any("sensitive personal attributes" in i for i in issues)
+    assert any("metric not grounded" in i for i in issues)
+    assert any("values alignment behaviour not grounded" in i for i in issues)
+
+
+def test_validation_accepts_grounded_awards_and_values_alignment():
+    evidence = {
+        "raw_text": (
+            "Jane Doe jane@example.com worked at Acme. "
+            "Received Acme Mentor Award in 2023. Mentored juniors weekly."
+        ),
+        "skills": ["Python"],
+        "experience": [{"company": "Acme", "title": "Engineer"}],
+        "awards": [{"title": "Acme Mentor Award", "date": "2023"}],
+        "full_name": "Jane Doe",
+        "contact": {"email": "jane@example.com"},
+    }
+    cv = CanonicalCV(
+        full_name="Jane Doe",
+        contact=ContactInfo(email="jane@example.com"),
+        skills=["Python"],
+        experience=[ExperienceItem(company="Acme", title="Engineer")],
+        awards=[AwardItem(title="Acme Mentor Award", date="2023")],
+        values_alignment=[
+            ValuesAlignmentItem(
+                value="Mentorship",
+                behaviour="Mentored juniors weekly",
+            )
+        ],
+    )
+    issues = validate_canonical_cv(cv, evidence)
+    assert not any("award not in evidence" in i for i in issues)
+    assert not any("values alignment behaviour not grounded" in i for i in issues)
+    assert not any("sensitive personal attributes" in i for i in issues)
+
+
+def test_validation_flags_one_page_budget_overflow():
+    evidence = {
+        "raw_text": "Jane Doe jane@example.com " + " ".join(f"Company{i}" for i in range(6)),
+        "skills": ["Python"],
+        "experience": [{"company": f"Company{i}", "title": "Engineer"} for i in range(6)],
+        "full_name": "Jane Doe",
+        "contact": {"email": "jane@example.com"},
+    }
+    cv = CanonicalCV(
+        full_name="Jane Doe",
+        contact=ContactInfo(email="jane@example.com"),
+        skills=["Python"],
+        professional_summary="x" * 500,
+        experience=[
+            ExperienceItem(
+                company=f"Company{i}",
+                title="Engineer",
+                bullets=[f"Did substantial work item {j} with outcomes" for j in range(5)],
+            )
+            for i in range(6)
+        ],
+    )
+    issues = validate_canonical_cv(cv, evidence)
+    assert any("one-page budget" in i for i in issues)
+
+
+def test_fake_provider_preserves_experience_bullet_groups():
+    provider = FakeProvider()
+    cv = provider.draft(
+        evidence={
+            "full_name": "Jane Doe",
+            "contact": {"email": "jane@example.com"},
+            "skills": ["Python"],
+            "experience": [
+                {
+                    "company": "Acme",
+                    "title": "Engineer",
+                    "bullets": ["Shipped features"],
+                    "bullet_groups": [
+                        {
+                            "heading": "Delivery",
+                            "bullets": ["Owned release trains"],
+                        }
+                    ],
+                }
+            ],
+            "raw_text": "Jane Doe jane@example.com Acme Python",
+        },
+        jd_analysis={"keywords": ["Python"]},
+        output_language="en",
+    )
+    assert len(cv.experience) == 1
+    assert cv.experience[0].bullets == ["Shipped features"]
+    assert len(cv.experience[0].bullet_groups) == 1
+    assert cv.experience[0].bullet_groups[0].heading == "Delivery"
+    assert cv.experience[0].bullet_groups[0].bullets == ["Owned release trains"]
 
 
 def test_jd_analysis_targeting_only(sample_jd):

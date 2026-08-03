@@ -99,7 +99,7 @@ class FakeProvider(DraftingProvider):
             key=lambda s: (0 if s.lower() in keywords else 1, s.lower()),
         )
 
-        experience = [
+        experience_items = [
             ExperienceItem(
                 company=str(item.get("company") or "").strip(),
                 title=str(item.get("title") or "").strip() or "Role",
@@ -107,10 +107,12 @@ class FakeProvider(DraftingProvider):
                 end_date=item.get("end_date"),
                 location=item.get("location"),
                 bullets=list(item.get("bullets") or []),
+                bullet_groups=list(item.get("bullet_groups") or []),
             )
             for item in (evidence.get("experience") or [])
             if isinstance(item, dict) and str(item.get("company") or "").strip()
         ]
+        experience = _densify_experience_for_one_page(experience_items)
 
         education = [
             EducationItem(
@@ -166,6 +168,8 @@ class FakeProvider(DraftingProvider):
             # Only mention targeting if related skills exist
             if any(s.lower() in keywords for s in ordered[:5]):
                 summary = f"{summary} Targeting roles related to {target_title}."
+        if isinstance(summary, str) and len(summary) > 450:
+            summary = summary[:447].rstrip() + "..."
 
         return CanonicalCV(
             full_name=name,
@@ -180,6 +184,31 @@ class FakeProvider(DraftingProvider):
             languages=list(evidence.get("spoken_languages") or []),
             output_language=output_language,
         )
+
+
+def _densify_experience_for_one_page(items: list[ExperienceItem]) -> list[ExperienceItem]:
+    """Keep FakeProvider drafts inside the deterministic one-page bullet budget."""
+    remaining = 12
+    densified: list[ExperienceItem] = []
+    for exp in items[:4]:
+        if remaining <= 0:
+            break
+        flat_cap = min(4, remaining)
+        flat = list(exp.bullets)[:flat_cap]
+        remaining -= len(flat)
+        groups = []
+        for group in exp.bullet_groups:
+            if remaining <= 0:
+                break
+            bullets = list(group.bullets)[: min(4, remaining)]
+            if not bullets:
+                continue
+            remaining -= len(bullets)
+            groups.append(group.model_copy(update={"bullets": bullets}))
+        densified.append(
+            exp.model_copy(update={"bullets": flat, "bullet_groups": groups})
+        )
+    return densified
 
 
 def extract_name_heuristic(text: str) -> str | None:

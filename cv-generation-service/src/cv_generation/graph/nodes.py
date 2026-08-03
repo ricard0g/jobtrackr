@@ -240,6 +240,7 @@ def node_validate(state: GraphState) -> dict[str, Any]:
             "No canonical CV to validate",
         )
     issues = validate_canonical_cv(cv, state["evidence"], jd_analysis=state.get("jd_analysis"))
+    issues.extend(_one_page_render_issues(cv))
     revision_count = int(state.get("revision_count") or 0)
     max_revisions = int(state.get("max_revisions") or 2)
     needs = bool(issues) and revision_count < max_revisions
@@ -253,6 +254,25 @@ def node_validate(state: GraphState) -> dict[str, Any]:
         "validation_issues": issues,
         "needs_revision": needs,
     }
+
+
+def _one_page_render_issues(cv: CanonicalCV) -> list[str]:
+    """PDF layout proxy for one-page fit (available in the service image)."""
+    try:
+        from cv_generation.render.pdf_renderer import render_pdf
+        from cv_generation.render.verify import pdf_page_count
+    except Exception:  # noqa: BLE001
+        return []
+    try:
+        pages = pdf_page_count(render_pdf(cv))
+    except Exception:  # noqa: BLE001
+        return []
+    if pages is not None and pages > 1:
+        return [
+            "one-page budget: rendered CV exceeds one page; "
+            "shorten summary/bullets and omit low-signal roles or trailing sections"
+        ]
+    return []
 
 
 def node_revise(state: GraphState, provider: DraftingProvider) -> dict[str, Any]:

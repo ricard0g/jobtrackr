@@ -177,6 +177,39 @@ def test_docx_uses_arial_one_inch_margins_and_no_tables_or_chrome():
     assert all(not p.text.strip() for p in section.footer.paragraphs)
 
 
+def test_docx_header_then_professional_summary_before_experience():
+    texts = [p.text.strip() for p in _docx_from_cv().paragraphs if p.text.strip()]
+    assert texts[0] == "Ada Lovelace"
+    assert "PROFESSIONAL SUMMARY" in texts
+    assert texts.index("PROFESSIONAL SUMMARY") < texts.index("EXPERIENCE")
+    assert texts.index("PROFESSIONAL SUMMARY") <= 4
+
+
+def test_docx_and_pdf_fit_on_one_page():
+    from pypdf import PdfReader
+
+    from cv_generation.render.pdf_renderer import render_pdf
+    from cv_generation.render.verify import verify_rendered
+    from cv_generation.models.specification import OutputFormat
+
+    cv = ats_trailing_canonical_cv()
+    docx = render_docx(cv)
+    pdf = render_pdf(cv)
+    assert len(PdfReader(io.BytesIO(pdf)).pages) == 1
+    verify_rendered(
+        pdf,
+        OutputFormat.PDF,
+        expected_name="Ada Lovelace",
+        expected_email="ada@example.com",
+    )
+    verify_rendered(
+        docx,
+        OutputFormat.DOCX,
+        expected_name="Ada Lovelace",
+        expected_email="ada@example.com",
+    )
+
+
 def test_docx_omits_empty_core_sections_but_keeps_relative_order():
     cv = CanonicalCV(
         full_name="Ada Lovelace",
