@@ -223,7 +223,7 @@ function GenerateDialogForm({
 	const [baseCvId, setBaseCvId] = useState(() =>
 		baseCvs[0] ? String(baseCvs[0].baseCvId) : "",
 	);
-	const [format, setFormat] = useState<GeneratedCvFormat>("PDF");
+	const [format, setFormat] = useState<GeneratedCvFormat>("DOCX");
 	const [jobDescription, setJobDescription] = useState(initialJobDescription);
 	const [additionalInformation, setAdditionalInformation] = useState("");
 	const [consentAccepted, setConsentAccepted] = useState(false);
