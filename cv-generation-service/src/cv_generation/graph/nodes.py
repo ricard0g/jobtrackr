@@ -186,11 +186,13 @@ def node_analyze_jd(state: GraphState) -> dict[str, Any]:
 
     keywords = _extract_keywords(jd)
     target_title = _guess_title(jd)
+    skill_expansions = _extract_skill_expansions(jd)
 
     return {
         "jd_analysis": {
             "keywords": keywords,
             "target_title": target_title,
+            "skill_expansions": skill_expansions,
             "source": "job_description",
             "note": "targeting_only",
         },
@@ -623,21 +625,44 @@ def _extract_summary(text: str) -> str | None:
 
 
 def _extract_keywords(jd: str) -> list[str]:
-    # Simple token frequency for targeting
+    # First-appearance order preserves JD required/preferred priority for targeting.
     stop = {
         "and", "or", "the", "a", "an", "to", "of", "in", "for", "with", "on", "at",
         "is", "are", "be", "as", "by", "we", "you", "your", "our", "will", "this",
         "that", "from", "have", "has", "been", "their", "they", "job", "role",
     }
     tokens = re.findall(r"[A-Za-z][A-Za-z0-9+.#]{1,30}", jd)
-    freq: dict[str, int] = {}
+    ordered: list[str] = []
+    seen: set[str] = set()
     for t in tokens:
         low = t.lower()
-        if low in stop or len(low) < 2:
+        if low in stop or len(low) < 2 or low in seen:
             continue
-        freq[t] = freq.get(t, 0) + 1
-    ranked = sorted(freq.items(), key=lambda kv: (-kv[1], kv[0].lower()))
-    return [k for k, _ in ranked[:40]]
+        seen.add(low)
+        ordered.append(t)
+        if len(ordered) >= 40:
+            break
+    return ordered
+
+
+_SKILL_EXPANSION_RE = re.compile(
+    r"\b([A-Za-z][A-Za-z0-9+.#]*(?:\s+[A-Za-z][A-Za-z0-9+.#]*)+)\s*\(([A-Za-z0-9+.#]{2,20})\)"
+)
+
+
+def _extract_skill_expansions(jd: str) -> list[dict[str, str]]:
+    """Pull Full Term (ACRONYM) pairs from the JD for grounded skill naming."""
+    expansions: list[dict[str, str]] = []
+    seen: set[str] = set()
+    for full, acronym in _SKILL_EXPANSION_RE.findall(jd):
+        full_n = " ".join(full.split())
+        acronym_n = acronym.strip()
+        key = f"{full_n.lower()}|{acronym_n.lower()}"
+        if key in seen:
+            continue
+        seen.add(key)
+        expansions.append({"full": full_n, "acronym": acronym_n})
+    return expansions
 
 
 def _guess_title(jd: str) -> str | None:

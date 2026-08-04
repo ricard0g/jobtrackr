@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import re
+
 import pytest
 
 from cv_generation.graph.nodes import node_analyze_jd, node_merge_user_evidence, node_normalize_evidence
@@ -64,6 +66,104 @@ def test_no_fabrication_of_jd_skills(sample_cv_md, sample_jd):
     assert "Kubernetes" not in result.canonical_cv.skills
     assert result.canonical_cv.experience
     assert result.canonical_cv.education
+
+
+def test_skills_jd_ordered_and_unrelated_evidence_skills_dropped(sample_cv_md, sample_jd):
+    """Grounded Tailoring: evidence-only skills, JD matches first, unrelated dropped."""
+    result = run_generation(
+        provider=FakeProvider(),
+        base_cv_bytes=sample_cv_md,
+        filename="cv.md",
+        content_type="text/markdown",
+        job_description=sample_jd,
+        additional_information=None,
+        output_format=OutputFormat.MARKDOWN,
+        correlation_id="00000000-0000-0000-0000-000000000010",
+        workflow_version="cv-graph-v2",
+    )
+    assert result.canonical_cv is not None
+    skills = result.canonical_cv.skills
+    # Sample evidence includes Linux/Git; JD does not ask for them.
+    assert "Linux" not in skills
+    assert "Git" not in skills
+    assert "Kubernetes" not in skills
+    # JD mentions Python/FastAPI before PostgreSQL/Docker — keep that priority.
+    assert skills == ["Python", "FastAPI", "PostgreSQL", "Docker"]
+
+
+def test_skills_expand_grounded_acronym_when_jd_names_full_term():
+    """Full Term (ACRONYM) only when evidence supports the skill and naming is grounded."""
+    base_cv = (
+        b"# Jane Doe\n"
+        b"jane@example.com\n\n"
+        b"## Skills\n"
+        b"CRM, Python, Baking\n\n"
+        b"## Experience\n"
+        b"### Engineer - Acme\n"
+        b"- Built CRM workflows in Python\n\n"
+        b"## Education\n"
+        b"### BS, Example University\n"
+    )
+    jd = (
+        "Software Engineer\n\n"
+        "Requirements:\n"
+        "- Customer Relationship Management (CRM)\n"
+        "- Python experience\n"
+        "- Kubernetes preferred\n"
+    )
+    result = run_generation(
+        provider=FakeProvider(),
+        base_cv_bytes=base_cv,
+        filename="cv.md",
+        content_type="text/markdown",
+        job_description=jd,
+        additional_information=None,
+        output_format=OutputFormat.MARKDOWN,
+        correlation_id="00000000-0000-0000-0000-000000000011",
+        workflow_version="cv-graph-v2",
+    )
+    assert result.canonical_cv is not None
+    skills = result.canonical_cv.skills
+    assert "Customer Relationship Management (CRM)" in skills
+    assert "Baking" not in skills
+    assert "Kubernetes" not in skills
+    assert "Python" in skills
+
+
+def _sentence_count(text: str) -> int:
+    parts = [p.strip() for p in re.split(r"[.!?]+", text) if p.strip()]
+    return len(parts)
+
+
+def test_professional_summary_is_two_to_three_grounded_role_targeted_sentences(
+    sample_cv_md, sample_jd
+):
+    result = run_generation(
+        provider=FakeProvider(),
+        base_cv_bytes=sample_cv_md,
+        filename="cv.md",
+        content_type="text/markdown",
+        job_description=sample_jd,
+        additional_information=None,
+        output_format=OutputFormat.MARKDOWN,
+        correlation_id="00000000-0000-0000-0000-000000000012",
+        workflow_version="cv-graph-v2",
+    )
+    assert result.canonical_cv is not None
+    summary = (result.canonical_cv.professional_summary or "").strip()
+    assert summary
+    assert 2 <= _sentence_count(summary) <= 3
+    # Role-targeted using JD title / evidenced skills — no invented keywords.
+    assert "Software Engineer" in summary or "software engineer" in summary.lower()
+    assert "Python" in summary
+    assert "Kubernetes" not in summary
+    # No fabricated metrics or ATS scores in the summary.
+    assert not re.search(r"\b\d{1,3}\s?%", summary)
+    assert not re.search(r"\bATS\s*(score|match)?\s*[:\-]?\s*\d+", summary, re.I)
+    # Metrics must stay evidence-only across the whole Generated CV at this seam.
+    blob = result.content.decode("utf-8")
+    assert "40%" not in blob
+    assert not re.search(r"\bATS\s*(score|match)?\s*[:\-]?\s*\d+", blob, re.I)
 
 
 def test_contact_only_base_cv_is_rejected(sample_jd):
@@ -223,6 +323,139 @@ def test_validation_rejects_fabricated_skill():
         jd_analysis={"keywords": ["Kubernetes", "Python"]},
     )
     assert any("Kubernetes" in i for i in issues)
+
+
+def test_validation_rejects_invented_full_term_around_evidenced_acronym():
+    evidence = {
+        "raw_text": "Jane Doe jane@example.com Skills: Python",
+        "skills": ["Python"],
+        "experience": [{"company": "Acme", "title": "Engineer"}],
+        "full_name": "Jane Doe",
+        "contact": {"email": "jane@example.com"},
+    }
+    cv = CanonicalCV(
+        full_name="Jane Doe",
+        contact=ContactInfo(email="jane@example.com"),
+        skills=["Invented Platform (Python)"],
+        experience=[ExperienceItem(company="Acme", title="Engineer")],
+    )
+    issues = validate_canonical_cv(cv, evidence, jd_analysis={"keywords": ["Python"]})
+    assert any("skill not in evidence" in i for i in issues)
+
+
+def test_validation_accepts_jd_named_expansion_for_evidenced_acronym():
+    evidence = {
+        "raw_text": "Jane Doe jane@example.com Skills: CRM, Python",
+        "skills": ["CRM", "Python"],
+        "experience": [{"company": "Acme", "title": "Engineer"}],
+        "full_name": "Jane Doe",
+        "contact": {"email": "jane@example.com"},
+    }
+    cv = CanonicalCV(
+        full_name="Jane Doe",
+        contact=ContactInfo(email="jane@example.com"),
+        skills=["Customer Relationship Management (CRM)", "Python"],
+        experience=[ExperienceItem(company="Acme", title="Engineer")],
+    )
+    issues = validate_canonical_cv(
+        cv,
+        evidence,
+        jd_analysis={
+            "keywords": ["CRM", "Python"],
+            "skill_expansions": [
+                {"full": "Customer Relationship Management", "acronym": "CRM"}
+            ],
+        },
+    )
+    assert not any("skill not in evidence" in i for i in issues)
+
+
+def test_validation_rejects_invented_metrics_in_summary():
+    evidence = {
+        "raw_text": "Jane Doe jane@example.com worked at Acme with Python.",
+        "skills": ["Python"],
+        "experience": [{"company": "Acme", "title": "Engineer"}],
+        "full_name": "Jane Doe",
+        "contact": {"email": "jane@example.com"},
+    }
+    cv = CanonicalCV(
+        full_name="Jane Doe",
+        contact=ContactInfo(email="jane@example.com"),
+        skills=["Python"],
+        professional_summary="Engineer who increased throughput by 40%.",
+        experience=[ExperienceItem(company="Acme", title="Engineer")],
+    )
+    issues = validate_canonical_cv(cv, evidence)
+    assert any("metric not grounded" in i for i in issues)
+
+
+def test_validation_accepts_metrics_grounded_in_evidence_summary():
+    evidence = {
+        "raw_text": (
+            "Jane Doe jane@example.com worked at Acme with Python. "
+            "Increased throughput by 40%."
+        ),
+        "skills": ["Python"],
+        "experience": [{"company": "Acme", "title": "Engineer"}],
+        "full_name": "Jane Doe",
+        "contact": {"email": "jane@example.com"},
+    }
+    cv = CanonicalCV(
+        full_name="Jane Doe",
+        contact=ContactInfo(email="jane@example.com"),
+        skills=["Python"],
+        professional_summary="Engineer who increased throughput by 40%.",
+        experience=[ExperienceItem(company="Acme", title="Engineer")],
+    )
+    issues = validate_canonical_cv(cv, evidence)
+    assert not any("metric not grounded" in i for i in issues)
+
+
+def test_fake_provider_does_not_invent_metrics_absent_from_evidence():
+    provider = FakeProvider()
+    cv = provider.draft(
+        evidence={
+            "full_name": "Jane Doe",
+            "contact": {"email": "jane@example.com"},
+            "skills": ["Python"],
+            "professional_summary": "Software engineer with Python experience.",
+            "experience": [
+                {
+                    "company": "Acme",
+                    "title": "Engineer",
+                    "bullets": ["Built APIs"],
+                }
+            ],
+            "raw_text": "Jane Doe jane@example.com Acme Python Built APIs",
+        },
+        jd_analysis={
+            "keywords": ["Python", "Engineer"],
+            "target_title": "Software Engineer",
+            "skill_expansions": [],
+        },
+        output_language="en",
+    )
+    blob = " ".join(
+        [
+            cv.professional_summary or "",
+            *cv.skills,
+            *(b for exp in cv.experience for b in exp.bullets),
+        ]
+    )
+    assert not re.search(r"\b\d{1,3}\s?%", blob)
+    assert "40%" not in blob
+    issues = validate_canonical_cv(
+        cv,
+        {
+            "full_name": "Jane Doe",
+            "contact": {"email": "jane@example.com"},
+            "skills": ["Python"],
+            "experience": [{"company": "Acme", "title": "Engineer"}],
+            "raw_text": "Jane Doe jane@example.com Acme Python Built APIs",
+        },
+        jd_analysis={"keywords": ["Python", "Engineer"]},
+    )
+    assert not any("metric not grounded" in i for i in issues)
 
 
 def test_validation_checks_metrics_and_sensitive_text_in_bullet_groups():

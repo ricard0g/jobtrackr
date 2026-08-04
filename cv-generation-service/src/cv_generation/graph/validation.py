@@ -36,6 +36,54 @@ def _phrase_in_corpus(phrase: str, corpus: str) -> bool:
     return bool(pattern.search(corpus))
 
 
+_EXPANDED_SKILL_RE = re.compile(
+    r"^(?P<full>.+?)\s*\((?P<acronym>[A-Za-z0-9+.#]{2,20})\)$"
+)
+
+
+def _skill_grounded(
+    skill: str,
+    evidence_skills: set[str],
+    corpus: str,
+    *,
+    jd_analysis: dict[str, Any] | None = None,
+) -> bool:
+    """Accept exact evidence skills or grounded Full Term (ACRONYM) expansions."""
+    low = skill.lower().strip()
+    if low in evidence_skills or _phrase_in_corpus(skill, corpus):
+        return True
+    match = _EXPANDED_SKILL_RE.match(skill.strip())
+    if not match:
+        return False
+    full = match.group("full").strip().lower()
+    acronym = match.group("acronym").strip().lower()
+    base_grounded = (
+        full in evidence_skills
+        or acronym in evidence_skills
+        or _phrase_in_corpus(full, corpus)
+        or _phrase_in_corpus(acronym, corpus)
+    )
+    if not base_grounded:
+        return False
+    # Both sides of the expansion must be supported (evidence/corpus), or the
+    # JD must supply this exact naming for an already-evidenced skill.
+    naming_in_evidence = (
+        (full in evidence_skills or _phrase_in_corpus(full, corpus))
+        and (acronym in evidence_skills or _phrase_in_corpus(acronym, corpus))
+    )
+    if naming_in_evidence:
+        return True
+    for item in (jd_analysis or {}).get("skill_expansions") or []:
+        if not isinstance(item, dict):
+            continue
+        if (
+            str(item.get("full") or "").strip().lower() == full
+            and str(item.get("acronym") or "").strip().lower() == acronym
+        ):
+            return True
+    return False
+
+
 def validate_canonical_cv(
     cv: CanonicalCV,
     evidence: dict[str, Any],
@@ -73,7 +121,7 @@ def validate_canonical_cv(
 
     # Skills must be grounded in structured evidence or as whole phrases in corpus
     for skill in cv.skills:
-        if skill.lower() not in evidence_skills and not _phrase_in_corpus(skill, corpus):
+        if not _skill_grounded(skill, evidence_skills, corpus, jd_analysis=jd_analysis):
             issues.append(f"skill not in evidence: {skill}")
 
     # Employers must appear in evidence
@@ -115,6 +163,7 @@ def validate_canonical_cv(
 
     # Fabricated metrics: numbers in user-visible prose that aren't in corpus
     metric_fields = [
+        *(cv.professional_summary or "",),
         *(b for exp in cv.experience for b in exp.bullets),
         *(
             text
@@ -151,11 +200,9 @@ def validate_canonical_cv(
     if jd_analysis:
         jd_skills = {s.lower() for s in (jd_analysis.get("keywords") or [])}
         for skill in cv.skills:
-            if (
-                skill.lower() in jd_skills
-                and skill.lower() not in evidence_skills
-                and not _phrase_in_corpus(skill, corpus)
-            ):
+            if _skill_grounded(skill, evidence_skills, corpus, jd_analysis=jd_analysis):
+                continue
+            if skill.lower() in jd_skills:
                 issues.append(f"JD skill fabricated into CV: {skill}")
 
     # Supported professional links present in evidence should survive

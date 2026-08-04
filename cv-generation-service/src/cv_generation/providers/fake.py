@@ -92,12 +92,11 @@ class FakeProvider(DraftingProvider):
         )
 
         evidence_skills: list[str] = list(evidence.get("skills") or [])
-        # Targeting: order skills by JD keyword overlap, never add new skills
-        keywords = {k.lower() for k in (jd_analysis.get("keywords") or [])}
-        ordered = sorted(
-            evidence_skills,
-            key=lambda s: (0 if s.lower() in keywords else 1, s.lower()),
-        )
+        keyword_list = [str(k) for k in (jd_analysis.get("keywords") or []) if str(k).strip()]
+        keywords = {k.lower() for k in keyword_list}
+        expansions = list(jd_analysis.get("skill_expansions") or [])
+        # Evidence-only: JD-order matches first; drop unrelated when any match exists.
+        ordered = _order_skills_for_jd(evidence_skills, keyword_list, expansions)
 
         experience_items = [
             ExperienceItem(
@@ -161,19 +160,12 @@ class FakeProvider(DraftingProvider):
             if isinstance(item, dict) and str(item.get("title") or "").strip()
         ]
 
-        summary = evidence.get("professional_summary")
-        if not summary and experience:
-            titles = ", ".join(e.title for e in experience[:2])
-            summary = f"Professional with experience as {titles}."
-
-        # Optionally emphasize JD title in summary without inventing facts
-        target_title = jd_analysis.get("target_title")
-        if summary and target_title and str(target_title).lower() not in summary.lower():
-            # Only mention targeting if related skills exist
-            if any(s.lower() in keywords for s in ordered[:5]):
-                summary = f"{summary} Targeting roles related to {target_title}."
-        if isinstance(summary, str) and len(summary) > 450:
-            summary = summary[:447].rstrip() + "..."
+        summary = _build_professional_summary(
+            evidence_summary=evidence.get("professional_summary"),
+            experience=experience,
+            skills=ordered,
+            target_title=jd_analysis.get("target_title"),
+        )
 
         return CanonicalCV(
             full_name=name,
@@ -188,6 +180,145 @@ class FakeProvider(DraftingProvider):
             languages=list(evidence.get("spoken_languages") or []),
             output_language=output_language,
         )
+
+
+def _build_professional_summary(
+    *,
+    evidence_summary: Any,
+    experience: list[ExperienceItem],
+    skills: list[str],
+    target_title: Any,
+) -> str | None:
+    """Draft 2–3 grounded prose sentences targeted to the role."""
+    evidenced_titles = [exp.title for exp in experience if exp.title]
+    companies = [exp.company for exp in experience[:2] if exp.company]
+    titles = evidenced_titles[:2]
+    # Only adopt the JD title when an evidenced experience title clearly matches.
+    jd_title = str(target_title or "").strip()
+    role_label = next(
+        (
+            t
+            for t in evidenced_titles
+            if jd_title and jd_title.lower() in t.lower()
+        ),
+        titles[0] if titles else "Professional",
+    )
+    # `skills` is already JD-ordered / filtered by Grounded Tailoring.
+    skill_highlights = list(skills[:4])
+
+    sentences: list[str] = []
+    if companies and titles:
+        sentences.append(
+            f"{role_label} with experience as {titles[0]} at {companies[0]}"
+            + (
+                f" and {titles[1]} at {companies[1]}"
+                if len(companies) > 1 and len(titles) > 1
+                else ""
+            )
+            + "."
+        )
+    elif evidence_summary and str(evidence_summary).strip():
+        base = str(evidence_summary).strip()
+        if not base.endswith((".", "!", "?")):
+            base += "."
+        sentences.append(base)
+    else:
+        sentences.append(f"{role_label} with grounded professional experience.")
+
+    if skill_highlights and len(sentences) < 3:
+        if len(skill_highlights) == 1:
+            skill_phrase = skill_highlights[0]
+        elif len(skill_highlights) == 2:
+            skill_phrase = f"{skill_highlights[0]} and {skill_highlights[1]}"
+        else:
+            skill_phrase = (
+                ", ".join(skill_highlights[:-1]) + f", and {skill_highlights[-1]}"
+            )
+        sentences.append(
+            f"Strengths include {skill_phrase}, aligned to this role's requirements."
+        )
+
+    # Prefer a distinct evidenced summary sentence when we still need a third.
+    if evidence_summary and len(sentences) < 3:
+        base = str(evidence_summary).strip()
+        if base:
+            if not base.endswith((".", "!", "?")):
+                base += "."
+            if base.lower() not in " ".join(sentences).lower():
+                sentences.append(base)
+
+    if not sentences:
+        return None
+    summary = " ".join(sentences[:3])
+    if len(summary) > 450:
+        summary = summary[:447].rstrip() + "..."
+    return summary
+
+
+def _format_skill_expansion(full: str, acronym: str) -> str:
+    return f"{full} ({acronym})"
+
+
+def _expand_skill_label(skill: str, expansions: list[Any]) -> str:
+    """Apply grounded Full Term (ACRONYM) naming when JD/evidence support it."""
+    low = skill.lower().strip()
+    for item in expansions:
+        if not isinstance(item, dict):
+            continue
+        full = str(item.get("full") or "").strip()
+        acronym = str(item.get("acronym") or "").strip()
+        if not full or not acronym:
+            continue
+        if low in {full.lower(), acronym.lower(), _format_skill_expansion(full, acronym).lower()}:
+            return _format_skill_expansion(full, acronym)
+    return skill
+
+
+def _skill_jd_rank(skill: str, keyword_rank: dict[str, int], expansions: list[Any]) -> int | None:
+    candidates = {skill.lower()}
+    for item in expansions:
+        if not isinstance(item, dict):
+            continue
+        full = str(item.get("full") or "").strip()
+        acronym = str(item.get("acronym") or "").strip()
+        if not full or not acronym:
+            continue
+        expanded = _format_skill_expansion(full, acronym)
+        if skill.lower() in {full.lower(), acronym.lower(), expanded.lower()}:
+            candidates.update({full.lower(), acronym.lower(), expanded.lower()})
+    ranks = [keyword_rank[c] for c in candidates if c in keyword_rank]
+    return min(ranks) if ranks else None
+
+
+def _order_skills_for_jd(
+    evidence_skills: list[str],
+    keyword_list: list[str],
+    expansions: list[Any] | None = None,
+) -> list[str]:
+    """Keep evidence skills only; JD matches first; drop unrelated when matches exist."""
+    if not evidence_skills:
+        return []
+    expansion_list = expansions or []
+    keyword_rank = {k.lower(): i for i, k in enumerate(keyword_list)}
+    matched: list[tuple[int, int, str]] = []
+    for index, skill in enumerate(evidence_skills):
+        rank = _skill_jd_rank(skill, keyword_rank, expansion_list)
+        if rank is not None:
+            matched.append((rank, index, _expand_skill_label(skill, expansion_list)))
+    if not matched:
+        # No JD overlap → keep evidence skills (cannot judge "unrelated").
+        return [_expand_skill_label(skill, expansion_list) for skill in evidence_skills]
+    matched.sort(key=lambda item: (item[0], item[1]))
+    # Deduplicate labels after expansion while preserving order.
+    seen: set[str] = set()
+    ordered: list[str] = []
+    for _, _, label in matched:
+        key = label.lower()
+        if key in seen:
+            continue
+        seen.add(key)
+        ordered.append(label)
+    return ordered
 
 
 def _experience_relevance(
