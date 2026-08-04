@@ -25,8 +25,15 @@ from cv_generation.render.docx_renderer import (
     render_docx,
 )
 from cv_generation.render.markdown import render_markdown
+from cv_generation.render.pdf_renderer import _to_html, render_pdf
 from fixtures.ats_canonical_cv import ats_core_canonical_cv, ats_trailing_canonical_cv
 
+_CORE_HEADINGS = (
+    "PROFESSIONAL SUMMARY",
+    "EXPERIENCE",
+    "EDUCATION",
+    "SKILLS",
+)
 _TRAILING_HEADINGS = (
     "AWARDS/VOLUNTEER",
     "PROJECTS",
@@ -34,6 +41,7 @@ _TRAILING_HEADINGS = (
     "LANGUAGES",
     "VALUES ALIGNMENT",
 )
+_ATS_HEADINGS = _CORE_HEADINGS + _TRAILING_HEADINGS
 
 
 def _docx_from_cv(cv: CanonicalCV | None = None) -> Document:
@@ -47,12 +55,157 @@ def _paragraph_starting_with(doc: Document, prefix: str):
     raise AssertionError(f"no paragraph starting with {prefix!r}")
 
 
+def _markdown_h2_headings(text: str) -> list[str]:
+    return [
+        line[3:].strip()
+        for line in text.splitlines()
+        if line.startswith("## ")
+    ]
+
+
+def _pdf_text(cv: CanonicalCV) -> str:
+    from pypdf import PdfReader
+
+    return "\n".join(
+        (page.extract_text() or "")
+        for page in PdfReader(io.BytesIO(render_pdf(cv))).pages
+    )
+
+
+def _heading_order_in_text(text: str) -> list[str]:
+    found: list[str] = []
+    for heading in _ATS_HEADINGS:
+        idx = text.find(heading)
+        if idx >= 0:
+            found.append((idx, heading))
+    found.sort(key=lambda item: item[0])
+    return [heading for _, heading in found]
+
+
 def test_markdown_contains_name_and_email():
     data = render_markdown(ats_core_canonical_cv())
     text = data.decode("utf-8")
     assert "Ada Lovelace" in text
     assert "ada@example.com" in text
     assert "Analytical Engines" in text
+
+
+def test_markdown_core_section_order_is_ats_structure():
+    text = render_markdown(ats_core_canonical_cv()).decode("utf-8")
+    assert _markdown_h2_headings(text) == list(_CORE_HEADINGS)
+    assert "Software Engineer, Analytical Engines" in text
+    assert "2020-01 - Present" in text
+    assert "BSc, Mathematics" in text
+    assert "2019-06" in text
+    assert "2016-09" not in text
+    assert "University of London" in text
+
+
+def test_markdown_trailing_section_order_when_all_present():
+    text = render_markdown(ats_trailing_canonical_cv()).decode("utf-8")
+    headings = _markdown_h2_headings(text)
+    trailing = [h for h in headings if h in _TRAILING_HEADINGS]
+    assert trailing == list(_TRAILING_HEADINGS)
+    assert headings.index("SKILLS") < headings.index("AWARDS/VOLUNTEER")
+    assert "Ada Lovelace Award" in text and "2022" in text
+    assert "Curiosity" in text and "Documented novel algorithms" in text
+
+
+def test_markdown_omits_empty_trailing_sections_but_keeps_relative_order():
+    cv = ats_core_canonical_cv()
+    cv.projects = [ProjectItem(name="Difference Engine")]
+    cv.languages = ["English"]
+    headings = _markdown_h2_headings(render_markdown(cv).decode("utf-8"))
+    present = [h for h in headings if h in _TRAILING_HEADINGS]
+    assert present == ["PROJECTS", "LANGUAGES"]
+    assert "AWARDS/VOLUNTEER" not in headings
+    assert "CERTIFICATIONS" not in headings
+    assert "VALUES ALIGNMENT" not in headings
+    assert headings.index("SKILLS") < headings.index("PROJECTS") < headings.index(
+        "LANGUAGES"
+    )
+
+
+def test_pdf_core_section_order_is_ats_structure():
+    text = _pdf_text(ats_core_canonical_cv())
+    assert _heading_order_in_text(text) == list(_CORE_HEADINGS)
+    assert text.index("Ada Lovelace") < text.index("PROFESSIONAL SUMMARY")
+    assert "Software Engineer, Analytical Engines" in text
+    assert "2020-01 - Present" in text
+    assert "BSc, Mathematics" in text
+    assert "2019-06" in text
+    assert "2016-09" not in text
+    assert "University of London" in text
+
+
+def test_pdf_trailing_section_order_when_all_present():
+    text = _pdf_text(ats_trailing_canonical_cv())
+    assert _heading_order_in_text(text) == list(_ATS_HEADINGS)
+    assert "Ada Lovelace Award" in text and "2022" in text
+    assert "Curiosity" in text and "Documented novel algorithms" in text
+
+
+def test_pdf_omits_empty_trailing_sections_but_keeps_relative_order():
+    cv = ats_core_canonical_cv()
+    cv.projects = [ProjectItem(name="Difference Engine")]
+    cv.languages = ["English"]
+    text = _pdf_text(cv)
+    assert _heading_order_in_text(text) == [
+        *_CORE_HEADINGS,
+        "PROJECTS",
+        "LANGUAGES",
+    ]
+
+
+def test_pdf_style_signals_approximate_ats_template():
+    html = _to_html(ats_core_canonical_cv())
+    assert "text-align: center" in html
+    assert "text-transform: uppercase" in html
+    assert "font-family: Arial" in html
+    assert "font-size: 11pt" in html
+    assert "font-weight: bold" in html
+    assert "font-style: italic" in html
+    assert "<h1>Ada Lovelace</h1>" in html
+    assert "<p class='contact'>" in html
+    assert "class='dates'" in html
+    assert html.index("<h1>") < html.index("<h2>Professional Summary</h2>")
+    assert html.index("<h2>Experience</h2>") < html.index("<h2>Education</h2>")
+    assert html.index("<h2>Education</h2>") < html.index("<h2>Skills</h2>")
+    # Experience / education hierarchy: bold+italic job line via h3 + floated dates.
+    assert "<h3>Software Engineer, Analytical Engines<span class='dates'>" in html
+    assert "<h3>BSc, Mathematics<span class='dates'>2019-06</span></h3>" in html
+
+
+def test_formats_share_ats_section_order_and_selected_content():
+    cv = ats_trailing_canonical_cv()
+    docx_text = "\n".join(p.text for p in _docx_from_cv(cv).paragraphs)
+    md_text = render_markdown(cv).decode("utf-8")
+    pdf_text = _pdf_text(cv)
+
+    docx_headings = [t.strip() for t in docx_text.splitlines() if t.strip() in _ATS_HEADINGS]
+    assert docx_headings == list(_ATS_HEADINGS)
+    assert _markdown_h2_headings(md_text) == list(_ATS_HEADINGS)
+    assert _heading_order_in_text(pdf_text) == list(_ATS_HEADINGS)
+
+    for blob in (docx_text, md_text, pdf_text):
+        assert "Ada Lovelace" in blob
+        assert "ada@example.com" in blob
+        assert "Software engineer with Python experience." in blob
+        assert "Software Engineer, Analytical Engines" in blob
+        assert "Python, FastAPI, PostgreSQL" in blob
+        assert "Difference Engine" in blob
+        assert "AWS Certified Developer" in blob
+        assert "Curiosity" in blob
+
+
+def test_formats_share_education_details_when_present():
+    cv = ats_core_canonical_cv()
+    cv.education[0].details = ["First-class honours"]
+    docx_text = "\n".join(p.text for p in _docx_from_cv(cv).paragraphs)
+    md_text = render_markdown(cv).decode("utf-8")
+    pdf_text = _pdf_text(cv)
+    for blob in (docx_text, md_text, pdf_text):
+        assert "First-class honours" in blob
 
 
 def test_docx_reopen_finds_name_and_email():
@@ -68,15 +221,9 @@ def test_docx_core_section_order_is_ats_structure():
     headings = {
         p.text.strip(): p
         for p in doc.paragraphs
-        if p.text.strip()
-        in {"PROFESSIONAL SUMMARY", "EXPERIENCE", "EDUCATION", "SKILLS"}
+        if p.text.strip() in _CORE_HEADINGS
     }
-    assert list(headings) == [
-        "PROFESSIONAL SUMMARY",
-        "EXPERIENCE",
-        "EDUCATION",
-        "SKILLS",
-    ]
+    assert list(headings) == list(_CORE_HEADINGS)
     for para in headings.values():
         run = para.runs[0]
         assert run.bold is True
@@ -188,9 +335,8 @@ def test_docx_header_then_professional_summary_before_experience():
 def test_docx_and_pdf_fit_on_one_page():
     from pypdf import PdfReader
 
-    from cv_generation.render.pdf_renderer import render_pdf
-    from cv_generation.render.verify import verify_rendered
     from cv_generation.models.specification import OutputFormat
+    from cv_generation.render.verify import verify_rendered
 
     cv = ats_trailing_canonical_cv()
     docx = render_docx(cv)

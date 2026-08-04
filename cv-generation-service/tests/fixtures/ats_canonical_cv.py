@@ -14,7 +14,7 @@ from cv_generation.models.canonical_cv import (
 
 
 def ats_core_canonical_cv() -> CanonicalCV:
-    """Stable Generated CV used to pin DOCX presentation against the ATS template."""
+    """Stable Generated CV used to pin renderer presentation against the ATS template."""
     return CanonicalCV(
         full_name="Ada Lovelace",
         contact=ContactInfo(

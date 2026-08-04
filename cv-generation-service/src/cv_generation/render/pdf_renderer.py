@@ -76,6 +76,11 @@ def _to_html(cv: CanonicalCV) -> str:
             sections.append(f"<h3>{heading}</h3>")
             if degree_bits and edu.institution:
                 sections.append(f"<p>{_esc(edu.institution)}</p>")
+            if edu.details:
+                sections.append("<ul>")
+                for detail in edu.details:
+                    sections.append(f"<li>{_esc(detail)}</li>")
+                sections.append("</ul>")
 
     if cv.skills:
         sections.append("<h2>Skills</h2>")

@@ -82,6 +82,23 @@ def test_generate_success_docx(client, auth_header, sample_cv_md, sample_jd):
     assert response.content[:2] == b"PK"  # zip/docx magic
 
 
+def test_generate_success_pdf(client, auth_header, sample_cv_md, sample_jd):
+    response = client.post(
+        "/v1/generate",
+        headers=auth_header,
+        files={"file": ("cv.md", sample_cv_md, "text/markdown")},
+        data={
+            "specification": _spec(
+                job_description=sample_jd,
+                output_format="PDF",
+            )
+        },
+    )
+    assert response.status_code == 200, response.text
+    assert "application/pdf" in response.headers["content-type"]
+    assert response.content[:4] == b"%PDF"
+
+
 def test_invalid_specification_json(client, auth_header, sample_cv_md):
     response = client.post(
         "/v1/generate",
