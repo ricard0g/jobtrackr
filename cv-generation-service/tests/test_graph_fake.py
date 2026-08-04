@@ -388,6 +388,134 @@ def test_fake_provider_preserves_experience_bullet_groups():
     assert cv.experience[0].bullet_groups[0].bullets == ["Owned release trains"]
 
 
+def _experience_bullet_count(exp: ExperienceItem) -> int:
+    return len(exp.bullets) + sum(len(group.bullets) for group in exp.bullet_groups)
+
+
+def test_fake_provider_densify_respects_per_role_bullet_cap_with_groups():
+    provider = FakeProvider()
+    cv = provider.draft(
+        evidence={
+            "full_name": "Jane Doe",
+            "contact": {"email": "jane@example.com"},
+            "skills": ["Python"],
+            "experience": [
+                {
+                    "company": "Acme",
+                    "title": "Engineer",
+                    "bullets": [f"Flat bullet {i}" for i in range(4)],
+                    "bullet_groups": [
+                        {
+                            "heading": "Delivery",
+                            "bullets": [f"Grouped bullet {i}" for i in range(4)],
+                        }
+                    ],
+                }
+            ],
+            "raw_text": "Jane Doe jane@example.com Acme Python",
+        },
+        jd_analysis={"keywords": ["Python"]},
+        output_language="en",
+    )
+    assert len(cv.experience) == 1
+    assert _experience_bullet_count(cv.experience[0]) <= 4
+    issues = validate_canonical_cv(
+        cv,
+        {
+            "full_name": "Jane Doe",
+            "contact": {"email": "jane@example.com"},
+            "skills": ["Python"],
+            "raw_text": "Jane Doe jane@example.com Acme Python "
+            + " ".join(f"Flat bullet {i}" for i in range(4))
+            + " "
+            + " ".join(f"Grouped bullet {i}" for i in range(4)),
+            "experience": [{"company": "Acme", "title": "Engineer"}],
+        },
+    )
+    assert not any("bullets per role" in i for i in issues)
+
+
+def test_fake_provider_densify_keeps_later_roles_within_role_cap():
+    provider = FakeProvider()
+    experience = [
+        {
+            "company": f"Company{i}",
+            "title": "Engineer",
+            "bullets": [f"Company{i} bullet {j}" for j in range(4)],
+        }
+        for i in range(4)
+    ]
+    cv = provider.draft(
+        evidence={
+            "full_name": "Jane Doe",
+            "contact": {"email": "jane@example.com"},
+            "skills": ["Python"],
+            "experience": experience,
+            "raw_text": "Jane Doe jane@example.com Python "
+            + " ".join(f"Company{i}" for i in range(4)),
+        },
+        jd_analysis={"keywords": ["Python"]},
+        output_language="en",
+    )
+    assert [e.company for e in cv.experience] == [f"Company{i}" for i in range(4)]
+    assert sum(_experience_bullet_count(e) for e in cv.experience) <= 12
+    assert all(_experience_bullet_count(e) <= 4 for e in cv.experience)
+
+
+def test_fake_provider_densify_prefers_jd_relevant_roles_when_dropping():
+    provider = FakeProvider()
+    cv = provider.draft(
+        evidence={
+            "full_name": "Jane Doe",
+            "contact": {"email": "jane@example.com"},
+            "skills": ["Python", "Baking"],
+            "experience": [
+                {
+                    "company": "Bakery",
+                    "title": "Baker",
+                    "bullets": ["Baked sourdough daily"],
+                },
+                {
+                    "company": "Cafe",
+                    "title": "Barista",
+                    "bullets": ["Made coffee"],
+                },
+                {
+                    "company": "Retail",
+                    "title": "Clerk",
+                    "bullets": ["Stocked shelves"],
+                },
+                {
+                    "company": "Park",
+                    "title": "Guide",
+                    "bullets": ["Led tours"],
+                },
+                {
+                    "company": "Analytical Engines",
+                    "title": "Software Engineer",
+                    "bullets": ["Built Python APIs"],
+                },
+            ],
+            "raw_text": (
+                "Jane Doe jane@example.com Bakery Cafe Retail Park "
+                "Analytical Engines Software Engineer Python Baking"
+            ),
+        },
+        jd_analysis={
+            "keywords": ["Python", "Software"],
+            "target_title": "Software Engineer",
+        },
+        output_language="en",
+    )
+    companies = [e.company for e in cv.experience]
+    assert "Analytical Engines" in companies
+    assert len(companies) == 4
+    # Lowest-signal early roles should be the ones dropped first among ties.
+    assert sum(
+        companies.count(name) for name in ("Bakery", "Cafe", "Retail", "Park")
+    ) == 3
+
+
 def test_jd_analysis_targeting_only(sample_jd):
     state: GraphState = {
         "job_description": sample_jd,

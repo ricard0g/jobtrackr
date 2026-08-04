@@ -112,7 +112,11 @@ class FakeProvider(DraftingProvider):
             for item in (evidence.get("experience") or [])
             if isinstance(item, dict) and str(item.get("company") or "").strip()
         ]
-        experience = _densify_experience_for_one_page(experience_items)
+        experience = _densify_experience_for_one_page(
+            experience_items,
+            keywords=keywords,
+            target_title=jd_analysis.get("target_title"),
+        )
 
         education = [
             EducationItem(
@@ -186,25 +190,79 @@ class FakeProvider(DraftingProvider):
         )
 
 
-def _densify_experience_for_one_page(items: list[ExperienceItem]) -> list[ExperienceItem]:
-    """Keep FakeProvider drafts inside the deterministic one-page bullet budget."""
-    remaining = 12
+def _experience_relevance(
+    exp: ExperienceItem,
+    *,
+    keywords: set[str],
+    target_title: str | None,
+) -> tuple[int, int]:
+    """Higher tuples are more JD-relevant (title match, then keyword hits)."""
+    title_hit = 0
+    if target_title and str(target_title).strip():
+        if str(target_title).strip().lower() in (exp.title or "").lower():
+            title_hit = 1
+    haystack = " ".join(
+        [
+            exp.title or "",
+            exp.company or "",
+            *exp.bullets,
+            *(group.heading for group in exp.bullet_groups),
+            *(bullet for group in exp.bullet_groups for bullet in group.bullets),
+        ]
+    ).lower()
+    keyword_hits = sum(1 for key in keywords if key and key in haystack)
+    return (title_hit, keyword_hits)
+
+
+def _densify_experience_for_one_page(
+    items: list[ExperienceItem],
+    *,
+    keywords: set[str] | None = None,
+    target_title: str | None = None,
+) -> list[ExperienceItem]:
+    """Keep FakeProvider drafts inside the deterministic one-page bullet budget.
+
+    Caps total bullets per role (flat + groups), never omits a selected role just
+    because the shared bullet pool is exhausted, and drops surplus roles by JD
+    relevance while preserving evidence order among keepers.
+    """
+    max_roles = 4
+    max_per_role = 4
+    max_total = 12
+    keyword_set = keywords or set()
+
+    ranked = sorted(
+        enumerate(items),
+        key=lambda pair: (
+            _experience_relevance(
+                pair[1],
+                keywords=keyword_set,
+                target_title=target_title,
+            ),
+            pair[0],
+        ),
+        reverse=True,
+    )
+    keep_indices = {index for index, _ in ranked[:max_roles]}
+    selected = [exp for index, exp in enumerate(items) if index in keep_indices]
+
+    remaining_total = max_total
     densified: list[ExperienceItem] = []
-    for exp in items[:4]:
-        if remaining <= 0:
-            break
-        flat_cap = min(4, remaining)
-        flat = list(exp.bullets)[:flat_cap]
-        remaining -= len(flat)
+    for exp in selected:
+        role_budget = min(max_per_role, remaining_total)
+        flat = list(exp.bullets)[:role_budget]
+        used = len(flat)
         groups = []
         for group in exp.bullet_groups:
-            if remaining <= 0:
+            left = role_budget - used
+            if left <= 0:
                 break
-            bullets = list(group.bullets)[: min(4, remaining)]
+            bullets = list(group.bullets)[:left]
             if not bullets:
                 continue
-            remaining -= len(bullets)
+            used += len(bullets)
             groups.append(group.model_copy(update={"bullets": bullets}))
+        remaining_total -= used
         densified.append(
             exp.model_copy(update={"bullets": flat, "bullet_groups": groups})
         )
