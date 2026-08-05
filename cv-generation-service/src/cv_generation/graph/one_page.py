@@ -36,8 +36,13 @@ def pdf_page_count_for_cv(cv: CanonicalCV) -> int | None:
 
 
 def fits_one_page(cv: CanonicalCV) -> bool:
+    """True only when a PDF proxy render is countable and fits on one page.
+
+    An uncountable render (``None``) is not treated as a fit — densification and
+    validation must not assume success when page count could not be measured.
+    """
     pages = pdf_page_count_for_cv(cv)
-    return pages is None or pages <= 1
+    return pages is not None and pages <= 1
 
 
 def fit_canonical_cv_to_one_page(

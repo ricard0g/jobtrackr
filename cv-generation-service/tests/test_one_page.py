@@ -101,6 +101,14 @@ def test_overflowing_cv_exceeds_one_page_before_fit():
     assert not fits_one_page(cv)
 
 
+def test_fits_one_page_rejects_uncountable_pdf(monkeypatch):
+    """Uncountable PDF must not be treated as a successful one-page fit."""
+    from cv_generation.graph import one_page
+
+    monkeypatch.setattr(one_page, "pdf_page_count_for_cv", lambda _cv: None)
+    assert not fits_one_page(_overflowing_cv())
+
+
 def test_fit_canonical_cv_to_one_page_shrinks_until_pdf_fits():
     cv = _overflowing_cv()
     fitted = fit_canonical_cv_to_one_page(

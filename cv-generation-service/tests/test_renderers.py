@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import io
 
+import pytest
 from docx import Document
 from docx.enum.text import WD_ALIGN_PARAGRAPH, WD_TAB_ALIGNMENT
 from docx.oxml.ns import qn
@@ -337,8 +338,9 @@ def test_docx_header_then_professional_summary_before_experience():
 def test_docx_and_pdf_fit_on_one_page():
     from pypdf import PdfReader
 
+    from cv_generation.graph.one_page import pdf_page_count_for_cv
     from cv_generation.models.specification import OutputFormat
-    from cv_generation.render.verify import verify_rendered
+    from cv_generation.render.verify import verify_one_page_layout, verify_rendered
 
     cv = ats_trailing_canonical_cv()
     docx = render_docx(cv)
@@ -356,6 +358,21 @@ def test_docx_and_pdf_fit_on_one_page():
         expected_name="Ada Lovelace",
         expected_email="ada@example.com",
     )
+    # DOCX output uses the PDF renderer as the one-page layout proxy.
+    verify_one_page_layout(pdf_page_count_for_cv(cv), artifact="document")
+
+
+def test_verify_one_page_layout_rejects_overflow_and_unknown():
+    from cv_generation.models.errors import ErrorCode, ServiceError
+    from cv_generation.render.verify import verify_one_page_layout
+
+    verify_one_page_layout(1)
+    with pytest.raises(ServiceError) as overflow:
+        verify_one_page_layout(2, artifact="document")
+    assert overflow.value.code == ErrorCode.DOCUMENT_TOO_LONG
+    with pytest.raises(ServiceError) as unknown:
+        verify_one_page_layout(None, artifact="document")
+    assert unknown.value.code == ErrorCode.GENERATION_VALIDATION_FAILED
 
 
 def test_docx_omits_empty_core_sections_but_keeps_relative_order():

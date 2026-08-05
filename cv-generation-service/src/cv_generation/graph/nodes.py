@@ -282,9 +282,15 @@ def node_validate(state: GraphState) -> dict[str, Any]:
 
 def _one_page_render_issues(cv: CanonicalCV) -> list[str]:
     """PDF layout proxy for one-page fit (available in the service image)."""
-    from cv_generation.graph.one_page import fits_one_page
+    from cv_generation.graph.one_page import pdf_page_count_for_cv
 
-    if fits_one_page(cv):
+    pages = pdf_page_count_for_cv(cv)
+    if pages is None:
+        return [
+            "one-page budget: rendered CV page count could not be verified; "
+            "retry generation or shorten the CV"
+        ]
+    if pages <= 1:
         return []
     return [
         "one-page budget: rendered CV exceeds one page; "
@@ -359,6 +365,12 @@ def node_verify(state: GraphState) -> dict[str, Any]:
         expected_name=cv.full_name,
         expected_email=cv.contact.email,
     )
+    # DOCX/Markdown use the PDF renderer as the ATS one-page layout proxy.
+    if fmt != OutputFormat.PDF:
+        from cv_generation.graph.one_page import pdf_page_count_for_cv
+        from cv_generation.render.verify import verify_one_page_layout
+
+        verify_one_page_layout(pdf_page_count_for_cv(cv))
     return {}
 
 
@@ -537,6 +549,129 @@ def _extract_skills_section(text: str) -> list[str]:
     return out[:40]
 
 
+_EXPERIENCE_ROLE_WORD_RE = re.compile(
+    r"\b(?:Engineer|Analyst|Manager|Developer|Designer|Scientist|Architect|"
+    r"Consultant|Specialist|Officer|Administrator|Director|Assistant|Intern|"
+    r"Lead|Baker|Barista|Clerk|Guide|Programmer)\b",
+    re.I,
+)
+
+_EXPERIENCE_DATE_LINE_RE = re.compile(
+    r"^(?:"
+    r"(?:(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*\.?\s+)?"
+    r"(?:19|20)\d{2}"
+    r")"
+    r"\s*(?:[-–—]|\s+to\s+)\s*"
+    r"(?:"
+    r"(?:(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*\.?\s+)?"
+    r"(?:(?:19|20)\d{2}|Present|Current)"
+    r")\.?$",
+    re.I,
+)
+
+
+def _is_experience_meta_line(line: str) -> bool:
+    """Date ranges / locations between a role header and its bullets — not employers."""
+    stripped = line.strip().strip("()[]")
+    if not stripped:
+        return True
+    if _EXPERIENCE_DATE_LINE_RE.fullmatch(stripped):
+        return True
+    if re.fullmatch(
+        r"(?:19|20)\d{2}\s*[-–—]\s*(?:(?:19|20)\d{2}|Present|Current)\.?",
+        stripped,
+        re.I,
+    ):
+        return True
+    # "London, UK" / "New York, NY" — short place names without role vocabulary.
+    if (
+        "," in stripped
+        and len(stripped) <= 60
+        and not _EXPERIENCE_ROLE_WORD_RE.search(stripped)
+        and not any(ch.isdigit() for ch in stripped)
+        and " at " not in stripped.lower()
+        and not re.search(r"\s+[—–\-]\s+", stripped)
+    ):
+        return True
+    return False
+
+
+def _looks_like_company_only(header: str) -> bool:
+    if header.endswith((".", "!", "?", ":")):
+        return False
+    words = header.split()
+    if not (1 <= len(words) <= 6):
+        return False
+    if _EXPERIENCE_ROLE_WORD_RE.search(header):
+        return False
+    if any(ch.isdigit() for ch in header):
+        return False
+    return bool(re.match(r"^[A-Z0-9]", header))
+
+
+def _parse_experience_header(header: str) -> tuple[str | None, str | None]:
+    """Return (company, title) from a role header, or (None, None) if not a header.
+
+    Title-only lines return ("", title). Company-only lines return (company, None).
+    """
+    if _is_experience_meta_line(header):
+        return None, None
+    if " at " in header.lower():
+        parts = re.split(r"\s+at\s+", header, maxsplit=1, flags=re.I)
+        return parts[1].strip(), parts[0].strip()
+    if " — " in header or " - " in header or " – " in header:
+        parts = re.split(r"\s+[—–\-]\s+", header, maxsplit=1)
+        if len(parts) == 2:
+            left, right = (parts[0].strip(), parts[1].strip())
+            # Company — Title (2020-Present) style.
+            if any(ch.isdigit() for ch in right) and re.search(
+                r"\b(?:19|20)\d{2}\b|present", right, re.I
+            ):
+                return left, right.split("(")[0].strip()
+            left_is_role = bool(_EXPERIENCE_ROLE_WORD_RE.search(left))
+            right_is_role = bool(_EXPERIENCE_ROLE_WORD_RE.search(right))
+            if left_is_role and not right_is_role:
+                return right, left  # Title — Company
+            if right_is_role and not left_is_role:
+                return left, right  # Company — Title
+            # Ambiguous: prefer Title — Company (ATS / Base CV fixture convention).
+            return right, left
+    if _EXPERIENCE_ROLE_WORD_RE.search(header) and len(header) < 80:
+        return "", header
+    if _looks_like_company_only(header):
+        return header, None
+    return None, None
+
+
+def _merge_experience_header_into_current(
+    current: dict[str, Any],
+    company: str | None,
+    title: str | None,
+) -> bool:
+    """Fold a partial header line into an open role that has no bullets yet."""
+    if current["bullets"]:
+        return False
+    cur_title = (current.get("title") or "").strip()
+    cur_company = (current.get("company") or "").strip()
+    title_missing = cur_title in ("", "Role")
+    company_missing = cur_company in ("", "Unknown")
+
+    if title and not company and title_missing:
+        current["title"] = title
+        return True
+    if company and not title and not title_missing and (company_missing or cur_company == company):
+        current["company"] = company
+        return True
+    if company and not title and company_missing is False and title_missing:
+        # Wrapped company name continued on the next line.
+        current["company"] = f"{cur_company} {company}".strip()
+        return True
+    if company and not title and company_missing and title_missing:
+        current["company"] = company
+        return True
+    return False
+
+
 def _extract_experience(text: str) -> list[dict[str, Any]]:
     body = _section_body(
         text,
@@ -558,55 +693,32 @@ def _extract_experience(text: str) -> list[dict[str, Any]]:
                 current["bullets"].append(bullet)
             continue
 
+        header = stripped.lstrip("#").lstrip("*").strip()
+        if _is_experience_meta_line(header):
+            continue
+
+        company, title = _parse_experience_header(header)
+        if company is None and title is None:
+            continue
+
+        if current is not None and _merge_experience_header_into_current(
+            current, company or None, title
+        ):
+            continue
+
         if current is not None:
             items.append(current)
-            current = None
 
-        header = stripped.lstrip("#").lstrip("*").strip()
-        company, title = _parse_experience_header(header)
-        if not company:
-            continue
+        clean_company = re.sub(r"[*#]", "", (company or "")).strip() or "Unknown"
+        clean_title = re.sub(r"[*#]", "", (title or "Role")).strip() or "Role"
         current = {
-            "company": re.sub(r"[*#]", "", company).strip(),
-            "title": re.sub(r"[*#]", "", title or "Role").strip(),
+            "company": clean_company,
+            "title": clean_title,
             "bullets": [],
         }
     if current is not None:
         items.append(current)
     return items[:10]
-
-
-_EXPERIENCE_ROLE_WORD_RE = re.compile(
-    r"\b(?:Engineer|Analyst|Manager|Developer|Designer|Scientist|Architect|"
-    r"Consultant|Specialist|Officer|Administrator|Director|Assistant|Intern|"
-    r"Lead|Baker|Barista|Clerk|Guide|Programmer)\b",
-    re.I,
-)
-
-
-def _parse_experience_header(header: str) -> tuple[str | None, str | None]:
-    """Return (company, title) from a role header line."""
-    if " at " in header.lower():
-        parts = re.split(r"\s+at\s+", header, maxsplit=1, flags=re.I)
-        return parts[1].strip(), parts[0].strip()
-    if " — " in header or " - " in header or " – " in header:
-        parts = re.split(r"\s+[—–\-]\s+", header, maxsplit=1)
-        if len(parts) == 2:
-            left, right = (parts[0].strip(), parts[1].strip())
-            # Company — Title (2020-Present) style.
-            if any(ch.isdigit() for ch in right) and re.search(
-                r"\b(?:19|20)\d{2}\b|present", right, re.I
-            ):
-                return left, right.split("(")[0].strip()
-            left_is_role = bool(_EXPERIENCE_ROLE_WORD_RE.search(left))
-            right_is_role = bool(_EXPERIENCE_ROLE_WORD_RE.search(right))
-            if left_is_role and not right_is_role:
-                return right, left  # Title — Company
-            if right_is_role and not left_is_role:
-                return left, right  # Company — Title
-            # Ambiguous: prefer Title — Company (ATS / Base CV fixture convention).
-            return right, left
-    return header, "Role"
 
 
 def _extract_education(text: str) -> list[dict[str, Any]]:
@@ -781,6 +893,13 @@ _TITLE_BOILERPLATE_RE = re.compile(
     re.IGNORECASE,
 )
 
+_TITLE_MARKETING_RE = re.compile(
+    r"(?:!|\||"
+    r"^(?:join|we(?:'re| are)|looking for|remote|full[\s-]?time|part[\s-]?time|"
+    r"about\b|why\s+you|make\s+it|hybrid|earn\b|apply\b|hiring)\b)",
+    re.IGNORECASE,
+)
+
 _ROLE_PHRASE_RE = re.compile(
     r"\b("
     r"(?:(?:Senior|Junior|Staff|Principal|Lead|IT)\s+)?"
@@ -794,18 +913,37 @@ _ROLE_PHRASE_RE = re.compile(
 def _guess_title(jd: str) -> str | None:
     """Best-effort JD role title for targeting — never a candidate fact source."""
     lines = [ln.strip() for ln in jd.strip().splitlines() if ln.strip()]
+
+    labeled = re.search(
+        r"(?m)^(?:job\s+)?(?:title|position|role)\s*[:=]\s*(.+)$",
+        jd,
+        re.I,
+    )
+    if labeled:
+        candidate = labeled.group(1).strip()[:80]
+        if (
+            candidate
+            and not _TITLE_BOILERPLATE_RE.match(candidate)
+            and not _TITLE_MARKETING_RE.search(candidate)
+        ):
+            return candidate
+
     for line in lines[:15]:
         if _TITLE_BOILERPLATE_RE.match(line):
             continue
-        if 3 < len(line) < 80 and not line.endswith("."):
-            return line[:80]
         match = _ROLE_PHRASE_RE.search(line[:160])
         if match:
             return match.group(1).strip()[:80]
 
-    labeled = re.search(r"(?:title|position|role)\s*[:=]\s*(.+)", jd, re.I)
-    if labeled:
-        return labeled.group(1).strip()[:80]
+    # Last resort: short line that looks like a job title, not marketing copy.
+    for line in lines[:15]:
+        if _TITLE_BOILERPLATE_RE.match(line):
+            continue
+        if _TITLE_MARKETING_RE.search(line):
+            continue
+        if 3 < len(line) < 80 and not line.endswith((".", "!", "?")):
+            if _EXPERIENCE_ROLE_WORD_RE.search(line):
+                return line[:80]
     return None
 
 

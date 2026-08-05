@@ -180,6 +180,46 @@ def test_jd_boilerplate_first_line_is_not_used_as_target_title():
     assert analysis["target_title"] == "Business Data Analyst"
 
 
+def test_jd_marketing_lines_are_not_used_as_target_title():
+    jd = (
+        "Join our team!\n"
+        "Remote | Full-time\n\n"
+        "Senior Software Engineer\n\n"
+        "Requirements:\n"
+        "- Python experience\n"
+    )
+    analysis = node_analyze_jd(
+        {"job_description": jd, "additional_information": None}
+    )["jd_analysis"]
+    assert analysis["target_title"] == "Senior Software Engineer"
+
+
+def test_experience_parser_skips_location_and_date_meta_lines():
+    from cv_generation.graph.nodes import _extract_experience
+
+    text = (
+        "## Experience\n"
+        "Software Engineer\n"
+        "Analytical Engines\n"
+        "London, UK\n"
+        "Jan 2020 - Present\n"
+        "- Built calculation engines in Python\n"
+        "Research Assistant — Royal Society\n"
+        "2020 - 2021\n"
+        "- Documented experimental results\n"
+    )
+    roles = _extract_experience(text)
+    assert len(roles) == 2
+    assert roles[0]["company"] == "Analytical Engines"
+    assert roles[0]["title"] == "Software Engineer"
+    assert roles[0]["bullets"] == ["Built calculation engines in Python"]
+    assert roles[1]["company"] == "Royal Society"
+    assert roles[1]["title"] == "Research Assistant"
+    assert "London" not in {r["company"] for r in roles}
+    assert "Present" not in {r["company"] for r in roles}
+    assert not any(r["title"] == "Role" and "London" in r["company"] for r in roles)
+
+
 def test_contact_only_base_cv_is_rejected(sample_jd):
     base_cv = (
         b"Ricardo Guzman\n"

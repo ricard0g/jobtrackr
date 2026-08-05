@@ -51,20 +51,33 @@ def verify_rendered(
 
     if output_format == OutputFormat.PDF:
         page_count = _pdf_page_count(data)
-        if page_count is None:
-            raise ServiceError(
-                ErrorCode.GENERATION_VALIDATION_FAILED,
-                "Rendered PDF could not be verified",
-            )
-        if page_count > _MAX_PAGES:
-            raise ServiceError(
-                ErrorCode.DOCUMENT_TOO_LONG,
-                f"Rendered PDF exceeds {_MAX_PAGES} page",
-            )
+        verify_one_page_layout(page_count, artifact="PDF")
     elif len(text) > _MAX_NON_PDF_CHARS:
         raise ServiceError(
             ErrorCode.DOCUMENT_TOO_LONG,
             "Rendered document exceeds length budget",
+        )
+
+
+def verify_one_page_layout(
+    page_count: int | None,
+    *,
+    artifact: str = "document",
+) -> None:
+    """Enforce the ATS one-page contract from a PDF layout proxy page count.
+
+    Used for PDF bytes directly and for DOCX/Markdown via a PDF render of the
+    same canonical CV (layout proxy).
+    """
+    if page_count is None:
+        raise ServiceError(
+            ErrorCode.GENERATION_VALIDATION_FAILED,
+            f"Rendered {artifact} could not be verified",
+        )
+    if page_count > _MAX_PAGES:
+        raise ServiceError(
+            ErrorCode.DOCUMENT_TOO_LONG,
+            f"Rendered {artifact} exceeds {_MAX_PAGES} page",
         )
 
 
