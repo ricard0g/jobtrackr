@@ -603,7 +603,7 @@ function GeneratedCvActions({
 const recentFilesStripClassName =
     "mt-2 flex gap-2.5 overflow-x-auto pb-1 md:grid md:grid-cols-5 md:overflow-visible md:pb-0";
 const recentFileCardClassName =
-    "flex h-[52px] w-[min(220px,70vw)] shrink-0 items-center gap-2.5 rounded-lg border border-light-gray bg-documents-surface px-2.5 text-left outline-none transition-colors hover:border-medium-gray hover:bg-white focus-visible:ring-2 focus-visible:ring-dark-accent md:w-auto md:min-w-0";
+    "flex h-[52px] w-[min(220px,70vw)] shrink-0 items-center gap-2.5 rounded-lg bg-documents-surface px-2.5 text-left outline-none transition-colors hover:border-medium-gray hover:bg-white focus-visible:ring-2 focus-visible:ring-dark-accent md:w-auto md:min-w-0 shadow-inset-crisp";
 
 function RecentFileSkeletonStrip() {
     return (
