@@ -1289,8 +1289,11 @@ def test_run_generation_includes_values_alignment_when_jd_and_evidence_support()
     assert "integrity" not in skills_lower
     text = result.content.decode("utf-8")
     assert "## VALUES ALIGNMENT" in text
-    # Locked trailing position: after core Skills (Languages omitted when unsupported).
-    assert text.index("## SKILLS") < text.index("## VALUES ALIGNMENT")
+    assert "## LANGUAGES" in text
+    # Locked trailing position: Languages then Values Alignment after Skills.
+    assert text.index("## SKILLS") < text.index("## LANGUAGES") < text.index(
+        "## VALUES ALIGNMENT"
+    )
     assert "Collaboration" in text
     assert "Mentorship" in text
     assert "Ownership" in text
@@ -1510,3 +1513,220 @@ def test_fake_provider_rejects_loose_value_behaviour_stem_noise():
         output_language="en",
     )
     assert cv.values_alignment == []
+
+
+_CORE_ATS_HEADINGS = (
+    "PROFESSIONAL SUMMARY",
+    "EXPERIENCE",
+    "EDUCATION",
+    "SKILLS",
+)
+_TRAILING_ATS_HEADINGS = (
+    "AWARDS/VOLUNTEER",
+    "PROJECTS",
+    "CERTIFICATIONS",
+    "LANGUAGES",
+    "VALUES ALIGNMENT",
+)
+
+
+def _markdown_h2_headings(text: str) -> list[str]:
+    return [
+        line[3:].strip()
+        for line in text.splitlines()
+        if line.startswith("## ")
+    ]
+
+
+def test_run_generation_core_ats_section_order(sample_cv_md, sample_jd):
+    """Always-on ATS Structure order at the primary FakeProvider seam."""
+    result = run_generation(
+        provider=FakeProvider(),
+        base_cv_bytes=sample_cv_md,
+        filename="cv.md",
+        content_type="text/markdown",
+        job_description=sample_jd,
+        additional_information=None,
+        output_format=OutputFormat.MARKDOWN,
+        correlation_id="00000000-0000-0000-0000-000000000070",
+        workflow_version="cv-graph-v2",
+    )
+    text = result.content.decode("utf-8")
+    headings = _markdown_h2_headings(text)
+    assert headings[:4] == list(_CORE_ATS_HEADINGS)
+    assert headings == list(_CORE_ATS_HEADINGS)
+    for trailing in _TRAILING_ATS_HEADINGS:
+        assert trailing not in headings
+
+
+def test_run_generation_full_trailing_ats_order_when_supported():
+    """Conditional trailing order when Candidate Evidence (and JD for values) supports all."""
+    base_cv = (
+        "# Jane Doe\n"
+        "jane@example.com\n\n"
+        "## Skills\n"
+        "Python, FastAPI\n\n"
+        "## Experience\n"
+        "### Software Engineer — Acme\n"
+        "- Collaborated with product on roadmap planning\n"
+        "- Built FastAPI services in Python\n"
+        "- Mentored juniors through weekly code reviews\n\n"
+        "## Education\n"
+        "### BS, Example University\n\n"
+        "## Awards\n"
+        "- Ada Lovelace Award (2022)\n"
+        "- Volunteer tutor, Coding Club\n\n"
+        "## Projects\n"
+        "### Difference Engine\n"
+        "- Designed punched-card programs\n\n"
+        "## Certifications\n"
+        "- AWS Certified Developer\n\n"
+        "## Languages\n"
+        "English, Spanish\n"
+    ).encode("utf-8")
+    jd = (
+        "Software Engineer\n\n"
+        "Requirements:\n"
+        "- Python and FastAPI experience\n\n"
+        "Our Values:\n"
+        "- Collaboration\n"
+        "- Mentorship\n"
+    )
+    result = run_generation(
+        provider=FakeProvider(),
+        base_cv_bytes=base_cv,
+        filename="cv.md",
+        content_type="text/markdown",
+        job_description=jd,
+        additional_information=None,
+        output_format=OutputFormat.MARKDOWN,
+        correlation_id="00000000-0000-0000-0000-000000000071",
+        workflow_version="cv-graph-v2",
+    )
+    assert result.canonical_cv is not None
+    text = result.content.decode("utf-8")
+    headings = _markdown_h2_headings(text)
+    assert headings == list(_CORE_ATS_HEADINGS) + list(_TRAILING_ATS_HEADINGS)
+    assert "Ada Lovelace Award" in text
+    assert "Difference Engine" in text
+    assert "AWS Certified Developer" in text
+    assert "English" in text and "Spanish" in text
+    assert "Collaboration" in text
+    assert "Mentorship" in text
+
+
+def test_run_generation_omits_unsupported_trailing_sections(sample_cv_md):
+    """Empty conditionals stay omitted; core order remains ATS Structure."""
+    result = run_generation(
+        provider=FakeProvider(),
+        base_cv_bytes=sample_cv_md,
+        filename="cv.md",
+        content_type="text/markdown",
+        job_description=(
+            "Software Engineer\n\n"
+            "Requirements:\n"
+            "- Experience with Python and FastAPI\n"
+        ),
+        additional_information=None,
+        output_format=OutputFormat.MARKDOWN,
+        correlation_id="00000000-0000-0000-0000-000000000072",
+        workflow_version="cv-graph-v2",
+    )
+    text = result.content.decode("utf-8")
+    headings = _markdown_h2_headings(text)
+    assert headings == list(_CORE_ATS_HEADINGS)
+    for trailing in _TRAILING_ATS_HEADINGS:
+        assert trailing not in text
+
+
+def test_run_generation_partial_trailing_keeps_relative_order():
+    """Present trailing sections keep Awards → Projects → … relative order."""
+    base_cv = (
+        "# Jane Doe\n"
+        "jane@example.com\n\n"
+        "## Skills\n"
+        "Python\n\n"
+        "## Experience\n"
+        "### Software Engineer — Acme\n"
+        "- Built Python services\n\n"
+        "## Education\n"
+        "### BS, Example University\n\n"
+        "## Projects\n"
+        "### Difference Engine\n"
+        "- Designed punched-card programs\n\n"
+        "## Languages\n"
+        "English\n"
+    ).encode("utf-8")
+    result = run_generation(
+        provider=FakeProvider(),
+        base_cv_bytes=base_cv,
+        filename="cv.md",
+        content_type="text/markdown",
+        job_description=(
+            "Software Engineer\n\n"
+            "Requirements:\n"
+            "- Python experience\n"
+        ),
+        additional_information=None,
+        output_format=OutputFormat.MARKDOWN,
+        correlation_id="00000000-0000-0000-0000-000000000074",
+        workflow_version="cv-graph-v2",
+    )
+    headings = _markdown_h2_headings(result.content.decode("utf-8"))
+    trailing = [h for h in headings if h in _TRAILING_ATS_HEADINGS]
+    assert trailing == ["PROJECTS", "LANGUAGES"]
+    assert headings.index("SKILLS") < headings.index("PROJECTS") < headings.index(
+        "LANGUAGES"
+    )
+    assert "AWARDS/VOLUNTEER" not in headings
+    assert "CERTIFICATIONS" not in headings
+    assert "VALUES ALIGNMENT" not in headings
+
+
+def test_run_generation_grounded_skills_summary_metrics_and_values_gating(
+    sample_cv_md, sample_jd
+):
+    """Skills/summary/metrics/values gating at run_generation (sample path).
+
+    Experience depth/title/theme policies stay in dedicated run_generation tests.
+    """
+    result = run_generation(
+        provider=FakeProvider(),
+        base_cv_bytes=sample_cv_md,
+        filename="cv.md",
+        content_type="text/markdown",
+        job_description=sample_jd,
+        additional_information=None,
+        output_format=OutputFormat.MARKDOWN,
+        correlation_id="00000000-0000-0000-0000-000000000073",
+        workflow_version="cv-graph-v2",
+    )
+    assert result.canonical_cv is not None
+    cv = result.canonical_cv
+    text = result.content.decode("utf-8")
+
+    # Skills: evidence-only, JD-ordered, unrelated dropped; no JD-only fabrication.
+    assert cv.skills == ["Python", "FastAPI", "PostgreSQL", "Docker"]
+    assert "Kubernetes" not in cv.skills
+    assert "Kubernetes" not in text
+    assert "Linux" not in cv.skills
+    assert "Git" not in cv.skills
+
+    # Summary: 2–3 grounded role-targeted sentences; no invented metrics.
+    summary = (cv.professional_summary or "").strip()
+    assert 2 <= _sentence_count(summary) <= 3
+    assert "Software Engineer" in summary or "software engineer" in summary.lower()
+    assert "Python" in summary
+    assert "Kubernetes" not in summary
+    assert not re.search(r"\b\d{1,3}\s?%", summary)
+    assert "40%" not in text
+
+    # Experience: no professional headline under the name.
+    name_idx = text.index("Ada Lovelace")
+    summary_idx = text.index("PROFESSIONAL SUMMARY")
+    between = text[name_idx:summary_idx]
+    assert "Software Engineer" not in between.split("\n")[1:3]
+
+    # Values gating: sample JD has no value statements.
+    assert cv.values_alignment == []
+    assert "VALUES ALIGNMENT" not in text

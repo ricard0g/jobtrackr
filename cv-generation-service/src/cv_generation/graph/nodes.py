@@ -162,9 +162,24 @@ def node_merge_user_evidence(state: GraphState) -> dict[str, Any]:
         evidence["projects"] = add_projects + base_projects
     if override.get("professional_summary"):
         evidence["professional_summary"] = override["professional_summary"]
+    if override.get("awards"):
+        add_awards = [a for a in override["awards"] if isinstance(a, dict)]
+        add_titles = {str(a.get("title") or "").lower() for a in add_awards}
+        base_awards = [
+            a
+            for a in (evidence.get("awards") or [])
+            if isinstance(a, dict) and str(a.get("title") or "").lower() not in add_titles
+        ]
+        evidence["awards"] = add_awards + base_awards
     if override.get("certifications"):
         evidence["certifications"] = list(
             dict.fromkeys(list(override["certifications"]) + list(evidence.get("certifications") or []))
+        )
+    if override.get("spoken_languages"):
+        evidence["spoken_languages"] = list(
+            dict.fromkeys(
+                list(override["spoken_languages"]) + list(evidence.get("spoken_languages") or [])
+            )
         )
 
     evidence["additional_information"] = additional
@@ -460,7 +475,10 @@ def _parse_evidence_from_text(text: str) -> dict[str, Any]:
     skills = _extract_skills_section(text)
     experience = _extract_experience(text)
     education = _extract_education(text)
+    awards = _extract_awards(text)
     projects = _extract_projects(text)
+    certifications = _extract_certifications(text)
+    spoken_languages = _extract_spoken_languages(text)
     summary = _extract_summary(text)
 
     return {
@@ -476,9 +494,10 @@ def _parse_evidence_from_text(text: str) -> dict[str, Any]:
         "experience": experience,
         "education": education,
         "professional_summary": summary,
+        "awards": awards,
         "projects": projects,
-        "certifications": [],
-        "spoken_languages": [],
+        "certifications": certifications,
+        "spoken_languages": spoken_languages,
     }
 
 
@@ -519,9 +538,19 @@ def _section_body(text: str, headers: tuple[str, ...]) -> str | None:
         "employment",
         "education",
         "academic background",
+        "awards",
+        "awards/volunteer",
+        "volunteer",
+        "volunteering",
+        "honors",
+        "honours",
         "projects",
         "certifications",
+        "certificates",
+        "licenses",
         "languages",
+        "spoken languages",
+        "language skills",
     )
     boundary = re.search(
         rf"^(?:{'|'.join(re.escape(value) for value in known_sections)})\s*:?[ \t]*$",
@@ -738,37 +767,112 @@ def _extract_education(text: str) -> list[dict[str, Any]]:
     return items[:5]
 
 
+def _extract_awards(text: str) -> list[dict[str, Any]]:
+    body = _section_body(
+        text,
+        (
+            "awards",
+            "awards/volunteer",
+            "volunteer",
+            "volunteering",
+            "honors",
+            "honours",
+        ),
+    )
+    if not body:
+        return []
+    items: list[dict[str, Any]] = []
+    for line in body.splitlines():
+        line = line.strip().lstrip("#").strip()
+        line = line.lstrip("-*• ").strip().strip("*").strip()
+        if not line:
+            continue
+        date = None
+        date_match = re.search(r"\((\d{4}(?:-\d{2})?)\)\s*$", line)
+        if date_match:
+            date = date_match.group(1)
+            line = line[: date_match.start()].strip().rstrip("-—,").strip()
+        if line:
+            items.append({"title": line, "date": date})
+    return items[:10]
+
+
 def _extract_projects(text: str) -> list[dict[str, Any]]:
     body = _section_body(text, ("projects", "personal projects", "side projects"))
     if not body:
         return []
     items: list[dict[str, Any]] = []
-    blocks = re.split(r"\n(?=\S)", body)
-    for block in blocks:
-        lines = [ln.strip() for ln in block.splitlines() if ln.strip()]
-        if not lines:
+    current: dict[str, Any] | None = None
+    for raw in body.splitlines():
+        line = raw.strip()
+        if not line:
             continue
-        header = lines[0].lstrip("#").lstrip("*").strip()
-        bullets = [
-            ln.lstrip("-*• ").strip()
-            for ln in lines[1:]
-            if ln.lstrip().startswith(("-", "*", "•"))
-        ]
-        description = None
-        for ln in lines[1:]:
-            if not ln.lstrip().startswith(("-", "*", "•")):
-                description = ln.lstrip("*").strip()
-                break
-        if header:
-            items.append(
-                {
-                    "name": re.sub(r"[*#]", "", header).strip(),
-                    "description": description,
-                    "bullets": bullets,
+        if line.lstrip().startswith(("-", "*", "•")):
+            bullet = line.lstrip("-*• ").strip()
+            if not bullet:
+                continue
+            if current is None:
+                current = {
+                    "name": bullet,
+                    "description": None,
+                    "bullets": [],
                     "technologies": [],
                 }
-            )
+                items.append(current)
+            else:
+                current["bullets"].append(bullet)
+            continue
+        header = re.sub(r"[*#]", "", line).strip()
+        if not header:
+            continue
+        current = {
+            "name": header,
+            "description": None,
+            "bullets": [],
+            "technologies": [],
+        }
+        items.append(current)
     return items[:10]
+
+
+def _extract_certifications(text: str) -> list[str]:
+    body = _section_body(text, ("certifications", "certificates", "licenses"))
+    if not body:
+        return []
+    items: list[str] = []
+    seen: set[str] = set()
+    for line in body.splitlines():
+        line = line.strip().lstrip("#").strip()
+        line = line.lstrip("-*• ").strip().strip("*").strip()
+        if not line:
+            continue
+        key = line.lower()
+        if key in seen:
+            continue
+        seen.add(key)
+        items.append(line)
+    return items[:10]
+
+
+def _extract_spoken_languages(text: str) -> list[str]:
+    body = _section_body(text, ("languages", "spoken languages", "language skills"))
+    if not body:
+        return []
+    tokens: list[str] = []
+    seen: set[str] = set()
+    for part in re.split(r"[,;\n|•\-]+", body):
+        token = part.strip().lstrip("#").strip().strip("*").strip()
+        if not token or token.lower().startswith("http"):
+            continue
+        # Skip fluency fluff like "Native" when listed alone.
+        if token.lower() in {"native", "fluent", "intermediate", "basic", "proficient"}:
+            continue
+        key = token.lower()
+        if key in seen:
+            continue
+        seen.add(key)
+        tokens.append(token)
+    return tokens[:10]
 
 
 def _extract_summary(text: str) -> str | None:
