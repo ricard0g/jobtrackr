@@ -196,6 +196,22 @@ def validate_canonical_cv(
                 f"values alignment behaviour not grounded in evidence: {item.behaviour[:80]}"
             )
 
+    if jd_analysis is not None:
+        jd_values = {
+            str(v).strip().lower()
+            for v in (jd_analysis.get("value_statements") or [])
+            if str(v).strip()
+        }
+        if cv.values_alignment and not jd_values:
+            issues.append(
+                "values alignment requires JD value statements"
+            )
+        for item in cv.values_alignment:
+            if item.value.strip().lower() not in jd_values:
+                issues.append(
+                    f"values alignment value not in JD: {item.value[:80]}"
+                )
+
     # JD skills must not be injected if absent from evidence
     if jd_analysis:
         jd_skills = {s.lower() for s in (jd_analysis.get("keywords") or [])}

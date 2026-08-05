@@ -13,6 +13,7 @@ from cv_generation.models.canonical_cv import (
     ExperienceBulletGroup,
     ExperienceItem,
     ProjectItem,
+    ValuesAlignmentItem,
 )
 from cv_generation.models.candidate_evidence import CandidateEvidence
 from cv_generation.models.errors import ErrorCode, ServiceError
@@ -183,6 +184,12 @@ class FakeProvider(DraftingProvider):
             target_title=jd_analysis.get("target_title"),
         )
 
+        values_alignment = _build_values_alignment(
+            evidence=evidence,
+            experience=experience,
+            value_statements=list(jd_analysis.get("value_statements") or []),
+        )
+
         return CanonicalCV(
             full_name=name,
             contact=contact,
@@ -194,6 +201,7 @@ class FakeProvider(DraftingProvider):
             projects=projects,
             certifications=list(evidence.get("certifications") or []),
             languages=list(evidence.get("spoken_languages") or []),
+            values_alignment=values_alignment,
             output_language=output_language,
         )
 
@@ -269,6 +277,134 @@ def _build_professional_summary(
     if len(summary) > 450:
         summary = summary[:447].rstrip() + "..."
     return summary
+
+
+def _value_match_words(value: str) -> set[str]:
+    stop = {
+        "and",
+        "or",
+        "the",
+        "a",
+        "an",
+        "to",
+        "of",
+        "in",
+        "for",
+        "with",
+        "on",
+        "at",
+        "our",
+        "we",
+        "value",
+        "values",
+    }
+    return {
+        t
+        for t in re.findall(r"[a-z0-9]+", value.lower())
+        if len(t) > 2 and t not in stop
+    }
+
+
+def _value_stems(word: str) -> set[str]:
+    """Light stems so Ownership↔Owned / Mentorship↔Mentored without Integrity↔interest."""
+    stems = {word}
+    for suf in ("ship", "tion", "sion", "ment", "ness", "ity", "ance", "ence"):
+        if word.endswith(suf) and len(word) > len(suf) + 2:
+            stems.add(word[: -len(suf)])
+            break
+    # ownership → own; leadership → lead (ership), without mangling mentorship→ment.
+    if word.endswith("ership") and len(word) > 8:
+        stems.add(word[: -len("ership")])
+    return {s for s in stems if len(s) >= 3}
+
+
+def _behaviour_matches_value(behaviour: str, value_words: set[str]) -> bool:
+    """True when a behaviour clearly evidences the JD value (concrete, not slogans)."""
+    if not value_words:
+        return False
+    low = behaviour.lower()
+    tokens = set(re.findall(r"[a-z0-9]+", low))
+    for word in value_words:
+        if word in low:
+            return True
+        for stem in _value_stems(word):
+            if stem in low:
+                return True
+            for token in tokens:
+                if token.startswith(stem) or stem.startswith(token):
+                    # Require enough overlap that Integrity ≠ interest.
+                    if min(len(stem), len(token)) >= 5:
+                        return True
+                    if len(stem) >= 3 and token.startswith(stem):
+                        return True
+    return False
+
+
+def _evidence_behaviour_pool(
+    evidence: dict[str, Any],
+    experience: list[ExperienceItem],
+) -> list[str]:
+    pool: list[str] = []
+    seen: set[str] = set()
+
+    def _add(text: Any) -> None:
+        if not isinstance(text, str):
+            return
+        cleaned = text.strip()
+        if not cleaned:
+            return
+        key = cleaned.lower()
+        if key in seen:
+            return
+        seen.add(key)
+        pool.append(cleaned)
+
+    for exp in experience:
+        for bullet in _flatten_experience_bullets(exp):
+            _add(bullet)
+    for item in evidence.get("projects") or []:
+        if isinstance(item, dict):
+            for bullet in item.get("bullets") or []:
+                _add(bullet)
+            _add(item.get("description"))
+    _add(evidence.get("professional_summary"))
+    return pool
+
+
+def _build_values_alignment(
+    *,
+    evidence: dict[str, Any],
+    experience: list[ExperienceItem],
+    value_statements: list[Any],
+) -> list[ValuesAlignmentItem]:
+    """Pair JD value labels with evidenced behaviours; omit when unsupported."""
+    values = [str(v).strip() for v in value_statements if str(v).strip()]
+    if not values:
+        return []
+    behaviours = _evidence_behaviour_pool(evidence, experience)
+    if not behaviours:
+        return []
+
+    used_behaviours: set[int] = set()
+    items: list[ValuesAlignmentItem] = []
+    for value in values:
+        words = _value_match_words(value)
+        matched_index: int | None = None
+        for index, behaviour in enumerate(behaviours):
+            if index in used_behaviours:
+                continue
+            if _behaviour_matches_value(behaviour, words):
+                matched_index = index
+                break
+        if matched_index is None:
+            continue
+        used_behaviours.add(matched_index)
+        items.append(
+            ValuesAlignmentItem(value=value, behaviour=behaviours[matched_index])
+        )
+        if len(items) >= 5:
+            break
+    return items
 
 
 def _format_skill_expansion(full: str, acronym: str) -> str:

@@ -40,6 +40,9 @@ _GROUNDED_CONTENT_RULES = [
     "No professional headline under the candidate name (ATS template has none)",
     "Experience theme groups: use optional {heading, bullets} only when jd_targeting.responsibility_themes are clear and Candidate Evidence supports bullets under them; otherwise flat bullets only",
     "Never invent employers, duties, dates, or theme headings unsupported by the JD themes + evidence",
+    "Values Alignment: include only when jd_targeting.value_statements are present AND Candidate Evidence supports concrete matching behaviours; otherwise omit the section",
+    "Values Alignment: value labels come from JD targeting aids; behaviours must be evidenced — never slogans or invented cultural claims",
+    "Never turn JD value_statements or other targeting aids into fabricated skills or Candidate Evidence",
 ]
 
 _ONE_PAGE_RULES = [

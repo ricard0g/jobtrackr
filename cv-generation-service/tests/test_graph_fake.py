@@ -1122,8 +1122,10 @@ def test_jd_analysis_targeting_only(sample_jd):
     assert "Python" in out["jd_analysis"]["keywords"] or "python" in [
         k.lower() for k in out["jd_analysis"]["keywords"]
     ]
+    assert out["jd_analysis"]["skill_phrases"] == out["jd_analysis"]["keywords"]
     # Flat requirements JD has no clear responsibility theme headers.
     assert out["jd_analysis"]["responsibility_themes"] == []
+    assert out["jd_analysis"]["value_statements"] == []
 
 
 def test_jd_analysis_extracts_responsibility_themes():
@@ -1190,3 +1192,321 @@ def test_language_override_in_additional():
     }
     out = node_analyze_jd(state)
     assert out["output_language"] == "es"
+
+
+def test_jd_analysis_exposes_targeting_aids_including_value_statements():
+    """JD targeting aids feed Grounded Tailoring; never candidate facts."""
+    state: GraphState = {
+        "job_description": (
+            "Software Engineer\n\n"
+            "Responsibilities:\n"
+            "API Development\n"
+            "- Design service APIs\n\n"
+            "Requirements:\n"
+            "- Python and FastAPI experience\n"
+            "- Customer Relationship Management (CRM)\n\n"
+            "Our Values:\n"
+            "- Integrity\n"
+            "- Collaboration\n"
+            "- Ownership\n"
+        ),
+        "additional_information": None,
+    }
+    out = node_analyze_jd(state)
+    analysis = out["jd_analysis"]
+    assert analysis["note"] == "targeting_only"
+    assert analysis["source"] == "job_description"
+    assert analysis["target_title"] == "Software Engineer"
+    assert analysis["responsibility_themes"] == ["API Development"]
+    assert analysis["value_statements"] == ["Integrity", "Collaboration", "Ownership"]
+    # Skill phrases stay targeting aids (keywords / expansions), not evidence.
+    skill_phrases = [s.lower() for s in analysis["skill_phrases"]]
+    assert "python" in skill_phrases
+    assert "fastapi" in skill_phrases
+    assert {"full": "Customer Relationship Management", "acronym": "CRM"} in analysis[
+        "skill_expansions"
+    ]
+
+
+def test_jd_analysis_omits_value_statements_when_jd_has_none(sample_jd):
+    out = node_analyze_jd(
+        {"job_description": sample_jd, "additional_information": None}
+    )
+    assert out["jd_analysis"]["value_statements"] == []
+    assert out["jd_analysis"]["note"] == "targeting_only"
+
+
+def test_run_generation_includes_values_alignment_when_jd_and_evidence_support():
+    base_cv = (
+        "# Jane Doe\n"
+        "jane@example.com\n\n"
+        "## Skills\n"
+        "Python, Mentoring\n\n"
+        "## Experience\n"
+        "### Software Engineer — Acme\n"
+        "- Collaborated with product on roadmap planning\n"
+        "- Mentored juniors through weekly code reviews\n"
+        "- Owned release quality for the payments service\n\n"
+        "## Education\n"
+        "### BS, Example University\n\n"
+        "## Languages\n"
+        "English, Spanish\n"
+    ).encode("utf-8")
+    jd = (
+        "Software Engineer\n\n"
+        "Requirements:\n"
+        "- Python experience\n\n"
+        "Our Values:\n"
+        "- Collaboration\n"
+        "- Mentorship\n"
+        "- Ownership\n"
+    )
+    result = run_generation(
+        provider=FakeProvider(),
+        base_cv_bytes=base_cv,
+        filename="cv.md",
+        content_type="text/markdown",
+        job_description=jd,
+        additional_information=None,
+        output_format=OutputFormat.MARKDOWN,
+        correlation_id="00000000-0000-0000-0000-000000000060",
+        workflow_version="cv-graph-v2",
+    )
+    assert result.canonical_cv is not None
+    items = result.canonical_cv.values_alignment
+    assert items
+    by_value = {item.value: item.behaviour for item in items}
+    assert "Collaboration" in by_value
+    assert "collaborated" in by_value["Collaboration"].lower()
+    assert "Mentorship" in by_value
+    assert "mentored" in by_value["Mentorship"].lower()
+    assert "Ownership" in by_value
+    assert "owned" in by_value["Ownership"].lower()
+    # Targeting aids must not fabricate skills from value labels.
+    skills_lower = [s.lower() for s in result.canonical_cv.skills]
+    assert "collaboration" not in skills_lower
+    assert "ownership" not in skills_lower
+    assert "integrity" not in skills_lower
+    text = result.content.decode("utf-8")
+    assert "## VALUES ALIGNMENT" in text
+    # Locked trailing position: after core Skills (Languages omitted when unsupported).
+    assert text.index("## SKILLS") < text.index("## VALUES ALIGNMENT")
+    assert "Collaboration" in text
+    assert "Mentorship" in text
+    assert "Ownership" in text
+
+
+def test_run_generation_omits_values_alignment_when_jd_has_no_values(sample_cv_md):
+    result = run_generation(
+        provider=FakeProvider(),
+        base_cv_bytes=sample_cv_md,
+        filename="cv.md",
+        content_type="text/markdown",
+        job_description=(
+            "Software Engineer\n\n"
+            "Requirements:\n"
+            "- Experience with Python and FastAPI\n"
+        ),
+        additional_information=None,
+        output_format=OutputFormat.MARKDOWN,
+        correlation_id="00000000-0000-0000-0000-000000000061",
+        workflow_version="cv-graph-v2",
+    )
+    assert result.canonical_cv is not None
+    assert result.canonical_cv.values_alignment == []
+    assert "VALUES ALIGNMENT" not in result.content.decode("utf-8")
+
+
+def test_run_generation_omits_values_alignment_when_evidence_lacks_behaviours():
+    base_cv = (
+        "# Jane Doe\n"
+        "jane@example.com\n\n"
+        "## Skills\n"
+        "Python\n\n"
+        "## Experience\n"
+        "### Software Engineer — Acme\n"
+        "- Built calculation engines in Python\n"
+        "- Tuned PostgreSQL queries\n\n"
+        "## Education\n"
+        "### BS, Example University\n"
+    ).encode("utf-8")
+    jd = (
+        "Software Engineer\n\n"
+        "Requirements:\n"
+        "- Python experience\n\n"
+        "Our Values:\n"
+        "- Integrity\n"
+        "- Empathy\n"
+    )
+    result = run_generation(
+        provider=FakeProvider(),
+        base_cv_bytes=base_cv,
+        filename="cv.md",
+        content_type="text/markdown",
+        job_description=jd,
+        additional_information=None,
+        output_format=OutputFormat.MARKDOWN,
+        correlation_id="00000000-0000-0000-0000-000000000062",
+        workflow_version="cv-graph-v2",
+    )
+    assert result.canonical_cv is not None
+    assert result.canonical_cv.values_alignment == []
+    assert "VALUES ALIGNMENT" not in result.content.decode("utf-8")
+    # Value labels remain targeting-only — never injected as skills.
+    assert "Integrity" not in result.canonical_cv.skills
+    assert "Empathy" not in result.canonical_cv.skills
+
+
+def test_validation_rejects_values_alignment_without_jd_value_statements():
+    evidence = {
+        "raw_text": "Jane Doe jane@example.com Mentored juniors weekly at Acme.",
+        "skills": ["Python"],
+        "experience": [{"company": "Acme", "title": "Engineer"}],
+        "full_name": "Jane Doe",
+        "contact": {"email": "jane@example.com"},
+    }
+    cv = CanonicalCV(
+        full_name="Jane Doe",
+        contact=ContactInfo(email="jane@example.com"),
+        skills=["Python"],
+        experience=[ExperienceItem(company="Acme", title="Engineer")],
+        values_alignment=[
+            ValuesAlignmentItem(
+                value="Mentorship",
+                behaviour="Mentored juniors weekly",
+            )
+        ],
+    )
+    issues = validate_canonical_cv(
+        cv,
+        evidence,
+        jd_analysis={"keywords": ["Python"], "value_statements": []},
+    )
+    assert any("values alignment requires JD value statements" in i for i in issues)
+
+
+def test_validation_rejects_values_alignment_value_not_in_jd():
+    evidence = {
+        "raw_text": "Jane Doe jane@example.com Mentored juniors weekly at Acme.",
+        "skills": ["Python"],
+        "experience": [{"company": "Acme", "title": "Engineer"}],
+        "full_name": "Jane Doe",
+        "contact": {"email": "jane@example.com"},
+    }
+    cv = CanonicalCV(
+        full_name="Jane Doe",
+        contact=ContactInfo(email="jane@example.com"),
+        skills=["Python"],
+        experience=[ExperienceItem(company="Acme", title="Engineer")],
+        values_alignment=[
+            ValuesAlignmentItem(
+                value="Invented Virtue",
+                behaviour="Mentored juniors weekly",
+            )
+        ],
+    )
+    issues = validate_canonical_cv(
+        cv,
+        evidence,
+        jd_analysis={
+            "keywords": ["Python"],
+            "value_statements": ["Collaboration", "Mentorship"],
+        },
+    )
+    assert any("values alignment value not in JD" in i for i in issues)
+
+
+def test_validation_rejects_values_alignment_when_jd_analysis_omits_value_key():
+    """Deterministic JD gate applies whenever jd_analysis is supplied."""
+    evidence = {
+        "raw_text": "Jane Doe jane@example.com Mentored juniors weekly at Acme.",
+        "skills": ["Python"],
+        "experience": [{"company": "Acme", "title": "Engineer"}],
+        "full_name": "Jane Doe",
+        "contact": {"email": "jane@example.com"},
+    }
+    cv = CanonicalCV(
+        full_name="Jane Doe",
+        contact=ContactInfo(email="jane@example.com"),
+        skills=["Python"],
+        experience=[ExperienceItem(company="Acme", title="Engineer")],
+        values_alignment=[
+            ValuesAlignmentItem(
+                value="Mentorship",
+                behaviour="Mentored juniors weekly",
+            )
+        ],
+    )
+    issues = validate_canonical_cv(
+        cv,
+        evidence,
+        jd_analysis={"keywords": ["Python"]},
+    )
+    assert any("values alignment requires JD value statements" in i for i in issues)
+
+
+def test_fake_provider_values_alignment_after_languages_in_markdown():
+    """Trailing ATS order: Languages then Values Alignment when both present."""
+    from cv_generation.render.markdown import render_markdown
+
+    cv = FakeProvider().draft(
+        evidence={
+            "full_name": "Jane Doe",
+            "contact": {"email": "jane@example.com"},
+            "skills": ["Python"],
+            "spoken_languages": ["English", "Spanish"],
+            "experience": [
+                {
+                    "company": "Acme",
+                    "title": "Software Engineer",
+                    "bullets": [
+                        "Collaborated with product on roadmap planning",
+                        "Built Python services",
+                    ],
+                }
+            ],
+            "education": [{"institution": "Example University", "degree": "BS"}],
+            "raw_text": (
+                "Jane Doe jane@example.com Collaborated with product on roadmap planning"
+            ),
+        },
+        jd_analysis={
+            "keywords": ["Python"],
+            "value_statements": ["Collaboration"],
+            "note": "targeting_only",
+        },
+        output_language="en",
+    )
+    assert cv.languages == ["English", "Spanish"]
+    assert cv.values_alignment
+    text = render_markdown(cv).decode("utf-8")
+    assert "## LANGUAGES" in text
+    assert "## VALUES ALIGNMENT" in text
+    assert text.index("## LANGUAGES") < text.index("## VALUES ALIGNMENT")
+
+
+def test_fake_provider_rejects_loose_value_behaviour_stem_noise():
+    """Integrity must not match unrelated 'interest' bullets."""
+    cv = FakeProvider().draft(
+        evidence={
+            "full_name": "Jane Doe",
+            "contact": {"email": "jane@example.com"},
+            "skills": ["Python"],
+            "experience": [
+                {
+                    "company": "Acme",
+                    "title": "Engineer",
+                    "bullets": ["Expressed interest in databases"],
+                }
+            ],
+            "education": [{"institution": "Example University"}],
+            "raw_text": "Jane Doe Expressed interest in databases",
+        },
+        jd_analysis={
+            "keywords": ["Python"],
+            "value_statements": ["Integrity"],
+            "note": "targeting_only",
+        },
+        output_language="en",
+    )
+    assert cv.values_alignment == []

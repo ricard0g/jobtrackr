@@ -188,13 +188,17 @@ def node_analyze_jd(state: GraphState) -> dict[str, Any]:
     target_title = _guess_title(jd)
     skill_expansions = _extract_skill_expansions(jd)
     responsibility_themes = _extract_responsibility_themes(jd)
+    value_statements = _extract_value_statements(jd)
 
     return {
         "jd_analysis": {
             "keywords": keywords,
+            # skill_phrases aliases keywords for Grounded Tailoring consumers.
+            "skill_phrases": keywords,
             "target_title": target_title,
             "skill_expansions": skill_expansions,
             "responsibility_themes": responsibility_themes,
+            "value_statements": value_statements,
             "source": "job_description",
             "note": "targeting_only",
         },
@@ -884,6 +888,99 @@ def _extract_responsibility_themes(jd: str) -> list[str]:
         if len(themes) >= 8:
             break
     return themes
+
+
+_VALUES_SECTION_RE = re.compile(
+    r"^(?:"
+    r"(?:(?:our|company|core|cultural|shared)\s+)?values|"
+    r"what\s+we\s+value|"
+    r"our\s+culture(?:\s+and\s+values)?|"
+    r"culture\s+and\s+values"
+    r")\s*:?\s*$",
+    re.IGNORECASE,
+)
+_VALUES_END_RE = re.compile(
+    r"^(?:requirements|qualifications|responsibilities|benefits|about(?:\s+us)?|"
+    r"about\s+the\s+(?:job|company|role)|(?:your\s+)?skills|what\s+we\s+offer|"
+    r"compensation|equal\s+opportunity|how\s+to\s+apply|location|salary|"
+    r"preferred|must\s+have|nice\s+to\s+have|perks)\s*:?\s*$",
+    re.IGNORECASE,
+)
+_VALUE_BULLET_RE = re.compile(r"^[-•*]\s+(.+)$")
+_VALUE_INLINE_RE = re.compile(
+    r"(?i)(?:our|company|core)\s+values\s*(?:are|:)\s*([^\n.]+)"
+)
+
+
+def _normalize_value_label(raw: str) -> str | None:
+    """Keep short company-value labels; drop marketing sentences."""
+    label = raw.strip().strip(" .;,").strip()
+    label = re.sub(r"\s+", " ", label)
+    if not label:
+        return None
+    # Drop sentence-like or overly long value blurbs.
+    if label.endswith((".", "!", "?")) or len(label) > 48:
+        return None
+    words = label.split()
+    if not (1 <= len(words) <= 4):
+        return None
+    if words[0].lower() in {"we", "you", "your", "our", "why", "about", "the"}:
+        return None
+    # Title-case single words / short phrases so Integrity stays Integrity.
+    if label.islower() or label.isupper():
+        label = label.title()
+    return label
+
+
+def _extract_value_statements(jd: str) -> list[str]:
+    """Company value labels from the JD — targeting aids only, never facts."""
+    values: list[str] = []
+    seen: set[str] = set()
+
+    def _add(raw: str) -> None:
+        label = _normalize_value_label(raw)
+        if not label:
+            return
+        key = label.lower()
+        if key in seen:
+            return
+        seen.add(key)
+        values.append(label)
+
+    in_values = False
+    for raw in jd.splitlines():
+        stripped = raw.strip()
+        if not stripped:
+            continue
+        if _VALUES_SECTION_RE.match(stripped):
+            in_values = True
+            continue
+        if in_values and _VALUES_END_RE.match(stripped):
+            break
+        if not in_values:
+            continue
+        bullet = _VALUE_BULLET_RE.match(stripped)
+        if bullet:
+            _add(bullet.group(1))
+            continue
+        # Non-bullet short labels under a values heading.
+        if not stripped.endswith(".") and len(stripped.split()) <= 4:
+            _add(stripped)
+        if len(values) >= 8:
+            break
+
+    if values:
+        return values[:8]
+
+    # Inline "Our values are X, Y, and Z" when no dedicated section exists.
+    inline = _VALUE_INLINE_RE.search(jd)
+    if inline:
+        chunk = inline.group(1)
+        for part in re.split(r",|/|\band\b", chunk, flags=re.IGNORECASE):
+            _add(part)
+            if len(values) >= 8:
+                break
+    return values[:8]
 
 
 _TITLE_BOILERPLATE_RE = re.compile(
