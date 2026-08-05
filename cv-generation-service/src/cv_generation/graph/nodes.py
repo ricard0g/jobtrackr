@@ -244,10 +244,29 @@ def node_validate(state: GraphState) -> dict[str, Any]:
             "No canonical CV to validate",
         )
     issues = validate_canonical_cv(cv, state["evidence"], jd_analysis=state.get("jd_analysis"))
+    # Hard ATS one-page contract: densify deterministically before failing/revising.
+    if _one_page_render_issues(cv):
+        from cv_generation.graph.one_page import fit_canonical_cv_to_one_page
+
+        fitted = fit_canonical_cv_to_one_page(cv, jd_analysis=state.get("jd_analysis"))
+        if fitted.model_dump() != cv.model_dump():
+            cv = fitted
+            issues = validate_canonical_cv(
+                cv, state["evidence"], jd_analysis=state.get("jd_analysis")
+            )
     issues.extend(_one_page_render_issues(cv))
     revision_count = int(state.get("revision_count") or 0)
     max_revisions = int(state.get("max_revisions") or 2)
     needs = bool(issues) and revision_count < max_revisions
+    if issues:
+        logger.warning(
+            "Canonical CV validation issues correlation_id=%s revision=%s/%s needs_revision=%s issues=%s",
+            state.get("correlation_id"),
+            revision_count,
+            max_revisions,
+            needs,
+            issues[:12],
+        )
     if issues and not needs:
         raise ServiceError(
             ErrorCode.GENERATION_VALIDATION_FAILED,
@@ -255,6 +274,7 @@ def node_validate(state: GraphState) -> dict[str, Any]:
             details={"issues": issues},
         )
     return {
+        "canonical_cv": cv,
         "validation_issues": issues,
         "needs_revision": needs,
     }
@@ -262,21 +282,14 @@ def node_validate(state: GraphState) -> dict[str, Any]:
 
 def _one_page_render_issues(cv: CanonicalCV) -> list[str]:
     """PDF layout proxy for one-page fit (available in the service image)."""
-    try:
-        from cv_generation.render.pdf_renderer import render_pdf
-        from cv_generation.render.verify import pdf_page_count
-    except Exception:  # noqa: BLE001
+    from cv_generation.graph.one_page import fits_one_page
+
+    if fits_one_page(cv):
         return []
-    try:
-        pages = pdf_page_count(render_pdf(cv))
-    except Exception:  # noqa: BLE001
-        return []
-    if pages is not None and pages > 1:
-        return [
-            "one-page budget: rendered CV exceeds one page; "
-            "shorten summary/bullets and omit low-signal roles or trailing sections"
-        ]
-    return []
+    return [
+        "one-page budget: rendered CV exceeds one page; "
+        "shorten summary/bullets and omit low-signal roles or trailing sections"
+    ]
 
 
 def node_revise(state: GraphState, provider: DraftingProvider) -> dict[str, Any]:
@@ -696,13 +709,22 @@ _RESP_SECTION_RE = re.compile(
     re.IGNORECASE,
 )
 _RESP_END_RE = re.compile(
-    r"^(?:requirements|qualifications|about(?:\s+us|\s+the\s+job)?|benefits|"
-    r"nice\s+to\s+have|preferred|must\s+have|skills|what\s+we\s+offer|"
-    r"compensation|equal\s+opportunity)\s*:?\s*$",
+    r"^(?:requirements|qualifications|about(?:\s+us|\s+the\s+(?:job|company|role))?|"
+    r"about\s+\w+|benefits|nice\s+to\s+have|preferred|must\s+have|"
+    r"(?:your\s+)?skills|what\s+we\s+offer|compensation|equal\s+opportunity|"
+    r"hybrid\s+working|why\s+you\s+should|make\s+it\s+real|"
+    r"we\s+are\s+a\b|disability\s+confident|how\s+to\s+apply|"
+    r"what\s+you.?ll\s+get|perks|location|salary)\s*:?\s*$",
     re.IGNORECASE,
 )
 _THEME_HEADER_RE = re.compile(
     r"^([A-Z][A-Za-z0-9][A-Za-z0-9 /&+.-]{1,48}):?\s*$"
+)
+_THEME_SECTION_NOISE_RE = re.compile(
+    r"^(?:your\s+skills|your\s+role|about\b|why\s+you|we\s+are\b|make\s+it\s+real|"
+    r"hybrid\s+working|disability\b|requirements|qualifications|benefits|"
+    r"responsibilities|the\s+role|overview)\b",
+    re.IGNORECASE,
 )
 
 
@@ -725,14 +747,22 @@ def _extract_responsibility_themes(jd: str) -> list[str]:
         # Skip bullet/duty lines; keep short Title-Case theme headers.
         if re.match(r"^[-•*]\s+", stripped) or stripped.endswith("."):
             continue
+        # Indented duty prose without a bullet marker is still not a theme header.
+        if raw[:1].isspace() and not _THEME_HEADER_RE.match(stripped.rstrip(":")):
+            continue
         match = _THEME_HEADER_RE.match(stripped)
         if not match:
             continue
         theme = match.group(1).rstrip(":").strip()
         if not theme or _TITLE_BOILERPLATE_RE.match(theme):
             continue
+        if _THEME_SECTION_NOISE_RE.match(theme) or _RESP_END_RE.match(theme):
+            continue
         words = theme.split()
-        if not (1 <= len(words) <= 6):
+        # Real JD theme labels are short noun phrases (e.g. "Data Lineage Management").
+        if not (1 <= len(words) <= 4):
+            continue
+        if words[0].lower() in {"we", "you", "your", "our", "why", "about", "the"}:
             continue
         key = theme.lower()
         if key in seen:

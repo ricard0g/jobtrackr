@@ -1108,6 +1108,41 @@ def test_jd_analysis_extracts_responsibility_themes():
     ]
 
 
+def test_jd_analysis_ignores_marketing_section_headers_as_themes():
+    """Real JDs often use 'Your Role' then later 'Your Skills' / employer blurbs."""
+    state: GraphState = {
+        "job_description": (
+            "About the Job you are considering:\n\n"
+            "Business Data Analyst is responsible for collecting data.\n\n"
+            "Hybrid working:\n\n"
+            "Blend of offices and home.\n\n"
+            "Your Role:\n\n"
+            "    Gather requirements through workshops.\n"
+            "    Data Lineage Management.\n"
+            "    Document end-to-end lineage from source systems.\n\n"
+            "Your Skills:\n\n"
+            "    Support Data Governance frameworks.\n"
+            "    Data Quality Controls.\n\n"
+            "We are a Disability Confident Employer:\n\n"
+            "Capgemini is proud to be a Disability Confident Employer.\n\n"
+            "Why you should consider Capgemini:\n\n"
+            "Join a thriving company.\n\n"
+            "About Capgemini:\n\n"
+            "Global business and technology transformation partner.\n"
+        ),
+        "additional_information": None,
+    }
+    out = node_analyze_jd(state)
+    themes = out["jd_analysis"]["responsibility_themes"]
+    joined = " | ".join(themes).lower()
+    assert "your skills" not in joined
+    assert "disability" not in joined
+    assert "capgemini" not in joined
+    assert "why you" not in joined
+    assert "about " not in joined
+    assert out["jd_analysis"]["target_title"] == "Business Data Analyst"
+
+
 def test_language_override_in_additional():
     state: GraphState = {
         "job_description": "Software Engineer. Requirements and experience needed.",

@@ -29,6 +29,13 @@ def create_app() -> FastAPI:
     @app.exception_handler(ServiceError)
     async def service_error_handler(_request: Request, exc: ServiceError) -> JSONResponse:
         body = exc.to_body()
+        logger.warning(
+            "ServiceError code=%s status=%s message=%s details=%s",
+            body.code,
+            exc.status_code,
+            body.message,
+            body.details,
+        )
         return JSONResponse(
             status_code=exc.status_code,
             content=body.model_dump(exclude_none=True),
