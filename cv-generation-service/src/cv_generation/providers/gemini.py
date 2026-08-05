@@ -36,6 +36,10 @@ _GROUNDED_CONTENT_RULES = [
     "Skills: allow Full Term (ACRONYM) only when grounded in evidence and/or JD naming of an evidenced skill",
     "Never invent or estimate metrics; include numbers only when present in Candidate Evidence",
     "JD is targeting-only for facts; never inject JD-only skills or numeric ATS scores",
+    "Experience titles: align to the JD target title only when that role's duties clearly match; never invent seniority or a mismatched function",
+    "No professional headline under the candidate name (ATS template has none)",
+    "Experience theme groups: use optional {heading, bullets} only when jd_targeting.responsibility_themes are clear and Candidate Evidence supports bullets under them; otherwise flat bullets only",
+    "Never invent employers, duties, dates, or theme headings unsupported by the JD themes + evidence",
 ]
 
 _ONE_PAGE_RULES = [

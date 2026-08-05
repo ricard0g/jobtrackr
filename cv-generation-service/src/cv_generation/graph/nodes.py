@@ -187,12 +187,14 @@ def node_analyze_jd(state: GraphState) -> dict[str, Any]:
     keywords = _extract_keywords(jd)
     target_title = _guess_title(jd)
     skill_expansions = _extract_skill_expansions(jd)
+    responsibility_themes = _extract_responsibility_themes(jd)
 
     return {
         "jd_analysis": {
             "keywords": keywords,
             "target_title": target_title,
             "skill_expansions": skill_expansions,
+            "responsibility_themes": responsibility_themes,
             "source": "job_description",
             "note": "targeting_only",
         },
@@ -530,45 +532,68 @@ def _extract_experience(text: str) -> list[dict[str, Any]]:
     if not body:
         return []
     items: list[dict[str, Any]] = []
-    # Lines like: Company — Title (dates) or **Title** at Company
-    blocks = re.split(r"\n(?=\S)", body)
-    for block in blocks:
-        lines = [ln.strip() for ln in block.splitlines() if ln.strip()]
-        if not lines:
+    current: dict[str, Any] | None = None
+    for raw in body.splitlines():
+        stripped = raw.strip()
+        if not stripped:
             continue
-        header = lines[0].lstrip("#").lstrip("*").strip()
-        company = None
-        title = None
-        if " at " in header.lower():
-            parts = re.split(r"\s+at\s+", header, maxsplit=1, flags=re.I)
-            title, company = parts[0].strip(), parts[1].strip()
-        elif " — " in header or " - " in header or " – " in header:
-            parts = re.split(r"\s+[—–\-]\s+", header, maxsplit=1)
-            if len(parts) == 2:
-                left, right = parts
-                # Heuristic: company first or title first
-                if any(c.isdigit() for c in right):
-                    company, title = left, right.split("(")[0].strip()
-                else:
-                    company, title = left, right
-        else:
-            company = header
-            title = lines[1] if len(lines) > 1 else "Role"
+        if stripped.lstrip().startswith(("-", "*", "•")):
+            if current is None:
+                continue
+            bullet = stripped.lstrip("-*• ").strip()
+            if bullet:
+                current["bullets"].append(bullet)
+            continue
 
-        bullets = [
-            ln.lstrip("-*• ").strip()
-            for ln in lines[1:]
-            if ln.lstrip().startswith(("-", "*", "•"))
-        ]
-        if company:
-            items.append(
-                {
-                    "company": re.sub(r"[*#]", "", company).strip(),
-                    "title": re.sub(r"[*#]", "", title or "Role").strip(),
-                    "bullets": bullets,
-                }
-            )
+        if current is not None:
+            items.append(current)
+            current = None
+
+        header = stripped.lstrip("#").lstrip("*").strip()
+        company, title = _parse_experience_header(header)
+        if not company:
+            continue
+        current = {
+            "company": re.sub(r"[*#]", "", company).strip(),
+            "title": re.sub(r"[*#]", "", title or "Role").strip(),
+            "bullets": [],
+        }
+    if current is not None:
+        items.append(current)
     return items[:10]
+
+
+_EXPERIENCE_ROLE_WORD_RE = re.compile(
+    r"\b(?:Engineer|Analyst|Manager|Developer|Designer|Scientist|Architect|"
+    r"Consultant|Specialist|Officer|Administrator|Director|Assistant|Intern|"
+    r"Lead|Baker|Barista|Clerk|Guide|Programmer)\b",
+    re.I,
+)
+
+
+def _parse_experience_header(header: str) -> tuple[str | None, str | None]:
+    """Return (company, title) from a role header line."""
+    if " at " in header.lower():
+        parts = re.split(r"\s+at\s+", header, maxsplit=1, flags=re.I)
+        return parts[1].strip(), parts[0].strip()
+    if " — " in header or " - " in header or " – " in header:
+        parts = re.split(r"\s+[—–\-]\s+", header, maxsplit=1)
+        if len(parts) == 2:
+            left, right = (parts[0].strip(), parts[1].strip())
+            # Company — Title (2020-Present) style.
+            if any(ch.isdigit() for ch in right) and re.search(
+                r"\b(?:19|20)\d{2}\b|present", right, re.I
+            ):
+                return left, right.split("(")[0].strip()
+            left_is_role = bool(_EXPERIENCE_ROLE_WORD_RE.search(left))
+            right_is_role = bool(_EXPERIENCE_ROLE_WORD_RE.search(right))
+            if left_is_role and not right_is_role:
+                return right, left  # Title — Company
+            if right_is_role and not left_is_role:
+                return left, right  # Company — Title
+            # Ambiguous: prefer Title — Company (ATS / Base CV fixture convention).
+            return right, left
+    return header, "Role"
 
 
 def _extract_education(text: str) -> list[dict[str, Any]]:
@@ -663,6 +688,60 @@ def _extract_skill_expansions(jd: str) -> list[dict[str, str]]:
         seen.add(key)
         expansions.append({"full": full_n, "acronym": acronym_n})
     return expansions
+
+
+_RESP_SECTION_RE = re.compile(
+    r"^(?:responsibilities|key\s+responsibilities|what\s+you.?ll\s+do|"
+    r"what\s+you\s+will\s+do|your\s+role|duties|essential\s+functions)\s*:?\s*$",
+    re.IGNORECASE,
+)
+_RESP_END_RE = re.compile(
+    r"^(?:requirements|qualifications|about(?:\s+us|\s+the\s+job)?|benefits|"
+    r"nice\s+to\s+have|preferred|must\s+have|skills|what\s+we\s+offer|"
+    r"compensation|equal\s+opportunity)\s*:?\s*$",
+    re.IGNORECASE,
+)
+_THEME_HEADER_RE = re.compile(
+    r"^([A-Z][A-Za-z0-9][A-Za-z0-9 /&+.-]{1,48}):?\s*$"
+)
+
+
+def _extract_responsibility_themes(jd: str) -> list[str]:
+    """Clear JD responsibility theme headers — targeting aids only, never facts."""
+    themes: list[str] = []
+    seen: set[str] = set()
+    in_responsibilities = False
+    for raw in jd.splitlines():
+        stripped = raw.strip()
+        if not stripped:
+            continue
+        if _RESP_SECTION_RE.match(stripped):
+            in_responsibilities = True
+            continue
+        if in_responsibilities and _RESP_END_RE.match(stripped):
+            break
+        if not in_responsibilities:
+            continue
+        # Skip bullet/duty lines; keep short Title-Case theme headers.
+        if re.match(r"^[-•*]\s+", stripped) or stripped.endswith("."):
+            continue
+        match = _THEME_HEADER_RE.match(stripped)
+        if not match:
+            continue
+        theme = match.group(1).rstrip(":").strip()
+        if not theme or _TITLE_BOILERPLATE_RE.match(theme):
+            continue
+        words = theme.split()
+        if not (1 <= len(words) <= 6):
+            continue
+        key = theme.lower()
+        if key in seen:
+            continue
+        seen.add(key)
+        themes.append(theme)
+        if len(themes) >= 8:
+            break
+    return themes
 
 
 _TITLE_BOILERPLATE_RE = re.compile(

@@ -39,6 +39,10 @@ def render_markdown(cv: CanonicalCV) -> bytes:
             lines.append("")
             for bullet in exp.bullets:
                 lines.append(f"- {bullet}")
+            for group in exp.bullet_groups:
+                lines.append(f"**{group.heading}**")
+                for bullet in group.bullets:
+                    lines.append(f"- {bullet}")
             lines.append("")
 
     if cv.education:

@@ -14,6 +14,8 @@ from cv_generation.models.canonical_cv import (
     CanonicalCV,
     ContactInfo,
     EducationItem,
+    ExperienceBulletGroup,
+    ExperienceItem,
     ProjectItem,
     ValuesAlignmentItem,
 )
@@ -437,3 +439,60 @@ def test_docx_values_alignment_renders_value_and_behaviour():
     assert any(
         "Curiosity" in t and "Documented novel algorithms" in t for t in texts
     )
+
+
+def _cv_with_experience_theme_groups() -> CanonicalCV:
+    cv = ats_core_canonical_cv()
+    cv.experience = [
+        ExperienceItem(
+            company="Analytical Engines",
+            title="Software Engineer",
+            start_date="2020-01",
+            end_date="Present",
+            bullets=["Kept a leftover flat bullet"],
+            bullet_groups=[
+                ExperienceBulletGroup(
+                    heading="API Development",
+                    bullets=["Built calculation engines in Python"],
+                ),
+                ExperienceBulletGroup(
+                    heading="Collaboration",
+                    bullets=["Partnered with mathematicians on algorithms"],
+                ),
+            ],
+        )
+    ]
+    return cv
+
+
+def test_docx_renders_experience_theme_groups():
+    doc = _docx_from_cv(_cv_with_experience_theme_groups())
+    texts = [p.text.strip() for p in doc.paragraphs]
+    assert "Software Engineer, Analytical Engines" in texts[0] or any(
+        "Software Engineer, Analytical Engines" in t for t in texts
+    )
+    assert "API Development" in texts
+    assert "Collaboration" in texts
+    assert any("Built calculation engines in Python" in t for t in texts)
+    assert any("Partnered with mathematicians" in t for t in texts)
+    assert any("Kept a leftover flat bullet" in t for t in texts)
+    # Theme headings are bold body labels, not uppercase ATS section headings.
+    theme = next(p for p in doc.paragraphs if p.text.strip() == "API Development")
+    assert theme.runs
+    assert all(r.bold and not r.italic for r in theme.runs if r.text.strip())
+    assert theme.text != theme.text.upper() or theme.text == "API Development"
+
+
+def test_markdown_and_pdf_render_experience_theme_groups():
+    cv = _cv_with_experience_theme_groups()
+    md = render_markdown(cv).decode("utf-8")
+    assert "API Development" in md
+    assert "Collaboration" in md
+    assert "- Built calculation engines in Python" in md
+    assert "- Kept a leftover flat bullet" in md
+
+    html = _to_html(cv)
+    assert "API Development" in html
+    assert "Collaboration" in html
+    assert "Built calculation engines in Python" in html
+    assert "Kept a leftover flat bullet" in html

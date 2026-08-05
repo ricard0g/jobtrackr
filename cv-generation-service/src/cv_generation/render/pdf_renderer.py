@@ -63,6 +63,13 @@ def _to_html(cv: CanonicalCV) -> str:
                 for b in exp.bullets:
                     sections.append(f"<li>{_esc(b)}</li>")
                 sections.append("</ul>")
+            for group in exp.bullet_groups:
+                sections.append(f"<p class='theme'>{_esc(group.heading)}</p>")
+                if group.bullets:
+                    sections.append("<ul>")
+                    for b in group.bullets:
+                        sections.append(f"<li>{_esc(b)}</li>")
+                    sections.append("</ul>")
 
     if cv.education:
         sections.append("<h2>Education</h2>")
@@ -153,6 +160,7 @@ def _to_html(cv: CanonicalCV) -> str:
     p { margin: 0 0 2pt 0; }
     .contact { text-align: center; margin: 0 0 1pt 0; }
     .meta { font-size: 11pt; }
+    .theme { font-weight: bold; margin: 3pt 0 1pt 0; }
     .dated { margin: 0 0 2pt 0; }
     .dates { float: right; font-style: italic; font-weight: bold; }
     ul { margin: 1pt 0 4pt 1.1em; padding: 0; }

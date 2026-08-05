@@ -603,7 +603,152 @@ def test_validation_flags_one_page_budget_overflow():
     assert any("one-page budget" in i for i in issues)
 
 
-def test_fake_provider_preserves_experience_bullet_groups():
+def _experience_bullet_count(exp: ExperienceItem) -> int:
+    return len(exp.bullets) + sum(len(group.bullets) for group in exp.bullet_groups)
+
+
+def test_experience_title_aligns_to_jd_only_when_duties_match():
+    """Align Experience title toward the posting when duties clearly match; else keep."""
+    provider = FakeProvider()
+    matching = provider.draft(
+        evidence={
+            "full_name": "Jane Doe",
+            "contact": {"email": "jane@example.com"},
+            "skills": ["Python"],
+            "experience": [
+                {
+                    "company": "Acme",
+                    "title": "Backend Developer",
+                    "bullets": [
+                        "Built Python APIs for billing",
+                        "Shipped FastAPI services to production",
+                        "Improved PostgreSQL query latency",
+                    ],
+                }
+            ],
+            "raw_text": (
+                "Jane Doe jane@example.com Acme Backend Developer "
+                "Built Python APIs FastAPI PostgreSQL"
+            ),
+        },
+        jd_analysis={
+            "keywords": ["Python", "FastAPI", "PostgreSQL"],
+            "target_title": "Software Engineer",
+        },
+        output_language="en",
+    )
+    assert matching.experience[0].title == "Software Engineer"
+    assert matching.experience[0].company == "Acme"
+    # No professional headline under the name — title lives on the experience line only.
+    assert matching.full_name == "Jane Doe"
+    assert matching.professional_summary
+    assert not matching.professional_summary.startswith("Software Engineer\n")
+
+    mismatched = provider.draft(
+        evidence={
+            "full_name": "Jane Doe",
+            "contact": {"email": "jane@example.com"},
+            "skills": ["Baking", "Python"],
+            "experience": [
+                {
+                    "company": "Bakery",
+                    "title": "Baker",
+                    "bullets": [
+                        "Baked sourdough daily",
+                        "Managed oven schedules",
+                    ],
+                }
+            ],
+            "raw_text": "Jane Doe jane@example.com Bakery Baker sourdough oven Python",
+        },
+        jd_analysis={
+            "keywords": ["Python", "FastAPI"],
+            "target_title": "Software Engineer",
+        },
+        output_language="en",
+    )
+    assert mismatched.experience[0].title == "Baker"
+    assert mismatched.experience[0].company == "Bakery"
+
+
+def test_run_generation_experience_title_alignment_and_no_name_headline(
+    sample_cv_md, sample_jd
+):
+    result = run_generation(
+        provider=FakeProvider(),
+        base_cv_bytes=sample_cv_md,
+        filename="cv.md",
+        content_type="text/markdown",
+        job_description=sample_jd,
+        additional_information=None,
+        output_format=OutputFormat.MARKDOWN,
+        correlation_id="00000000-0000-0000-0000-000000000048",
+        workflow_version="cv-graph-v2",
+    )
+    assert result.canonical_cv is not None
+    titles = [e.title for e in result.canonical_cv.experience]
+    assert "Software Engineer" in titles
+    text = result.content.decode("utf-8")
+    # Name then contact — no detached professional headline under the name.
+    name_idx = text.index("Ada Lovelace")
+    summary_idx = text.index("PROFESSIONAL SUMMARY")
+    between = text[name_idx:summary_idx]
+    assert "Software Engineer" not in between.split("\n")[1:3]
+
+
+def test_run_generation_densifies_jd_relevant_experience_depth():
+    """Most JD-relevant roles prefer ~3–4 bullets; low-signal roles are thinner."""
+    base_cv = (
+        "# Jane Doe\n"
+        "jane@example.com\n\n"
+        "## Skills\n"
+        "Python, FastAPI, Baking\n\n"
+        "## Experience\n"
+        "### Software Engineer — Analytical Engines\n"
+        "- Built Python services for billing\n"
+        "- Designed FastAPI endpoints\n"
+        "- Tuned PostgreSQL queries\n"
+        "- Wrote Docker compose stacks\n"
+        "- Mentored juniors on code review\n"
+        "- Presented architecture talks\n\n"
+        "### Baker — Neighborhood Bakery\n"
+        "- Baked bread daily\n"
+        "- Opened the shop\n"
+        "- Cleaned ovens\n"
+        "- Ordered flour\n\n"
+        "## Education\n"
+        "### BS, Example University\n"
+    ).encode("utf-8")
+    jd = (
+        "Software Engineer\n\n"
+        "Requirements:\n"
+        "- Python and FastAPI\n"
+        "- PostgreSQL and Docker\n"
+    )
+    result = run_generation(
+        provider=FakeProvider(),
+        base_cv_bytes=base_cv,
+        filename="cv.md",
+        content_type="text/markdown",
+        job_description=jd,
+        additional_information=None,
+        output_format=OutputFormat.MARKDOWN,
+        correlation_id="00000000-0000-0000-0000-00000000004a",
+        workflow_version="cv-graph-v2",
+    )
+    assert result.canonical_cv is not None
+    by_company = {e.company: e for e in result.canonical_cv.experience}
+    assert "Analytical Engines" in by_company
+    relevant = _experience_bullet_count(by_company["Analytical Engines"])
+    assert 3 <= relevant <= 4
+    if "Neighborhood Bakery" in by_company:
+        assert _experience_bullet_count(by_company["Neighborhood Bakery"]) < relevant
+    text = result.content.decode("utf-8")
+    assert "Analytical Engines" in text
+    assert "Kubernetes" not in text
+
+
+def test_experience_theme_groups_when_jd_themes_and_evidence_support():
     provider = FakeProvider()
     cv = provider.draft(
         evidence={
@@ -613,30 +758,191 @@ def test_fake_provider_preserves_experience_bullet_groups():
             "experience": [
                 {
                     "company": "Acme",
-                    "title": "Engineer",
-                    "bullets": ["Shipped features"],
-                    "bullet_groups": [
-                        {
-                            "heading": "Delivery",
-                            "bullets": ["Owned release trains"],
-                        }
+                    "title": "Software Engineer",
+                    "bullets": [
+                        "Built REST APIs in Python",
+                        "Collaborated with product on roadmap",
+                        "Tuned PostgreSQL indexes",
                     ],
                 }
             ],
-            "raw_text": "Jane Doe jane@example.com Acme Python",
+            "raw_text": (
+                "Jane Doe jane@example.com Acme Software Engineer "
+                "Built REST APIs Collaborated PostgreSQL"
+            ),
         },
-        jd_analysis={"keywords": ["Python"]},
+        jd_analysis={
+            "keywords": ["Python", "API", "PostgreSQL"],
+            "target_title": "Software Engineer",
+            "responsibility_themes": ["API Development", "Collaboration"],
+        },
         output_language="en",
     )
     assert len(cv.experience) == 1
-    assert cv.experience[0].bullets == ["Shipped features"]
-    assert len(cv.experience[0].bullet_groups) == 1
-    assert cv.experience[0].bullet_groups[0].heading == "Delivery"
-    assert cv.experience[0].bullet_groups[0].bullets == ["Owned release trains"]
+    groups = cv.experience[0].bullet_groups
+    headings = [g.heading for g in groups]
+    assert headings == ["API Development", "Collaboration"]
+    assert any("REST APIs" in b for g in groups for b in g.bullets)
+    assert any("Collaborated" in b for g in groups for b in g.bullets)
+    # Theme-supported bullets leave the flat list (or only unmatched leftovers).
+    assert not any("REST APIs" in b for b in cv.experience[0].bullets)
+    assert not any("Collaborated" in b for b in cv.experience[0].bullets)
 
 
-def _experience_bullet_count(exp: ExperienceItem) -> int:
-    return len(exp.bullets) + sum(len(group.bullets) for group in exp.bullet_groups)
+def test_experience_flat_bullets_when_themes_absent_or_unsupported():
+    provider = FakeProvider()
+    no_themes = provider.draft(
+        evidence={
+            "full_name": "Jane Doe",
+            "contact": {"email": "jane@example.com"},
+            "skills": ["Python"],
+            "experience": [
+                {
+                    "company": "Acme",
+                    "title": "Engineer",
+                    "bullets": ["Built APIs", "Owned releases"],
+                    "bullet_groups": [
+                        {"heading": "Delivery", "bullets": ["Shipped trains"]}
+                    ],
+                }
+            ],
+            "raw_text": "Jane Doe jane@example.com Acme Python Built APIs Owned releases",
+        },
+        jd_analysis={"keywords": ["Python"], "responsibility_themes": []},
+        output_language="en",
+    )
+    assert no_themes.experience[0].bullet_groups == []
+    flat = no_themes.experience[0].bullets
+    assert "Built APIs" in flat
+    assert "Owned releases" in flat
+    assert "Shipped trains" in flat
+
+    unsupported = provider.draft(
+        evidence={
+            "full_name": "Jane Doe",
+            "contact": {"email": "jane@example.com"},
+            "skills": ["Python"],
+            "experience": [
+                {
+                    "company": "Acme",
+                    "title": "Engineer",
+                    "bullets": ["Built APIs", "Owned releases"],
+                }
+            ],
+            "raw_text": "Jane Doe jane@example.com Acme Python Built APIs Owned releases",
+        },
+        jd_analysis={
+            "keywords": ["Python"],
+            "responsibility_themes": ["People Leadership", "Sales Strategy"],
+        },
+        output_language="en",
+    )
+    assert unsupported.experience[0].bullet_groups == []
+    assert unsupported.experience[0].bullets == ["Built APIs", "Owned releases"]
+
+
+def test_run_generation_theme_groups_from_jd_responsibility_themes():
+    base_cv = (
+        "# Jane Doe\n"
+        "jane@example.com\n\n"
+        "## Skills\n"
+        "Python, FastAPI\n\n"
+        "## Experience\n"
+        "### Software Engineer — Acme\n"
+        "- Built REST APIs in Python\n"
+        "- Collaborated with designers on UX\n"
+        "- Tuned database queries\n\n"
+        "## Education\n"
+        "### BS, Example University\n"
+    ).encode("utf-8")
+    jd = (
+        "Software Engineer\n\n"
+        "Responsibilities:\n"
+        "API Development\n"
+        "- Design and build service APIs\n"
+        "Collaboration\n"
+        "- Partner with cross-functional teams\n\n"
+        "Requirements:\n"
+        "- Python and FastAPI experience\n"
+    )
+    result = run_generation(
+        provider=FakeProvider(),
+        base_cv_bytes=base_cv,
+        filename="cv.md",
+        content_type="text/markdown",
+        job_description=jd,
+        additional_information=None,
+        output_format=OutputFormat.MARKDOWN,
+        correlation_id="00000000-0000-0000-0000-000000000049",
+        workflow_version="cv-graph-v2",
+    )
+    assert result.canonical_cv is not None
+    assert result.canonical_cv.experience
+    groups = result.canonical_cv.experience[0].bullet_groups
+    assert [g.heading for g in groups] == ["API Development", "Collaboration"]
+    text = result.content.decode("utf-8")
+    assert "API Development" in text
+    assert "Collaboration" in text
+    assert "Built REST APIs" in text
+
+
+def test_jd_relevant_roles_prefer_three_to_four_bullets_low_signal_thinned():
+    provider = FakeProvider()
+    cv = provider.draft(
+        evidence={
+            "full_name": "Jane Doe",
+            "contact": {"email": "jane@example.com"},
+            "skills": ["Python"],
+            "experience": [
+                {
+                    "company": "Analytical Engines",
+                    "title": "Software Engineer",
+                    "bullets": [
+                        "Built Python services",
+                        "Designed FastAPI endpoints",
+                        "Tuned PostgreSQL queries",
+                        "Wrote Docker compose stacks",
+                        "Mentored juniors on code review",
+                        "Presented architecture talks",
+                    ],
+                },
+                {
+                    "company": "Bakery",
+                    "title": "Baker",
+                    "bullets": [
+                        "Baked bread daily",
+                        "Opened the shop",
+                        "Cleaned ovens",
+                        "Ordered flour",
+                        "Scheduled shifts",
+                        "Balanced register",
+                    ],
+                },
+            ],
+            "raw_text": (
+                "Jane Doe jane@example.com Analytical Engines Software Engineer "
+                "Python FastAPI PostgreSQL Docker Bakery Baker bread"
+            ),
+        },
+        jd_analysis={
+            "keywords": ["Python", "FastAPI", "PostgreSQL", "Docker"],
+            "target_title": "Software Engineer",
+        },
+        output_language="en",
+    )
+    by_company = {e.company: e for e in cv.experience}
+    assert "Analytical Engines" in by_company
+    relevant_count = _experience_bullet_count(by_company["Analytical Engines"])
+    assert 3 <= relevant_count <= 4
+    if "Bakery" in by_company:
+        assert _experience_bullet_count(by_company["Bakery"]) < relevant_count
+    # Never invent employers or duties.
+    assert all(e.company in {"Analytical Engines", "Bakery"} for e in cv.experience)
+    blob = " ".join(
+        b for e in cv.experience for b in e.bullets
+    ) + " ".join(b for e in cv.experience for g in e.bullet_groups for b in g.bullets)
+    assert "Kubernetes" not in blob
+    assert "Invented" not in blob
 
 
 def test_fake_provider_densify_respects_per_role_bullet_cap_with_groups():
@@ -650,22 +956,24 @@ def test_fake_provider_densify_respects_per_role_bullet_cap_with_groups():
                 {
                     "company": "Acme",
                     "title": "Engineer",
-                    "bullets": [f"Flat bullet {i}" for i in range(4)],
-                    "bullet_groups": [
-                        {
-                            "heading": "Delivery",
-                            "bullets": [f"Grouped bullet {i}" for i in range(4)],
-                        }
-                    ],
+                    "bullets": [f"Delivery outcome {i}" for i in range(4)]
+                    + [f"Platform outcome {i}" for i in range(4)],
                 }
             ],
-            "raw_text": "Jane Doe jane@example.com Acme Python",
+            "raw_text": "Jane Doe jane@example.com Acme Python "
+            + " ".join(f"Delivery outcome {i}" for i in range(4))
+            + " "
+            + " ".join(f"Platform outcome {i}" for i in range(4)),
         },
-        jd_analysis={"keywords": ["Python"]},
+        jd_analysis={
+            "keywords": ["Python"],
+            "responsibility_themes": ["Delivery", "Platform"],
+        },
         output_language="en",
     )
     assert len(cv.experience) == 1
     assert _experience_bullet_count(cv.experience[0]) <= 4
+    assert cv.experience[0].bullet_groups
     issues = validate_canonical_cv(
         cv,
         {
@@ -673,9 +981,9 @@ def test_fake_provider_densify_respects_per_role_bullet_cap_with_groups():
             "contact": {"email": "jane@example.com"},
             "skills": ["Python"],
             "raw_text": "Jane Doe jane@example.com Acme Python "
-            + " ".join(f"Flat bullet {i}" for i in range(4))
+            + " ".join(f"Delivery outcome {i}" for i in range(4))
             + " "
-            + " ".join(f"Grouped bullet {i}" for i in range(4)),
+            + " ".join(f"Platform outcome {i}" for i in range(4)),
             "experience": [{"company": "Acme", "title": "Engineer"}],
         },
     )
@@ -773,6 +1081,30 @@ def test_jd_analysis_targeting_only(sample_jd):
     assert out["output_language"] == "en"
     assert "Python" in out["jd_analysis"]["keywords"] or "python" in [
         k.lower() for k in out["jd_analysis"]["keywords"]
+    ]
+    # Flat requirements JD has no clear responsibility theme headers.
+    assert out["jd_analysis"]["responsibility_themes"] == []
+
+
+def test_jd_analysis_extracts_responsibility_themes():
+    state: GraphState = {
+        "job_description": (
+            "Software Engineer\n\n"
+            "Responsibilities:\n"
+            "API Development\n"
+            "- Design service APIs\n"
+            "Collaboration\n"
+            "- Partner with product\n\n"
+            "Requirements:\n"
+            "- Python experience\n"
+        ),
+        "additional_information": None,
+    }
+    out = node_analyze_jd(state)
+    assert out["jd_analysis"]["note"] == "targeting_only"
+    assert out["jd_analysis"]["responsibility_themes"] == [
+        "API Development",
+        "Collaboration",
     ]
 
 

@@ -10,6 +10,7 @@ from cv_generation.models.canonical_cv import (
     CanonicalCV,
     ContactInfo,
     EducationItem,
+    ExperienceBulletGroup,
     ExperienceItem,
     ProjectItem,
 )
@@ -98,8 +99,17 @@ class FakeProvider(DraftingProvider):
         # Evidence-only: JD-order matches first; drop unrelated when any match exists.
         ordered = _order_skills_for_jd(evidence_skills, keyword_list, expansions)
 
-        experience_items = [
-            ExperienceItem(
+        themes = [
+            str(t).strip()
+            for t in (jd_analysis.get("responsibility_themes") or [])
+            if str(t).strip()
+        ]
+        target_title = jd_analysis.get("target_title")
+        experience_items = []
+        for item in evidence.get("experience") or []:
+            if not isinstance(item, dict) or not str(item.get("company") or "").strip():
+                continue
+            raw = ExperienceItem(
                 company=str(item.get("company") or "").strip(),
                 title=str(item.get("title") or "").strip() or "Role",
                 start_date=item.get("start_date"),
@@ -108,13 +118,19 @@ class FakeProvider(DraftingProvider):
                 bullets=list(item.get("bullets") or []),
                 bullet_groups=list(item.get("bullet_groups") or []),
             )
-            for item in (evidence.get("experience") or [])
-            if isinstance(item, dict) and str(item.get("company") or "").strip()
-        ]
+            themed = _apply_experience_theme_groups(raw, themes)
+            aligned_title = _align_experience_title(
+                themed,
+                target_title=target_title,
+                keywords=keywords,
+            )
+            experience_items.append(
+                themed.model_copy(update={"title": aligned_title})
+            )
         experience = _densify_experience_for_one_page(
             experience_items,
             keywords=keywords,
-            target_title=jd_analysis.get("target_title"),
+            target_title=target_title,
         )
 
         education = [
@@ -321,6 +337,170 @@ def _order_skills_for_jd(
     return ordered
 
 
+_ROLE_FAMILIES: tuple[frozenset[str], ...] = (
+    frozenset({"engineer", "developer", "programmer", "swe", "sre"}),
+    frozenset({"analyst", "scientist", "researcher"}),
+    frozenset({"manager", "lead", "director", "head"}),
+    frozenset({"designer", "ux", "ui"}),
+    frozenset({"consultant", "specialist", "architect"}),
+    frozenset({"baker", "barista", "chef", "cook"}),
+)
+
+
+def _title_tokens(title: str) -> set[str]:
+    return {t for t in re.findall(r"[a-z0-9]+", title.lower()) if t}
+
+
+def _role_family(title: str) -> int | None:
+    tokens = _title_tokens(title)
+    for index, family in enumerate(_ROLE_FAMILIES):
+        if tokens & family:
+            return index
+    return None
+
+
+def _experience_haystack(exp: ExperienceItem) -> str:
+    return " ".join(
+        [
+            exp.title or "",
+            exp.company or "",
+            *exp.bullets,
+            *(group.heading for group in exp.bullet_groups),
+            *(bullet for group in exp.bullet_groups for bullet in group.bullets),
+        ]
+    ).lower()
+
+
+def _duties_clearly_match(
+    exp: ExperienceItem,
+    *,
+    target_title: str,
+    keywords: set[str],
+) -> bool:
+    """True when evidenced duties clearly support adopting the JD title."""
+    evidenced = (exp.title or "").strip()
+    if not evidenced:
+        return False
+    jd = target_title.strip()
+    jd_low = jd.lower()
+    ev_low = evidenced.lower()
+    if jd_low in ev_low or ev_low in jd_low:
+        return True
+
+    haystack = _experience_haystack(exp)
+    keyword_hits = sum(1 for key in keywords if key and key in haystack)
+    jd_family = _role_family(jd)
+    ev_family = _role_family(evidenced)
+    # Same role family plus clear duty overlap (not a single weak keyword hit).
+    if jd_family is not None and jd_family == ev_family and keyword_hits >= 2:
+        return True
+    # Strong duty overlap with a JD role word appearing in the role text.
+    jd_role_words = _title_tokens(jd) & {
+        token for family in _ROLE_FAMILIES for token in family
+    }
+    if keyword_hits >= 2 and jd_role_words and any(w in haystack for w in jd_role_words):
+        return True
+    return False
+
+
+def _align_experience_title(
+    exp: ExperienceItem,
+    *,
+    target_title: Any,
+    keywords: set[str],
+) -> str:
+    jd_title = str(target_title or "").strip()
+    if not jd_title:
+        return exp.title
+    if _duties_clearly_match(exp, target_title=jd_title, keywords=keywords):
+        return jd_title
+    return exp.title
+
+
+def _theme_match_words(theme: str) -> set[str]:
+    stop = {
+        "and",
+        "or",
+        "the",
+        "a",
+        "an",
+        "to",
+        "of",
+        "in",
+        "for",
+        "with",
+        "on",
+        "at",
+        "team",
+        "work",
+        "working",
+    }
+    return {
+        t
+        for t in re.findall(r"[a-z0-9]+", theme.lower())
+        if len(t) > 2 and t not in stop
+    }
+
+
+def _bullet_matches_theme(bullet: str, theme_words: set[str]) -> bool:
+    if not theme_words:
+        return False
+    low = bullet.lower()
+    tokens = set(re.findall(r"[a-z0-9]+", low))
+    for word in theme_words:
+        if word in low:
+            return True
+        # Light stemming so Collaboration ↔ Collaborated, Develop ↔ Development.
+        for token in tokens:
+            if len(word) >= 5 and len(token) >= 5 and (
+                token.startswith(word[:5]) or word.startswith(token[:5])
+            ):
+                return True
+    return False
+
+
+def _flatten_experience_bullets(exp: ExperienceItem) -> list[str]:
+    pool: list[str] = []
+    seen: set[str] = set()
+    for bullet in [*exp.bullets, *(b for g in exp.bullet_groups for b in g.bullets)]:
+        key = bullet.strip().lower()
+        if not bullet.strip() or key in seen:
+            continue
+        seen.add(key)
+        pool.append(bullet)
+    return pool
+
+
+def _apply_experience_theme_groups(
+    exp: ExperienceItem,
+    themes: list[str],
+) -> ExperienceItem:
+    """Group bullets under JD themes when evidence supports them; else flat bullets."""
+    pool = _flatten_experience_bullets(exp)
+    if not themes:
+        return exp.model_copy(update={"bullets": pool, "bullet_groups": []})
+
+    used: set[int] = set()
+    groups: list[ExperienceBulletGroup] = []
+    for theme in themes:
+        words = _theme_match_words(theme)
+        matched: list[str] = []
+        for index, bullet in enumerate(pool):
+            if index in used:
+                continue
+            if _bullet_matches_theme(bullet, words):
+                matched.append(bullet)
+                used.add(index)
+        if matched:
+            groups.append(ExperienceBulletGroup(heading=theme, bullets=matched))
+
+    if not groups:
+        return exp.model_copy(update={"bullets": pool, "bullet_groups": []})
+
+    leftovers = [bullet for index, bullet in enumerate(pool) if index not in used]
+    return exp.model_copy(update={"bullets": leftovers, "bullet_groups": groups})
+
+
 def _experience_relevance(
     exp: ExperienceItem,
     *,
@@ -332,17 +512,18 @@ def _experience_relevance(
     if target_title and str(target_title).strip():
         if str(target_title).strip().lower() in (exp.title or "").lower():
             title_hit = 1
-    haystack = " ".join(
-        [
-            exp.title or "",
-            exp.company or "",
-            *exp.bullets,
-            *(group.heading for group in exp.bullet_groups),
-            *(bullet for group in exp.bullet_groups for bullet in group.bullets),
-        ]
-    ).lower()
+    haystack = _experience_haystack(exp)
     keyword_hits = sum(1 for key in keywords if key and key in haystack)
     return (title_hit, keyword_hits)
+
+
+def _role_bullet_cap(relevance: tuple[int, int], *, is_top_relevant: bool) -> int:
+    """Prefer ~3–4 on strongest JD-fit roles; thin low-signal keepers."""
+    if is_top_relevant or relevance[0] or relevance[1] >= 2:
+        return 4
+    if relevance[1] >= 1:
+        return 2
+    return 1
 
 
 def _densify_experience_for_one_page(
@@ -353,37 +534,44 @@ def _densify_experience_for_one_page(
 ) -> list[ExperienceItem]:
     """Keep FakeProvider drafts inside the deterministic one-page bullet budget.
 
-    Caps total bullets per role (flat + groups), never omits a selected role just
-    because the shared bullet pool is exhausted, and drops surplus roles by JD
-    relevance while preserving evidence order among keepers.
+    Prefers ~3–4 bullets on the most JD-relevant roles, allocates the shared
+    bullet pool by relevance first, thins low-signal keepers, and drops surplus
+    roles by JD relevance while preserving evidence order among keepers.
     """
     max_roles = 4
-    max_per_role = 4
     max_total = 12
     keyword_set = keywords or set()
 
-    ranked = sorted(
-        enumerate(items),
-        key=lambda pair: (
+    scored = [
+        (
+            index,
+            exp,
             _experience_relevance(
-                pair[1],
+                exp,
                 keywords=keyword_set,
                 target_title=target_title,
             ),
-            pair[0],
-        ),
-        reverse=True,
-    )
-    keep_indices = {index for index, _ in ranked[:max_roles]}
-    selected = [exp for index, exp in enumerate(items) if index in keep_indices]
+        )
+        for index, exp in enumerate(items)
+    ]
+    ranked = sorted(scored, key=lambda row: (row[2], row[0]), reverse=True)
+    keep_indices = {index for index, _, _ in ranked[:max_roles]}
+    top_relevant_index = ranked[0][0] if ranked else None
 
+    # Allocate bullets in relevance order so JD-fit roles densify first.
+    trimmed_by_index: dict[int, ExperienceItem] = {}
     remaining_total = max_total
-    densified: list[ExperienceItem] = []
-    for exp in selected:
-        role_budget = min(max_per_role, remaining_total)
-        flat = list(exp.bullets)[:role_budget]
-        used = len(flat)
-        groups = []
+    for index, exp, rel in ranked:
+        if index not in keep_indices:
+            continue
+        role_cap = _role_bullet_cap(
+            rel,
+            is_top_relevant=index == top_relevant_index,
+        )
+        role_budget = min(role_cap, remaining_total)
+        # Prefer theme-group bullets when present, then flat leftovers.
+        groups: list[ExperienceBulletGroup] = []
+        used = 0
         for group in exp.bullet_groups:
             left = role_budget - used
             if left <= 0:
@@ -393,11 +581,18 @@ def _densify_experience_for_one_page(
                 continue
             used += len(bullets)
             groups.append(group.model_copy(update={"bullets": bullets}))
+        flat = list(exp.bullets)[: max(0, role_budget - used)]
+        used += len(flat)
         remaining_total -= used
-        densified.append(
-            exp.model_copy(update={"bullets": flat, "bullet_groups": groups})
+        trimmed_by_index[index] = exp.model_copy(
+            update={"bullets": flat, "bullet_groups": groups}
         )
-    return densified
+
+    return [
+        trimmed_by_index[index]
+        for index, exp in enumerate(items)
+        if index in trimmed_by_index
+    ]
 
 
 def extract_name_heuristic(text: str) -> str | None:

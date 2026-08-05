@@ -52,6 +52,10 @@ def render_docx(cv: CanonicalCV) -> bytes:
                 _add_body_paragraph(doc, exp.location)
             for bullet in exp.bullets:
                 _add_bullet(doc, bullet)
+            for group in exp.bullet_groups:
+                _add_theme_heading(doc, group.heading)
+                for bullet in group.bullets:
+                    _add_bullet(doc, bullet)
 
     if cv.education:
         _heading(doc, "Education")
@@ -152,6 +156,14 @@ def _add_experience_header(doc: Document, exp: ExperienceItem) -> None:
     label = f"{exp.title}, {exp.company}"
     dates = " - ".join(filter(None, [exp.start_date, exp.end_date]))
     _add_dated_line(doc, label=label, dates=dates)
+
+
+def _add_theme_heading(doc: Document, heading: str) -> Paragraph:
+    """JD-mirrored theme label under a role — bold body text, not a section heading."""
+    p = doc.add_paragraph()
+    _tighten(p, space_before=Pt(2), space_after=Pt(1))
+    _apply_ats_run(p.add_run(heading), bold=True)
+    return p
 
 
 def _add_education_block(doc: Document, edu: EducationItem) -> None:

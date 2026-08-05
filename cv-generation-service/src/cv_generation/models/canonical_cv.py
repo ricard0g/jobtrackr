@@ -20,7 +20,7 @@ class ContactInfo(BaseModel):
 
 
 class ExperienceBulletGroup(BaseModel):
-    """Optional JD-mirrored theme heading with supporting bullets (rendered in later tickets)."""
+    """Optional JD-mirrored theme heading with supporting grounded bullets."""
 
     heading: str
     bullets: list[str] = Field(default_factory=list)
