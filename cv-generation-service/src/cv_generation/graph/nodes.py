@@ -665,13 +665,38 @@ def _extract_skill_expansions(jd: str) -> list[dict[str, str]]:
     return expansions
 
 
+_TITLE_BOILERPLATE_RE = re.compile(
+    r"^(?:about(?:\s+the)?\s+job.*|overview|description|job\s+description|"
+    r"position\s+overview|your\s+role|the\s+role|responsibilities|requirements|"
+    r"essential\s+functions|hybrid\s+working|about\s+us|who\s+we\s+are)\s*:?\s*$",
+    re.IGNORECASE,
+)
+
+_ROLE_PHRASE_RE = re.compile(
+    r"\b("
+    r"(?:(?:Senior|Junior|Staff|Principal|Lead|IT)\s+)?"
+    r"[A-Z][A-Za-z0-9+/#.&'-]*(?:\s+[A-Z][A-Za-z0-9+/#.&'-]*){0,5}\s*"
+    r"(?:Engineer|Analyst|Manager|Developer|Designer|Scientist|Architect|"
+    r"Consultant|Specialist|Officer|Administrator|Director)\d*"
+    r")\b"
+)
+
+
 def _guess_title(jd: str) -> str | None:
-    first_line = jd.strip().splitlines()[0].strip() if jd.strip() else ""
-    if 3 < len(first_line) < 80:
-        return first_line
-    m = re.search(r"(?:title|position|role)\s*[:=]\s*(.+)", jd, re.I)
-    if m:
-        return m.group(1).strip()[:80]
+    """Best-effort JD role title for targeting — never a candidate fact source."""
+    lines = [ln.strip() for ln in jd.strip().splitlines() if ln.strip()]
+    for line in lines[:15]:
+        if _TITLE_BOILERPLATE_RE.match(line):
+            continue
+        if 3 < len(line) < 80 and not line.endswith("."):
+            return line[:80]
+        match = _ROLE_PHRASE_RE.search(line[:160])
+        if match:
+            return match.group(1).strip()[:80]
+
+    labeled = re.search(r"(?:title|position|role)\s*[:=]\s*(.+)", jd, re.I)
+    if labeled:
+        return labeled.group(1).strip()[:80]
     return None
 
 

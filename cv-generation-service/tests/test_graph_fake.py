@@ -166,6 +166,20 @@ def test_professional_summary_is_two_to_three_grounded_role_targeted_sentences(
     assert not re.search(r"\bATS\s*(score|match)?\s*[:\-]?\s*\d+", blob, re.I)
 
 
+def test_jd_boilerplate_first_line_is_not_used_as_target_title():
+    """JD intros like 'About the Job...' must not become targeting title."""
+    jd = (
+        "About the Job you are considering:\n\n"
+        "Business Data Analyst is responsible for collecting data.\n\n"
+        "Your Role:\n"
+        "- Gather requirements\n"
+    )
+    analysis = node_analyze_jd(
+        {"job_description": jd, "additional_information": None}
+    )["jd_analysis"]
+    assert analysis["target_title"] == "Business Data Analyst"
+
+
 def test_contact_only_base_cv_is_rejected(sample_jd):
     base_cv = (
         b"Ricardo Guzman\n"

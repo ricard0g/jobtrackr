@@ -136,3 +136,4 @@ class CanonicalCV(BaseModel):
 
     def has_contact_channel(self) -> bool:
         return bool(self.contact.email or self.contact.phone)
+
