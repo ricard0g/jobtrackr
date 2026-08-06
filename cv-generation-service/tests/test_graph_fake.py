@@ -220,6 +220,52 @@ def test_experience_parser_skips_location_and_date_meta_lines():
     assert not any(r["title"] == "Role" and "London" in r["company"] for r in roles)
 
 
+def test_plain_text_experience_keeps_roles_after_volunteer_title_line():
+    """A Volunteer job title must not truncate Experience at the section boundary."""
+    from cv_generation.graph.nodes import _extract_experience
+
+    text = (
+        "Experience\n"
+        "Software Engineer\n"
+        "Acme\n"
+        "- Built Python services\n"
+        "Volunteer\n"
+        "Coding Club\n"
+        "- Tutored juniors weekly\n"
+        "Education\n"
+        "BS, Example University\n"
+    )
+    roles = _extract_experience(text)
+    assert len(roles) >= 2
+    titles = {r["title"] for r in roles}
+    companies = {r["company"] for r in roles}
+    assert "Software Engineer" in titles or "Acme" in companies
+    assert any(
+        "Coding Club" in r.get("company", "") or r.get("title") == "Volunteer"
+        for r in roles
+    )
+
+
+def test_projects_parser_keeps_description_under_title():
+    from cv_generation.graph.nodes import _extract_projects
+
+    text = (
+        "## Projects\n"
+        "### Difference Engine\n"
+        "Mechanical calculation prototype\n"
+        "- Designed punched-card programs\n"
+        "- Documented operating procedures\n"
+    )
+    projects = _extract_projects(text)
+    assert len(projects) == 1
+    assert projects[0]["name"] == "Difference Engine"
+    assert projects[0]["description"] == "Mechanical calculation prototype"
+    assert projects[0]["bullets"] == [
+        "Designed punched-card programs",
+        "Documented operating procedures",
+    ]
+
+
 def test_contact_only_base_cv_is_rejected(sample_jd):
     base_cv = (
         b"Ricardo Guzman\n"

@@ -10,6 +10,7 @@ from fastapi.responses import JSONResponse
 
 from cv_generation import __version__
 from cv_generation.api import generate, health
+from cv_generation.log_privacy import redact_service_error_for_log
 from cv_generation.models.errors import ErrorBody, ErrorCode, ServiceError
 
 logging.basicConfig(
@@ -29,12 +30,16 @@ def create_app() -> FastAPI:
     @app.exception_handler(ServiceError)
     async def service_error_handler(_request: Request, exc: ServiceError) -> JSONResponse:
         body = exc.to_body()
+        safe_message, safe_details = redact_service_error_for_log(
+            message=body.message,
+            details=body.details,
+        )
         logger.warning(
             "ServiceError code=%s status=%s message=%s details=%s",
             body.code,
             exc.status_code,
-            body.message,
-            body.details,
+            safe_message,
+            safe_details,
         )
         return JSONResponse(
             status_code=exc.status_code,

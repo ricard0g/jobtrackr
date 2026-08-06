@@ -14,6 +14,7 @@ from cv_generation.extraction.extract import (
 )
 from cv_generation.graph.state import GraphState
 from cv_generation.graph.validation import validate_canonical_cv
+from cv_generation.log_privacy import summarize_validation_issues_for_log
 from cv_generation.models.canonical_cv import CanonicalCV
 from cv_generation.models.errors import ErrorCode, ServiceError
 from cv_generation.providers.base import DraftingProvider
@@ -278,13 +279,16 @@ def node_validate(state: GraphState) -> dict[str, Any]:
     max_revisions = int(state.get("max_revisions") or 2)
     needs = bool(issues) and revision_count < max_revisions
     if issues:
+        summary = summarize_validation_issues_for_log(issues)
         logger.warning(
-            "Canonical CV validation issues correlation_id=%s revision=%s/%s needs_revision=%s issues=%s",
+            "Canonical CV validation issues correlation_id=%s revision=%s/%s "
+            "needs_revision=%s issue_total=%s issue_counts=%s",
             state.get("correlation_id"),
             revision_count,
             max_revisions,
             needs,
-            issues[:12],
+            summary["issue_total"],
+            summary["issue_counts"],
         )
     if issues and not needs:
         raise ServiceError(
@@ -540,7 +544,6 @@ def _section_body(text: str, headers: tuple[str, ...]) -> str | None:
         "academic background",
         "awards",
         "awards/volunteer",
-        "volunteer",
         "volunteering",
         "honors",
         "honours",
@@ -822,16 +825,24 @@ def _extract_projects(text: str) -> list[dict[str, Any]]:
             else:
                 current["bullets"].append(bullet)
             continue
-        header = re.sub(r"[*#]", "", line).strip()
+        is_heading = bool(re.match(r"^#+\s+\S", line))
+        header = re.sub(r"^#+\s*", "", line)
+        header = re.sub(r"[*]", "", header).strip()
         if not header:
             continue
-        current = {
-            "name": header,
-            "description": None,
-            "bullets": [],
-            "technologies": [],
-        }
-        items.append(current)
+        # New project on first entry, markdown heading, or after bullets already started.
+        if current is None or is_heading or current["bullets"]:
+            current = {
+                "name": header,
+                "description": None,
+                "bullets": [],
+                "technologies": [],
+            }
+            items.append(current)
+        elif current["description"] is None:
+            current["description"] = header
+        else:
+            current["description"] = f"{current['description']} {header}".strip()
     return items[:10]
 
 
