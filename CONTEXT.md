@@ -21,5 +21,13 @@ The creation of a Generated CV using a real drafting model. If that model is una
 _Avoid_: Export, conversion
 
 **Output Format**:
-The file representation of a Generated CV, such as PDF, DOCX, or Markdown. It changes serialization, not the Generated CV's selected content or section structure.
-_Avoid_: Template, layout
+The file representation of a Generated CV, such as PDF, DOCX, or Markdown. Section order and selected content stay the same across formats. DOCX matches the ATS resume template styles exactly; PDF and Markdown match those styles as closely as the medium allows.
+_Avoid_: Template, layout, format-specific section structure
+
+**ATS Structure**:
+The fixed section order and presentation contract for a Generated CV. Always-on core: Professional Summary, Experience, Education, Skills. Conditional trailing order when present: Awards/Volunteer, then Projects, Certifications, Languages, then Values Alignment. Presentation (alignment, weights, labels, fonts) follows the project's ATS resume template. Structure and presentation are enforced deterministically in schema and renderers; content selection follows Grounded Tailoring in drafting.
+_Avoid_: Fancy layout, Canva template, free-form sections, prompt-only layout
+
+**Grounded Tailoring**:
+Drafting that reorders, emphasizes, and may adopt job-description phrasing only when Candidate Evidence already supports the underlying fact. It does not invent employers, metrics, skills, or duties. Quantified results appear only when the number exists in Candidate Evidence.
+_Avoid_: Keyword stuffing, verbatim paste without evidence, loose title matching, estimated metrics

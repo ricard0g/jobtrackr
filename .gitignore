@@ -44,3 +44,6 @@ scripts/acceptance/fixtures/acceptance-generated.docx
 scripts/acceptance/__pycache__/
 scripts/acceptance/**/__pycache__/
 *.pyc
+
+# Temporary CV-gen research pack (extract into playbook; do not commit binaries)
+docs/temporary-cv-gen-improvement-docs/

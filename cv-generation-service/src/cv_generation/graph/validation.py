@@ -19,6 +19,13 @@ _SENSITIVE_RE = re.compile(
     re.IGNORECASE,
 )
 
+# Deterministic one-page content budget (feeds revise before render/verify).
+_MAX_SUMMARY_CHARS = 450
+_MAX_EXPERIENCE_ROLES = 4
+_MAX_BULLETS_PER_ROLE = 4
+_MAX_TOTAL_EXPERIENCE_BULLETS = 12
+_MAX_DRAFT_BODY_CHARS = 3_500
+
 
 def _phrase_in_corpus(phrase: str, corpus: str) -> bool:
     """Require whole-phrase match, not an accidental substring of another token."""
@@ -27,6 +34,54 @@ def _phrase_in_corpus(phrase: str, corpus: str) -> bool:
         return False
     pattern = re.compile(rf"(?<![a-z0-9]){re.escape(normalized)}(?![a-z0-9])", re.IGNORECASE)
     return bool(pattern.search(corpus))
+
+
+_EXPANDED_SKILL_RE = re.compile(
+    r"^(?P<full>.+?)\s*\((?P<acronym>[A-Za-z0-9+.#]{2,20})\)$"
+)
+
+
+def _skill_grounded(
+    skill: str,
+    evidence_skills: set[str],
+    corpus: str,
+    *,
+    jd_analysis: dict[str, Any] | None = None,
+) -> bool:
+    """Accept exact evidence skills or grounded Full Term (ACRONYM) expansions."""
+    low = skill.lower().strip()
+    if low in evidence_skills or _phrase_in_corpus(skill, corpus):
+        return True
+    match = _EXPANDED_SKILL_RE.match(skill.strip())
+    if not match:
+        return False
+    full = match.group("full").strip().lower()
+    acronym = match.group("acronym").strip().lower()
+    base_grounded = (
+        full in evidence_skills
+        or acronym in evidence_skills
+        or _phrase_in_corpus(full, corpus)
+        or _phrase_in_corpus(acronym, corpus)
+    )
+    if not base_grounded:
+        return False
+    # Both sides of the expansion must be supported (evidence/corpus), or the
+    # JD must supply this exact naming for an already-evidenced skill.
+    naming_in_evidence = (
+        (full in evidence_skills or _phrase_in_corpus(full, corpus))
+        and (acronym in evidence_skills or _phrase_in_corpus(acronym, corpus))
+    )
+    if naming_in_evidence:
+        return True
+    for item in (jd_analysis or {}).get("skill_expansions") or []:
+        if not isinstance(item, dict):
+            continue
+        if (
+            str(item.get("full") or "").strip().lower() == full
+            and str(item.get("acronym") or "").strip().lower() == acronym
+        ):
+            return True
+    return False
 
 
 def validate_canonical_cv(
@@ -66,7 +121,7 @@ def validate_canonical_cv(
 
     # Skills must be grounded in structured evidence or as whole phrases in corpus
     for skill in cv.skills:
-        if skill.lower() not in evidence_skills and not _phrase_in_corpus(skill, corpus):
+        if not _skill_grounded(skill, evidence_skills, corpus, jd_analysis=jd_analysis):
             issues.append(f"skill not in evidence: {skill}")
 
     # Employers must appear in evidence
@@ -85,28 +140,85 @@ def validate_canonical_cv(
     ):
         issues.append("numeric ATS scores are forbidden")
 
-    for field in (cv.professional_summary or "", *[b for exp in cv.experience for b in exp.bullets]):
+    visible_text_fields = [
+        *(cv.professional_summary or "",),
+        *(b for exp in cv.experience for b in exp.bullets),
+        *(
+            text
+            for exp in cv.experience
+            for group in exp.bullet_groups
+            for text in (group.heading, *group.bullets)
+        ),
+        *(award.title for award in cv.awards),
+        *(
+            text
+            for item in cv.values_alignment
+            for text in (item.value, item.behaviour)
+        ),
+    ]
+    for field in visible_text_fields:
         if _SENSITIVE_RE.search(field):
             issues.append("sensitive personal attributes must be omitted")
             break
 
-    # Fabricated metrics: numbers in bullets that aren't in corpus
-    for exp in cv.experience:
-        for bullet in exp.bullets:
-            if _METRIC_RE.search(bullet):
-                nums = re.findall(r"\d+(?:\.\d+)?%?", bullet)
-                if nums and not any(n in corpus for n in nums):
-                    issues.append(f"metric not grounded in evidence: {bullet[:80]}")
+    # Fabricated metrics: numbers in user-visible prose that aren't in corpus
+    metric_fields = [
+        *(cv.professional_summary or "",),
+        *(b for exp in cv.experience for b in exp.bullets),
+        *(
+            text
+            for exp in cv.experience
+            for group in exp.bullet_groups
+            for text in (group.heading, *group.bullets)
+        ),
+        *(award.title for award in cv.awards),
+        *(item.behaviour for item in cv.values_alignment),
+    ]
+    for field in metric_fields:
+        if _METRIC_RE.search(field):
+            nums = re.findall(r"\d+(?:\.\d+)?%?", field)
+            if nums and not any(n in corpus for n in nums):
+                issues.append(f"metric not grounded in evidence: {field[:80]}")
+
+    evidence_awards = {
+        str(item.get("title") or "").strip().lower()
+        for item in (evidence.get("awards") or [])
+        if isinstance(item, dict) and str(item.get("title") or "").strip()
+    }
+    for award in cv.awards:
+        title = award.title.strip()
+        if title.lower() not in evidence_awards and not _phrase_in_corpus(title, corpus):
+            issues.append(f"award not in evidence: {title}")
+
+    for item in cv.values_alignment:
+        if not _phrase_in_corpus(item.behaviour, corpus):
+            issues.append(
+                f"values alignment behaviour not grounded in evidence: {item.behaviour[:80]}"
+            )
+
+    if jd_analysis is not None:
+        jd_values = {
+            str(v).strip().lower()
+            for v in (jd_analysis.get("value_statements") or [])
+            if str(v).strip()
+        }
+        if cv.values_alignment and not jd_values:
+            issues.append(
+                "values alignment requires JD value statements"
+            )
+        for item in cv.values_alignment:
+            if item.value.strip().lower() not in jd_values:
+                issues.append(
+                    f"values alignment value not in JD: {item.value[:80]}"
+                )
 
     # JD skills must not be injected if absent from evidence
     if jd_analysis:
         jd_skills = {s.lower() for s in (jd_analysis.get("keywords") or [])}
         for skill in cv.skills:
-            if (
-                skill.lower() in jd_skills
-                and skill.lower() not in evidence_skills
-                and not _phrase_in_corpus(skill, corpus)
-            ):
+            if _skill_grounded(skill, evidence_skills, corpus, jd_analysis=jd_analysis):
+                continue
+            if skill.lower() in jd_skills:
                 issues.append(f"JD skill fabricated into CV: {skill}")
 
     # Supported professional links present in evidence should survive
@@ -125,5 +237,84 @@ def validate_canonical_cv(
 
     if not (cv.experience or cv.education or cv.projects):
         issues.append("CV must include at least one experience, education, or project entry")
+
+    issues.extend(_one_page_budget_issues(cv))
+
+    return issues
+
+
+def draft_body_char_count(cv: CanonicalCV) -> int:
+    """Approximate drafted body size excluding contact chrome."""
+    parts: list[str] = [
+        cv.professional_summary or "",
+        ", ".join(cv.skills),
+        ", ".join(cv.languages),
+        ", ".join(cv.certifications),
+    ]
+    for exp in cv.experience:
+        parts.extend(exp.bullets)
+        for group in exp.bullet_groups:
+            parts.append(group.heading)
+            parts.extend(group.bullets)
+    for edu in cv.education:
+        parts.extend(edu.details)
+        parts.extend(
+            bit for bit in (edu.institution, edu.degree, edu.field, edu.end_date) if bit
+        )
+    for proj in cv.projects:
+        parts.append(proj.name)
+        if proj.description:
+            parts.append(proj.description)
+        parts.extend(proj.bullets)
+    for award in cv.awards:
+        parts.append(award.title)
+    for item in cv.values_alignment:
+        parts.extend((item.value, item.behaviour))
+    return sum(len(part) for part in parts if part)
+
+
+def _experience_bullet_count(exp) -> int:
+    return len(exp.bullets) + sum(len(group.bullets) for group in exp.bullet_groups)
+
+
+def _one_page_budget_issues(cv: CanonicalCV) -> list[str]:
+    """Actionable densification issues so revise can shorten before render."""
+    issues: list[str] = []
+    summary = (cv.professional_summary or "").strip()
+    if len(summary) > _MAX_SUMMARY_CHARS:
+        issues.append(
+            "one-page budget: professional summary must be 2-3 short sentences "
+            f"(max {_MAX_SUMMARY_CHARS} characters)"
+        )
+
+    if len(cv.experience) > _MAX_EXPERIENCE_ROLES:
+        issues.append(
+            "one-page budget: keep at most "
+            f"{_MAX_EXPERIENCE_ROLES} experience roles; omit lowest-signal roles"
+        )
+
+    total_bullets = 0
+    for exp in cv.experience:
+        count = _experience_bullet_count(exp)
+        total_bullets += count
+        if count > _MAX_BULLETS_PER_ROLE:
+            issues.append(
+                "one-page budget: use at most "
+                f"{_MAX_BULLETS_PER_ROLE} bullets per role ({exp.company})"
+            )
+
+    if total_bullets > _MAX_TOTAL_EXPERIENCE_BULLETS:
+        issues.append(
+            "one-page budget: total experience bullets must be <= "
+            f"{_MAX_TOTAL_EXPERIENCE_BULLETS}; keep strongest JD-relevant bullets only"
+        )
+
+    body_chars = draft_body_char_count(cv)
+    if body_chars > _MAX_DRAFT_BODY_CHARS:
+        issues.append(
+            "one-page budget: drafted body exceeds "
+            f"{_MAX_DRAFT_BODY_CHARS} characters ({body_chars}); "
+            "shorten summary/bullets and drop low-signal trailing sections"
+        )
 
     return issues

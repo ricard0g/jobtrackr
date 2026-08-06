@@ -19,6 +19,21 @@ class ContactInfo(BaseModel):
         return self
 
 
+class ExperienceBulletGroup(BaseModel):
+    """Optional JD-mirrored theme heading with supporting grounded bullets."""
+
+    heading: str
+    bullets: list[str] = Field(default_factory=list)
+
+    @field_validator("heading")
+    @classmethod
+    def _non_empty(cls, value: str) -> str:
+        stripped = value.strip()
+        if not stripped:
+            raise ValueError("must not be empty")
+        return stripped
+
+
 class ExperienceItem(BaseModel):
     company: str
     title: str
@@ -26,6 +41,7 @@ class ExperienceItem(BaseModel):
     end_date: str | None = None
     location: str | None = None
     bullets: list[str] = Field(default_factory=list)
+    bullet_groups: list[ExperienceBulletGroup] = Field(default_factory=list)
 
     @field_validator("company", "title")
     @classmethod
@@ -61,6 +77,36 @@ class ProjectItem(BaseModel):
     bullets: list[str] = Field(default_factory=list)
 
 
+class AwardItem(BaseModel):
+    """Award, recognition, or volunteer entry for the Awards/Volunteer trailing section."""
+
+    title: str
+    date: str | None = None
+
+    @field_validator("title")
+    @classmethod
+    def _non_empty(cls, value: str) -> str:
+        stripped = value.strip()
+        if not stripped:
+            raise ValueError("must not be empty")
+        return stripped
+
+
+class ValuesAlignmentItem(BaseModel):
+    """Company value paired with an evidenced matching behaviour."""
+
+    value: str
+    behaviour: str
+
+    @field_validator("value", "behaviour")
+    @classmethod
+    def _non_empty(cls, value: str) -> str:
+        stripped = value.strip()
+        if not stripped:
+            raise ValueError("must not be empty")
+        return stripped
+
+
 class CanonicalCV(BaseModel):
     """Single-column ATS-safe CV representation. No photos/age/nationality."""
 
@@ -70,9 +116,11 @@ class CanonicalCV(BaseModel):
     skills: list[str] = Field(default_factory=list)
     experience: list[ExperienceItem] = Field(default_factory=list)
     education: list[EducationItem] = Field(default_factory=list)
+    awards: list[AwardItem] = Field(default_factory=list)
     projects: list[ProjectItem] = Field(default_factory=list)
     certifications: list[str] = Field(default_factory=list)
     languages: list[str] = Field(default_factory=list)
+    values_alignment: list[ValuesAlignmentItem] = Field(default_factory=list)
     output_language: str = Field(
         default="en",
         description="BCP-47-ish language code used for rendering (e.g. en, es, fr).",
@@ -88,3 +136,4 @@ class CanonicalCV(BaseModel):
 
     def has_contact_channel(self) -> bool:
         return bool(self.contact.email or self.contact.phone)
+

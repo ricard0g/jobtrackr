@@ -14,6 +14,7 @@ from cv_generation.extraction.extract import (
 )
 from cv_generation.graph.state import GraphState
 from cv_generation.graph.validation import validate_canonical_cv
+from cv_generation.log_privacy import summarize_validation_issues_for_log
 from cv_generation.models.canonical_cv import CanonicalCV
 from cv_generation.models.errors import ErrorCode, ServiceError
 from cv_generation.providers.base import DraftingProvider
@@ -162,9 +163,24 @@ def node_merge_user_evidence(state: GraphState) -> dict[str, Any]:
         evidence["projects"] = add_projects + base_projects
     if override.get("professional_summary"):
         evidence["professional_summary"] = override["professional_summary"]
+    if override.get("awards"):
+        add_awards = [a for a in override["awards"] if isinstance(a, dict)]
+        add_titles = {str(a.get("title") or "").lower() for a in add_awards}
+        base_awards = [
+            a
+            for a in (evidence.get("awards") or [])
+            if isinstance(a, dict) and str(a.get("title") or "").lower() not in add_titles
+        ]
+        evidence["awards"] = add_awards + base_awards
     if override.get("certifications"):
         evidence["certifications"] = list(
             dict.fromkeys(list(override["certifications"]) + list(evidence.get("certifications") or []))
+        )
+    if override.get("spoken_languages"):
+        evidence["spoken_languages"] = list(
+            dict.fromkeys(
+                list(override["spoken_languages"]) + list(evidence.get("spoken_languages") or [])
+            )
         )
 
     evidence["additional_information"] = additional
@@ -186,11 +202,19 @@ def node_analyze_jd(state: GraphState) -> dict[str, Any]:
 
     keywords = _extract_keywords(jd)
     target_title = _guess_title(jd)
+    skill_expansions = _extract_skill_expansions(jd)
+    responsibility_themes = _extract_responsibility_themes(jd)
+    value_statements = _extract_value_statements(jd)
 
     return {
         "jd_analysis": {
             "keywords": keywords,
+            # skill_phrases aliases keywords for Grounded Tailoring consumers.
+            "skill_phrases": keywords,
             "target_title": target_title,
+            "skill_expansions": skill_expansions,
+            "responsibility_themes": responsibility_themes,
+            "value_statements": value_statements,
             "source": "job_description",
             "note": "targeting_only",
         },
@@ -240,9 +264,32 @@ def node_validate(state: GraphState) -> dict[str, Any]:
             "No canonical CV to validate",
         )
     issues = validate_canonical_cv(cv, state["evidence"], jd_analysis=state.get("jd_analysis"))
+    # Hard ATS one-page contract: densify deterministically before failing/revising.
+    if _one_page_render_issues(cv):
+        from cv_generation.graph.one_page import fit_canonical_cv_to_one_page
+
+        fitted = fit_canonical_cv_to_one_page(cv, jd_analysis=state.get("jd_analysis"))
+        if fitted.model_dump() != cv.model_dump():
+            cv = fitted
+            issues = validate_canonical_cv(
+                cv, state["evidence"], jd_analysis=state.get("jd_analysis")
+            )
+    issues.extend(_one_page_render_issues(cv))
     revision_count = int(state.get("revision_count") or 0)
     max_revisions = int(state.get("max_revisions") or 2)
     needs = bool(issues) and revision_count < max_revisions
+    if issues:
+        summary = summarize_validation_issues_for_log(issues)
+        logger.warning(
+            "Canonical CV validation issues correlation_id=%s revision=%s/%s "
+            "needs_revision=%s issue_total=%s issue_counts=%s",
+            state.get("correlation_id"),
+            revision_count,
+            max_revisions,
+            needs,
+            summary["issue_total"],
+            summary["issue_counts"],
+        )
     if issues and not needs:
         raise ServiceError(
             ErrorCode.GENERATION_VALIDATION_FAILED,
@@ -250,9 +297,28 @@ def node_validate(state: GraphState) -> dict[str, Any]:
             details={"issues": issues},
         )
     return {
+        "canonical_cv": cv,
         "validation_issues": issues,
         "needs_revision": needs,
     }
+
+
+def _one_page_render_issues(cv: CanonicalCV) -> list[str]:
+    """PDF layout proxy for one-page fit (available in the service image)."""
+    from cv_generation.graph.one_page import pdf_page_count_for_cv
+
+    pages = pdf_page_count_for_cv(cv)
+    if pages is None:
+        return [
+            "one-page budget: rendered CV page count could not be verified; "
+            "retry generation or shorten the CV"
+        ]
+    if pages <= 1:
+        return []
+    return [
+        "one-page budget: rendered CV exceeds one page; "
+        "shorten summary/bullets and omit low-signal roles or trailing sections"
+    ]
 
 
 def node_revise(state: GraphState, provider: DraftingProvider) -> dict[str, Any]:
@@ -322,6 +388,12 @@ def node_verify(state: GraphState) -> dict[str, Any]:
         expected_name=cv.full_name,
         expected_email=cv.contact.email,
     )
+    # DOCX/Markdown use the PDF renderer as the ATS one-page layout proxy.
+    if fmt != OutputFormat.PDF:
+        from cv_generation.graph.one_page import pdf_page_count_for_cv
+        from cv_generation.render.verify import verify_one_page_layout
+
+        verify_one_page_layout(pdf_page_count_for_cv(cv))
     return {}
 
 
@@ -407,7 +479,10 @@ def _parse_evidence_from_text(text: str) -> dict[str, Any]:
     skills = _extract_skills_section(text)
     experience = _extract_experience(text)
     education = _extract_education(text)
+    awards = _extract_awards(text)
     projects = _extract_projects(text)
+    certifications = _extract_certifications(text)
+    spoken_languages = _extract_spoken_languages(text)
     summary = _extract_summary(text)
 
     return {
@@ -423,9 +498,10 @@ def _parse_evidence_from_text(text: str) -> dict[str, Any]:
         "experience": experience,
         "education": education,
         "professional_summary": summary,
+        "awards": awards,
         "projects": projects,
-        "certifications": [],
-        "spoken_languages": [],
+        "certifications": certifications,
+        "spoken_languages": spoken_languages,
     }
 
 
@@ -466,9 +542,18 @@ def _section_body(text: str, headers: tuple[str, ...]) -> str | None:
         "employment",
         "education",
         "academic background",
+        "awards",
+        "awards/volunteer",
+        "volunteering",
+        "honors",
+        "honours",
         "projects",
         "certifications",
+        "certificates",
+        "licenses",
         "languages",
+        "spoken languages",
+        "language skills",
     )
     boundary = re.search(
         rf"^(?:{'|'.join(re.escape(value) for value in known_sections)})\s*:?[ \t]*$",
@@ -500,6 +585,129 @@ def _extract_skills_section(text: str) -> list[str]:
     return out[:40]
 
 
+_EXPERIENCE_ROLE_WORD_RE = re.compile(
+    r"\b(?:Engineer|Analyst|Manager|Developer|Designer|Scientist|Architect|"
+    r"Consultant|Specialist|Officer|Administrator|Director|Assistant|Intern|"
+    r"Lead|Baker|Barista|Clerk|Guide|Programmer)\b",
+    re.I,
+)
+
+_EXPERIENCE_DATE_LINE_RE = re.compile(
+    r"^(?:"
+    r"(?:(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*\.?\s+)?"
+    r"(?:19|20)\d{2}"
+    r")"
+    r"\s*(?:[-–—]|\s+to\s+)\s*"
+    r"(?:"
+    r"(?:(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*\.?\s+)?"
+    r"(?:(?:19|20)\d{2}|Present|Current)"
+    r")\.?$",
+    re.I,
+)
+
+
+def _is_experience_meta_line(line: str) -> bool:
+    """Date ranges / locations between a role header and its bullets — not employers."""
+    stripped = line.strip().strip("()[]")
+    if not stripped:
+        return True
+    if _EXPERIENCE_DATE_LINE_RE.fullmatch(stripped):
+        return True
+    if re.fullmatch(
+        r"(?:19|20)\d{2}\s*[-–—]\s*(?:(?:19|20)\d{2}|Present|Current)\.?",
+        stripped,
+        re.I,
+    ):
+        return True
+    # "London, UK" / "New York, NY" — short place names without role vocabulary.
+    if (
+        "," in stripped
+        and len(stripped) <= 60
+        and not _EXPERIENCE_ROLE_WORD_RE.search(stripped)
+        and not any(ch.isdigit() for ch in stripped)
+        and " at " not in stripped.lower()
+        and not re.search(r"\s+[—–\-]\s+", stripped)
+    ):
+        return True
+    return False
+
+
+def _looks_like_company_only(header: str) -> bool:
+    if header.endswith((".", "!", "?", ":")):
+        return False
+    words = header.split()
+    if not (1 <= len(words) <= 6):
+        return False
+    if _EXPERIENCE_ROLE_WORD_RE.search(header):
+        return False
+    if any(ch.isdigit() for ch in header):
+        return False
+    return bool(re.match(r"^[A-Z0-9]", header))
+
+
+def _parse_experience_header(header: str) -> tuple[str | None, str | None]:
+    """Return (company, title) from a role header, or (None, None) if not a header.
+
+    Title-only lines return ("", title). Company-only lines return (company, None).
+    """
+    if _is_experience_meta_line(header):
+        return None, None
+    if " at " in header.lower():
+        parts = re.split(r"\s+at\s+", header, maxsplit=1, flags=re.I)
+        return parts[1].strip(), parts[0].strip()
+    if " — " in header or " - " in header or " – " in header:
+        parts = re.split(r"\s+[—–\-]\s+", header, maxsplit=1)
+        if len(parts) == 2:
+            left, right = (parts[0].strip(), parts[1].strip())
+            # Company — Title (2020-Present) style.
+            if any(ch.isdigit() for ch in right) and re.search(
+                r"\b(?:19|20)\d{2}\b|present", right, re.I
+            ):
+                return left, right.split("(")[0].strip()
+            left_is_role = bool(_EXPERIENCE_ROLE_WORD_RE.search(left))
+            right_is_role = bool(_EXPERIENCE_ROLE_WORD_RE.search(right))
+            if left_is_role and not right_is_role:
+                return right, left  # Title — Company
+            if right_is_role and not left_is_role:
+                return left, right  # Company — Title
+            # Ambiguous: prefer Title — Company (ATS / Base CV fixture convention).
+            return right, left
+    if _EXPERIENCE_ROLE_WORD_RE.search(header) and len(header) < 80:
+        return "", header
+    if _looks_like_company_only(header):
+        return header, None
+    return None, None
+
+
+def _merge_experience_header_into_current(
+    current: dict[str, Any],
+    company: str | None,
+    title: str | None,
+) -> bool:
+    """Fold a partial header line into an open role that has no bullets yet."""
+    if current["bullets"]:
+        return False
+    cur_title = (current.get("title") or "").strip()
+    cur_company = (current.get("company") or "").strip()
+    title_missing = cur_title in ("", "Role")
+    company_missing = cur_company in ("", "Unknown")
+
+    if title and not company and title_missing:
+        current["title"] = title
+        return True
+    if company and not title and not title_missing and (company_missing or cur_company == company):
+        current["company"] = company
+        return True
+    if company and not title and company_missing is False and title_missing:
+        # Wrapped company name continued on the next line.
+        current["company"] = f"{cur_company} {company}".strip()
+        return True
+    if company and not title and company_missing and title_missing:
+        current["company"] = company
+        return True
+    return False
+
+
 def _extract_experience(text: str) -> list[dict[str, Any]]:
     body = _section_body(
         text,
@@ -508,44 +716,44 @@ def _extract_experience(text: str) -> list[dict[str, Any]]:
     if not body:
         return []
     items: list[dict[str, Any]] = []
-    # Lines like: Company — Title (dates) or **Title** at Company
-    blocks = re.split(r"\n(?=\S)", body)
-    for block in blocks:
-        lines = [ln.strip() for ln in block.splitlines() if ln.strip()]
-        if not lines:
+    current: dict[str, Any] | None = None
+    for raw in body.splitlines():
+        stripped = raw.strip()
+        if not stripped:
             continue
-        header = lines[0].lstrip("#").lstrip("*").strip()
-        company = None
-        title = None
-        if " at " in header.lower():
-            parts = re.split(r"\s+at\s+", header, maxsplit=1, flags=re.I)
-            title, company = parts[0].strip(), parts[1].strip()
-        elif " — " in header or " - " in header or " – " in header:
-            parts = re.split(r"\s+[—–\-]\s+", header, maxsplit=1)
-            if len(parts) == 2:
-                left, right = parts
-                # Heuristic: company first or title first
-                if any(c.isdigit() for c in right):
-                    company, title = left, right.split("(")[0].strip()
-                else:
-                    company, title = left, right
-        else:
-            company = header
-            title = lines[1] if len(lines) > 1 else "Role"
+        if stripped.lstrip().startswith(("-", "*", "•")):
+            if current is None:
+                continue
+            bullet = stripped.lstrip("-*• ").strip()
+            if bullet:
+                current["bullets"].append(bullet)
+            continue
 
-        bullets = [
-            ln.lstrip("-*• ").strip()
-            for ln in lines[1:]
-            if ln.lstrip().startswith(("-", "*", "•"))
-        ]
-        if company:
-            items.append(
-                {
-                    "company": re.sub(r"[*#]", "", company).strip(),
-                    "title": re.sub(r"[*#]", "", title or "Role").strip(),
-                    "bullets": bullets,
-                }
-            )
+        header = stripped.lstrip("#").lstrip("*").strip()
+        if _is_experience_meta_line(header):
+            continue
+
+        company, title = _parse_experience_header(header)
+        if company is None and title is None:
+            continue
+
+        if current is not None and _merge_experience_header_into_current(
+            current, company or None, title
+        ):
+            continue
+
+        if current is not None:
+            items.append(current)
+
+        clean_company = re.sub(r"[*#]", "", (company or "")).strip() or "Unknown"
+        clean_title = re.sub(r"[*#]", "", (title or "Role")).strip() or "Role"
+        current = {
+            "company": clean_company,
+            "title": clean_title,
+            "bullets": [],
+        }
+    if current is not None:
+        items.append(current)
     return items[:10]
 
 
@@ -562,37 +770,120 @@ def _extract_education(text: str) -> list[dict[str, Any]]:
     return items[:5]
 
 
+def _extract_awards(text: str) -> list[dict[str, Any]]:
+    body = _section_body(
+        text,
+        (
+            "awards",
+            "awards/volunteer",
+            "volunteer",
+            "volunteering",
+            "honors",
+            "honours",
+        ),
+    )
+    if not body:
+        return []
+    items: list[dict[str, Any]] = []
+    for line in body.splitlines():
+        line = line.strip().lstrip("#").strip()
+        line = line.lstrip("-*• ").strip().strip("*").strip()
+        if not line:
+            continue
+        date = None
+        date_match = re.search(r"\((\d{4}(?:-\d{2})?)\)\s*$", line)
+        if date_match:
+            date = date_match.group(1)
+            line = line[: date_match.start()].strip().rstrip("-—,").strip()
+        if line:
+            items.append({"title": line, "date": date})
+    return items[:10]
+
+
 def _extract_projects(text: str) -> list[dict[str, Any]]:
     body = _section_body(text, ("projects", "personal projects", "side projects"))
     if not body:
         return []
     items: list[dict[str, Any]] = []
-    blocks = re.split(r"\n(?=\S)", body)
-    for block in blocks:
-        lines = [ln.strip() for ln in block.splitlines() if ln.strip()]
-        if not lines:
+    current: dict[str, Any] | None = None
+    for raw in body.splitlines():
+        line = raw.strip()
+        if not line:
             continue
-        header = lines[0].lstrip("#").lstrip("*").strip()
-        bullets = [
-            ln.lstrip("-*• ").strip()
-            for ln in lines[1:]
-            if ln.lstrip().startswith(("-", "*", "•"))
-        ]
-        description = None
-        for ln in lines[1:]:
-            if not ln.lstrip().startswith(("-", "*", "•")):
-                description = ln.lstrip("*").strip()
-                break
-        if header:
-            items.append(
-                {
-                    "name": re.sub(r"[*#]", "", header).strip(),
-                    "description": description,
-                    "bullets": bullets,
+        if line.lstrip().startswith(("-", "*", "•")):
+            bullet = line.lstrip("-*• ").strip()
+            if not bullet:
+                continue
+            if current is None:
+                current = {
+                    "name": bullet,
+                    "description": None,
+                    "bullets": [],
                     "technologies": [],
                 }
-            )
+                items.append(current)
+            else:
+                current["bullets"].append(bullet)
+            continue
+        is_heading = bool(re.match(r"^#+\s+\S", line))
+        header = re.sub(r"^#+\s*", "", line)
+        header = re.sub(r"[*]", "", header).strip()
+        if not header:
+            continue
+        # New project on first entry, markdown heading, or after bullets already started.
+        if current is None or is_heading or current["bullets"]:
+            current = {
+                "name": header,
+                "description": None,
+                "bullets": [],
+                "technologies": [],
+            }
+            items.append(current)
+        elif current["description"] is None:
+            current["description"] = header
+        else:
+            current["description"] = f"{current['description']} {header}".strip()
     return items[:10]
+
+
+def _extract_certifications(text: str) -> list[str]:
+    body = _section_body(text, ("certifications", "certificates", "licenses"))
+    if not body:
+        return []
+    items: list[str] = []
+    seen: set[str] = set()
+    for line in body.splitlines():
+        line = line.strip().lstrip("#").strip()
+        line = line.lstrip("-*• ").strip().strip("*").strip()
+        if not line:
+            continue
+        key = line.lower()
+        if key in seen:
+            continue
+        seen.add(key)
+        items.append(line)
+    return items[:10]
+
+
+def _extract_spoken_languages(text: str) -> list[str]:
+    body = _section_body(text, ("languages", "spoken languages", "language skills"))
+    if not body:
+        return []
+    tokens: list[str] = []
+    seen: set[str] = set()
+    for part in re.split(r"[,;\n|•\-]+", body):
+        token = part.strip().lstrip("#").strip().strip("*").strip()
+        if not token or token.lower().startswith("http"):
+            continue
+        # Skip fluency fluff like "Native" when listed alone.
+        if token.lower() in {"native", "fluent", "intermediate", "basic", "proficient"}:
+            continue
+        key = token.lower()
+        if key in seen:
+            continue
+        seen.add(key)
+        tokens.append(token)
+    return tokens[:10]
 
 
 def _extract_summary(text: str) -> str | None:
@@ -603,30 +894,268 @@ def _extract_summary(text: str) -> str | None:
 
 
 def _extract_keywords(jd: str) -> list[str]:
-    # Simple token frequency for targeting
+    # First-appearance order preserves JD required/preferred priority for targeting.
     stop = {
         "and", "or", "the", "a", "an", "to", "of", "in", "for", "with", "on", "at",
         "is", "are", "be", "as", "by", "we", "you", "your", "our", "will", "this",
         "that", "from", "have", "has", "been", "their", "they", "job", "role",
     }
     tokens = re.findall(r"[A-Za-z][A-Za-z0-9+.#]{1,30}", jd)
-    freq: dict[str, int] = {}
+    ordered: list[str] = []
+    seen: set[str] = set()
     for t in tokens:
         low = t.lower()
-        if low in stop or len(low) < 2:
+        if low in stop or len(low) < 2 or low in seen:
             continue
-        freq[t] = freq.get(t, 0) + 1
-    ranked = sorted(freq.items(), key=lambda kv: (-kv[1], kv[0].lower()))
-    return [k for k, _ in ranked[:40]]
+        seen.add(low)
+        ordered.append(t)
+        if len(ordered) >= 40:
+            break
+    return ordered
+
+
+_SKILL_EXPANSION_RE = re.compile(
+    r"\b([A-Za-z][A-Za-z0-9+.#]*(?:\s+[A-Za-z][A-Za-z0-9+.#]*)+)\s*\(([A-Za-z0-9+.#]{2,20})\)"
+)
+
+
+def _extract_skill_expansions(jd: str) -> list[dict[str, str]]:
+    """Pull Full Term (ACRONYM) pairs from the JD for grounded skill naming."""
+    expansions: list[dict[str, str]] = []
+    seen: set[str] = set()
+    for full, acronym in _SKILL_EXPANSION_RE.findall(jd):
+        full_n = " ".join(full.split())
+        acronym_n = acronym.strip()
+        key = f"{full_n.lower()}|{acronym_n.lower()}"
+        if key in seen:
+            continue
+        seen.add(key)
+        expansions.append({"full": full_n, "acronym": acronym_n})
+    return expansions
+
+
+_RESP_SECTION_RE = re.compile(
+    r"^(?:responsibilities|key\s+responsibilities|what\s+you.?ll\s+do|"
+    r"what\s+you\s+will\s+do|your\s+role|duties|essential\s+functions)\s*:?\s*$",
+    re.IGNORECASE,
+)
+_RESP_END_RE = re.compile(
+    r"^(?:requirements|qualifications|about(?:\s+us|\s+the\s+(?:job|company|role))?|"
+    r"about\s+\w+|benefits|nice\s+to\s+have|preferred|must\s+have|"
+    r"(?:your\s+)?skills|what\s+we\s+offer|compensation|equal\s+opportunity|"
+    r"hybrid\s+working|why\s+you\s+should|make\s+it\s+real|"
+    r"we\s+are\s+a\b|disability\s+confident|how\s+to\s+apply|"
+    r"what\s+you.?ll\s+get|perks|location|salary)\s*:?\s*$",
+    re.IGNORECASE,
+)
+_THEME_HEADER_RE = re.compile(
+    r"^([A-Z][A-Za-z0-9][A-Za-z0-9 /&+.-]{1,48}):?\s*$"
+)
+_THEME_SECTION_NOISE_RE = re.compile(
+    r"^(?:your\s+skills|your\s+role|about\b|why\s+you|we\s+are\b|make\s+it\s+real|"
+    r"hybrid\s+working|disability\b|requirements|qualifications|benefits|"
+    r"responsibilities|the\s+role|overview)\b",
+    re.IGNORECASE,
+)
+
+
+def _extract_responsibility_themes(jd: str) -> list[str]:
+    """Clear JD responsibility theme headers — targeting aids only, never facts."""
+    themes: list[str] = []
+    seen: set[str] = set()
+    in_responsibilities = False
+    for raw in jd.splitlines():
+        stripped = raw.strip()
+        if not stripped:
+            continue
+        if _RESP_SECTION_RE.match(stripped):
+            in_responsibilities = True
+            continue
+        if in_responsibilities and _RESP_END_RE.match(stripped):
+            break
+        if not in_responsibilities:
+            continue
+        # Skip bullet/duty lines; keep short Title-Case theme headers.
+        if re.match(r"^[-•*]\s+", stripped) or stripped.endswith("."):
+            continue
+        # Indented duty prose without a bullet marker is still not a theme header.
+        if raw[:1].isspace() and not _THEME_HEADER_RE.match(stripped.rstrip(":")):
+            continue
+        match = _THEME_HEADER_RE.match(stripped)
+        if not match:
+            continue
+        theme = match.group(1).rstrip(":").strip()
+        if not theme or _TITLE_BOILERPLATE_RE.match(theme):
+            continue
+        if _THEME_SECTION_NOISE_RE.match(theme) or _RESP_END_RE.match(theme):
+            continue
+        words = theme.split()
+        # Real JD theme labels are short noun phrases (e.g. "Data Lineage Management").
+        if not (1 <= len(words) <= 4):
+            continue
+        if words[0].lower() in {"we", "you", "your", "our", "why", "about", "the"}:
+            continue
+        key = theme.lower()
+        if key in seen:
+            continue
+        seen.add(key)
+        themes.append(theme)
+        if len(themes) >= 8:
+            break
+    return themes
+
+
+_VALUES_SECTION_RE = re.compile(
+    r"^(?:"
+    r"(?:(?:our|company|core|cultural|shared)\s+)?values|"
+    r"what\s+we\s+value|"
+    r"our\s+culture(?:\s+and\s+values)?|"
+    r"culture\s+and\s+values"
+    r")\s*:?\s*$",
+    re.IGNORECASE,
+)
+_VALUES_END_RE = re.compile(
+    r"^(?:requirements|qualifications|responsibilities|benefits|about(?:\s+us)?|"
+    r"about\s+the\s+(?:job|company|role)|(?:your\s+)?skills|what\s+we\s+offer|"
+    r"compensation|equal\s+opportunity|how\s+to\s+apply|location|salary|"
+    r"preferred|must\s+have|nice\s+to\s+have|perks)\s*:?\s*$",
+    re.IGNORECASE,
+)
+_VALUE_BULLET_RE = re.compile(r"^[-•*]\s+(.+)$")
+_VALUE_INLINE_RE = re.compile(
+    r"(?i)(?:our|company|core)\s+values\s*(?:are|:)\s*([^\n.]+)"
+)
+
+
+def _normalize_value_label(raw: str) -> str | None:
+    """Keep short company-value labels; drop marketing sentences."""
+    label = raw.strip().strip(" .;,").strip()
+    label = re.sub(r"\s+", " ", label)
+    if not label:
+        return None
+    # Drop sentence-like or overly long value blurbs.
+    if label.endswith((".", "!", "?")) or len(label) > 48:
+        return None
+    words = label.split()
+    if not (1 <= len(words) <= 4):
+        return None
+    if words[0].lower() in {"we", "you", "your", "our", "why", "about", "the"}:
+        return None
+    # Title-case single words / short phrases so Integrity stays Integrity.
+    if label.islower() or label.isupper():
+        label = label.title()
+    return label
+
+
+def _extract_value_statements(jd: str) -> list[str]:
+    """Company value labels from the JD — targeting aids only, never facts."""
+    values: list[str] = []
+    seen: set[str] = set()
+
+    def _add(raw: str) -> None:
+        label = _normalize_value_label(raw)
+        if not label:
+            return
+        key = label.lower()
+        if key in seen:
+            return
+        seen.add(key)
+        values.append(label)
+
+    in_values = False
+    for raw in jd.splitlines():
+        stripped = raw.strip()
+        if not stripped:
+            continue
+        if _VALUES_SECTION_RE.match(stripped):
+            in_values = True
+            continue
+        if in_values and _VALUES_END_RE.match(stripped):
+            break
+        if not in_values:
+            continue
+        bullet = _VALUE_BULLET_RE.match(stripped)
+        if bullet:
+            _add(bullet.group(1))
+            continue
+        # Non-bullet short labels under a values heading.
+        if not stripped.endswith(".") and len(stripped.split()) <= 4:
+            _add(stripped)
+        if len(values) >= 8:
+            break
+
+    if values:
+        return values[:8]
+
+    # Inline "Our values are X, Y, and Z" when no dedicated section exists.
+    inline = _VALUE_INLINE_RE.search(jd)
+    if inline:
+        chunk = inline.group(1)
+        for part in re.split(r",|/|\band\b", chunk, flags=re.IGNORECASE):
+            _add(part)
+            if len(values) >= 8:
+                break
+    return values[:8]
+
+
+_TITLE_BOILERPLATE_RE = re.compile(
+    r"^(?:about(?:\s+the)?\s+job.*|overview|description|job\s+description|"
+    r"position\s+overview|your\s+role|the\s+role|responsibilities|requirements|"
+    r"essential\s+functions|hybrid\s+working|about\s+us|who\s+we\s+are)\s*:?\s*$",
+    re.IGNORECASE,
+)
+
+_TITLE_MARKETING_RE = re.compile(
+    r"(?:!|\||"
+    r"^(?:join|we(?:'re| are)|looking for|remote|full[\s-]?time|part[\s-]?time|"
+    r"about\b|why\s+you|make\s+it|hybrid|earn\b|apply\b|hiring)\b)",
+    re.IGNORECASE,
+)
+
+_ROLE_PHRASE_RE = re.compile(
+    r"\b("
+    r"(?:(?:Senior|Junior|Staff|Principal|Lead|IT)\s+)?"
+    r"[A-Z][A-Za-z0-9+/#.&'-]*(?:\s+[A-Z][A-Za-z0-9+/#.&'-]*){0,5}\s*"
+    r"(?:Engineer|Analyst|Manager|Developer|Designer|Scientist|Architect|"
+    r"Consultant|Specialist|Officer|Administrator|Director)\d*"
+    r")\b"
+)
 
 
 def _guess_title(jd: str) -> str | None:
-    first_line = jd.strip().splitlines()[0].strip() if jd.strip() else ""
-    if 3 < len(first_line) < 80:
-        return first_line
-    m = re.search(r"(?:title|position|role)\s*[:=]\s*(.+)", jd, re.I)
-    if m:
-        return m.group(1).strip()[:80]
+    """Best-effort JD role title for targeting — never a candidate fact source."""
+    lines = [ln.strip() for ln in jd.strip().splitlines() if ln.strip()]
+
+    labeled = re.search(
+        r"(?m)^(?:job\s+)?(?:title|position|role)\s*[:=]\s*(.+)$",
+        jd,
+        re.I,
+    )
+    if labeled:
+        candidate = labeled.group(1).strip()[:80]
+        if (
+            candidate
+            and not _TITLE_BOILERPLATE_RE.match(candidate)
+            and not _TITLE_MARKETING_RE.search(candidate)
+        ):
+            return candidate
+
+    for line in lines[:15]:
+        if _TITLE_BOILERPLATE_RE.match(line):
+            continue
+        match = _ROLE_PHRASE_RE.search(line[:160])
+        if match:
+            return match.group(1).strip()[:80]
+
+    # Last resort: short line that looks like a job title, not marketing copy.
+    for line in lines[:15]:
+        if _TITLE_BOILERPLATE_RE.match(line):
+            continue
+        if _TITLE_MARKETING_RE.search(line):
+            continue
+        if 3 < len(line) < 80 and not line.endswith((".", "!", "?")):
+            if _EXPERIENCE_ROLE_WORD_RE.search(line):
+                return line[:80]
     return None
 
 

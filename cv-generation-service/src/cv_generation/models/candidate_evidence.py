@@ -5,6 +5,7 @@ from __future__ import annotations
 from pydantic import BaseModel, Field
 
 from cv_generation.models.canonical_cv import (
+    AwardItem,
     ContactInfo,
     EducationItem,
     ExperienceItem,
@@ -24,6 +25,7 @@ class CandidateEvidence(BaseModel):
     skills: list[str] = Field(default_factory=list)
     experience: list[ExperienceItem] = Field(default_factory=list)
     education: list[EducationItem] = Field(default_factory=list)
+    awards: list[AwardItem] = Field(default_factory=list)
     projects: list[ProjectItem] = Field(default_factory=list)
     certifications: list[str] = Field(default_factory=list)
     spoken_languages: list[str] = Field(default_factory=list)
