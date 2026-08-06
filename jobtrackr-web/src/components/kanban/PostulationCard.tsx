@@ -151,9 +151,7 @@ export const PostulationCard = memo(function PostulationCard({
 			onPointerMove={handlePointerMove}
 			onPointerUp={resetDragClickState}
 			className={cn(
-				// touch-manipulation keeps pan scrolling on the card; PointerSensor's
-				// touch delay still requires a short hold before drag starts.
-				"flex h-fit min-h-fit w-full max-w-full shrink-0 cursor-pointer touch-manipulation select-none flex-col items-start justify-start gap-y-3 overflow-hidden rounded-lg border border-off-white bg-white p-4 shadow-md outline-none transition-[border-color,box-shadow,opacity,transform] duration-150 [-webkit-touch-callout:none] focus-visible:ring-3 focus-visible:ring-ring/30",
+				"flex h-fit min-h-fit w-full max-w-full shrink-0 cursor-pointer touch-none select-none flex-col items-start justify-start gap-y-3 overflow-hidden rounded-lg border border-off-white bg-white p-4 shadow-md outline-none transition-[border-color,box-shadow,opacity,transform] duration-150 [-webkit-touch-callout:none] focus-visible:ring-3 focus-visible:ring-ring/30",
 				"active:cursor-grabbing data-[dragging=true]:cursor-grabbing data-[drag-source=true]:cursor-grabbing",
 				isDropTarget &&
 					"border-primary/70 shadow-lg ring-2 ring-primary/25",
