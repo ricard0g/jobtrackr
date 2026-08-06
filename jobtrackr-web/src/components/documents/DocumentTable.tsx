@@ -236,7 +236,7 @@ export function DocumentTable<Row, SortKey extends string>({
 									{rows.map((row) => (
 										<tr
 											key={rowKey(row)}
-											className="h-12 border-b border-black/20 last:border-b-0"
+											className="relative h-12 border-b border-black/20 last:border-b-0"
 										>
 											{columns.map((column) => (
 												<td
