@@ -7,7 +7,7 @@ import { defineConfig } from "vitest/config";
 export default defineConfig({
 	plugins: [react(), tailwindcss()],
 	server: {
-		allowedHosts: [".ngrok-free.app", ".ngrok.app"],
+		allowedHosts: [".trycloudflare.com"],
 		hmr: process.env.VITE_HMR_HOST
 			? {
 					host: process.env.VITE_HMR_HOST,

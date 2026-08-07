@@ -3,17 +3,18 @@ set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 TMUX_CONF="/exec-daemon/tmux.portal.conf"
+CLOUDFLARED_LOG="/tmp/jobtrackr-cloudflared.log"
 MOCK_MODE=false
 
 usage() {
 	cat <<'EOF'
 Usage: ./scripts/cloud-tunnel-up.sh [--mock]
 
-Start Postgres (full stack only), API, Vite, nginx, and ngrok for phone testing.
+Start Postgres (full stack only), API, Vite, nginx, and a Cloudflare quick tunnel for phone testing.
 
   --mock   Vite + MSW only (no Postgres/API); uses config/nginx/cloud-dev-mock.conf
 
-Requires: nginx, ngrok, docker, npm, java
+Requires: nginx, cloudflared, docker, npm, java
 EOF
 }
 
@@ -42,8 +43,8 @@ require_cmd() {
 			nginx)
 				echo "Install nginx (e.g. apt-get install -y nginx) and retry." >&2
 				;;
-			ngrok)
-				echo "Install ngrok and configure an authtoken (see docs/cloud-agent/ngrok-dev.md)." >&2
+			cloudflared)
+				echo "Install cloudflared (see jobtrackr-web/docs/cloud-agent/cloudflare-tunnel-dev.md)." >&2
 				;;
 			docker)
 				echo "Docker is required for Postgres in full-stack mode." >&2
@@ -54,7 +55,7 @@ require_cmd() {
 }
 
 require_cmd nginx
-require_cmd ngrok
+require_cmd cloudflared
 require_cmd npm
 require_cmd java
 
@@ -91,9 +92,11 @@ wait_for_url() {
 	return 1
 }
 
-get_ngrok_url() {
-	curl -sf http://127.0.0.1:4040/api/tunnels \
-		| python3 -c "import sys,json; d=json.load(sys.stdin); print(next(t['public_url'] for t in d['tunnels'] if t['public_url'].startswith('https')))"
+get_tunnel_url() {
+	if [[ ! -f "$CLOUDFLARED_LOG" ]]; then
+		return 1
+	fi
+	grep -oE 'https://[a-zA-Z0-9-]+\.trycloudflare\.com' "$CLOUDFLARED_LOG" | head -n1
 }
 
 start_vite_session() {
@@ -145,33 +148,34 @@ tmux_cmd new-session -d -s nginx-proxy -c "$ROOT_DIR" -- \
 	bash -lc "nginx -c '$NGINX_CONFIG' -g 'daemon off;'"
 wait_for_url "http://localhost:9080/" "nginx"
 
-kill_session ngrok-tunnel
-tmux_cmd new-session -d -s ngrok-tunnel -c "$ROOT_DIR" -- \
-	bash -lc 'ngrok http localhost:9080'
+kill_session cloudflared-tunnel
+rm -f "$CLOUDFLARED_LOG"
+tmux_cmd new-session -d -s cloudflared-tunnel -c "$ROOT_DIR" -- \
+	bash -lc "cloudflared tunnel --url http://localhost:9080 2>&1 | tee '$CLOUDFLARED_LOG'"
 
-NGROK_URL=""
-for ((i = 1; i <= 30; i++)); do
-	if NGROK_URL="$(get_ngrok_url 2>/dev/null || true)" && [[ -n "$NGROK_URL" ]]; then
+TUNNEL_URL=""
+for ((i = 1; i <= 45; i++)); do
+	if TUNNEL_URL="$(get_tunnel_url 2>/dev/null || true)" && [[ -n "$TUNNEL_URL" ]]; then
 		break
 	fi
 	sleep 1
 done
 
-if [[ -z "$NGROK_URL" ]]; then
-	echo "Failed to read ngrok public URL from http://127.0.0.1:4040/api/tunnels" >&2
+if [[ -z "$TUNNEL_URL" ]]; then
+	echo "Failed to read Cloudflare public URL from $CLOUDFLARED_LOG" >&2
 	exit 1
 fi
 
-NGROK_HOST="$(python3 -c "from urllib.parse import urlparse; print(urlparse('$NGROK_URL').hostname)")"
-echo "ngrok URL: $NGROK_URL"
-echo "ngrok host: $NGROK_HOST"
+TUNNEL_HOST="$(python3 -c "from urllib.parse import urlparse; print(urlparse('$TUNNEL_URL').hostname)")"
+echo "Cloudflare URL: $TUNNEL_URL"
+echo "Cloudflare host: $TUNNEL_HOST"
 
-start_vite_session "export VITE_HMR_HOST='$NGROK_HOST'; "
+start_vite_session "export VITE_HMR_HOST='$TUNNEL_HOST'; "
 wait_for_url "http://localhost:5173/" "Vite (HMR host)"
 
 echo ""
 echo "Cloud tunnel is up."
-echo "  Public URL: $NGROK_URL"
+echo "  Public URL: $TUNNEL_URL"
 if [[ "$MOCK_MODE" == true ]]; then
 	echo "  Mode: mock API (MSW)"
 else
@@ -180,9 +184,9 @@ else
 fi
 echo ""
 echo "Verify:"
-echo "  curl -s -o /dev/null -w '%{http_code}\n' '$NGROK_URL/' -H 'ngrok-skip-browser-warning: true'"
+echo "  curl -s -o /dev/null -w '%{http_code}\n' '$TUNNEL_URL/'"
 if [[ "$MOCK_MODE" == false ]]; then
-	echo "  curl -s '$NGROK_URL/api/v1/auth/csrf' -H 'ngrok-skip-browser-warning: true'"
+	echo "  curl -s '$TUNNEL_URL/api/v1/auth/csrf'"
 fi
 echo ""
 echo "Stop with: ./scripts/cloud-tunnel-down.sh"
