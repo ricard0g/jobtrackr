@@ -183,15 +183,15 @@ Before finishing a change, verify:
 * No unnecessary `useEffect` fetching was added.
 * TypeScript remains strict and avoids `any`.
 
-## ngrok Dev Tunnel (Phone Testing)
+## Cloudflare Tunnel (Phone Testing)
 
-When a user wants to preview the app on a phone through ngrok, follow **`docs/cloud-agent/ngrok-dev.md`**.
+When a user wants to preview the app on a phone through a Cloudflare quick tunnel, follow **`docs/cloud-agent/cloudflare-tunnel-dev.md`**.
 
 Summary:
 
 * nginx reverse-proxies Vite (`:5173`) and the API (`:8080`) on `localhost:9080`
-* `ngrok http localhost:9080` (single tunnel to nginx, not directly to Vite)
+* `cloudflared tunnel --url http://localhost:9080` (single tunnel to nginx, not directly to Vite)
 * Full stack: `./scripts/cloud-tunnel-up.sh` — sets `VITE_API_MOCKING=false`, `VITE_API_ORIGIN=`, `JWT_REFRESH_COOKIE_SECURE=true`
 * Mock shortcut: `./scripts/cloud-tunnel-up.sh --mock`
-* Requires `server.allowedHosts: [".ngrok-free.app", ".ngrok.app"]` in `vite.config.ts` and same-origin API paths
-* User needs an ngrok authtoken; on phone they must tap **Visit Site** on the ngrok warning page first
+* Requires `server.allowedHosts: [".trycloudflare.com"]` in `vite.config.ts` and same-origin API paths
+* No Cloudflare account or authtoken needed for quick tunnels; no interstitial warning page on the phone

@@ -15,8 +15,6 @@ import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
 public class CorsConfig {
 
     private static final List<String> TUNNEL_ORIGIN_PATTERNS = List.of(
-            "https://*.ngrok-free.app",
-            "https://*.ngrok.app",
             "https://*.trycloudflare.com");
 
     @Bean

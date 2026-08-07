@@ -110,7 +110,7 @@ To preview the full stack on a phone from a cloud agent through a single public 
 ./scripts/cloud-tunnel-up.sh
 ```
 
-This starts Postgres, the API, Vite, nginx, and ngrok. See [`jobtrackr-web/docs/cloud-agent/ngrok-dev.md`](../jobtrackr-web/docs/cloud-agent/ngrok-dev.md) for manual tmux steps, mock-only mode (`--mock`), and troubleshooting.
+This starts Postgres, the API, Vite, nginx, and a Cloudflare quick tunnel. See [`jobtrackr-web/docs/cloud-agent/cloudflare-tunnel-dev.md`](../jobtrackr-web/docs/cloud-agent/cloudflare-tunnel-dev.md) for manual tmux steps, mock-only mode (`--mock`), and troubleshooting.
 
 Stop with:
 
