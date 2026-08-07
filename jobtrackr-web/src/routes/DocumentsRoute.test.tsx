@@ -364,6 +364,27 @@ describe("DocumentsRoute", () => {
 			screen.getByRole("button", { name: "More actions for engineering-profile.pdf" }),
 		).toBeTruthy();
 		expect(screen.queryByRole("link", { name: /Open application/i })).toBeNull();
+
+		const actionsHeader = within(table).getByRole("columnheader", { name: "Actions" });
+		expect(actionsHeader.className.split(/\s+/)).toContain("sticky");
+		expect(actionsHeader.className.split(/\s+/)).toContain("right-0");
+		expect(actionsHeader.className.split(/\s+/)).toContain("md:w-[18%]");
+		const actionsCell = screen
+			.getByRole("button", { name: "Preview engineering-profile.pdf" })
+			.closest("td");
+		expect(actionsCell?.className).toContain("sticky");
+		expect(actionsCell?.className).toContain("md:static");
+
+		const mobileActions = screen.getByRole("button", {
+			name: "More actions for engineering-profile.pdf on small screens",
+		});
+		fireEvent.click(mobileActions);
+		const mobileMenu = await screen.findByRole("menu", {
+			name: "More actions for engineering-profile.pdf on small screens",
+		});
+		expect(within(mobileMenu).getByRole("menuitem", { name: "Preview" })).toBeTruthy();
+		expect(within(mobileMenu).getByRole("menuitem", { name: "Download" })).toBeTruthy();
+		expect(within(mobileMenu).getByRole("menuitem", { name: "Delete" })).toBeTruthy();
 	});
 
 	it("sorts and paginates the bounded Base CV collection through URL state", async () => {
@@ -794,8 +815,8 @@ describe("DocumentsRoute", () => {
 		);
 
 		const actionsHeader = within(table).getByRole("columnheader", { name: "Actions" });
-		expect(actionsHeader.className).not.toContain("sticky");
-		expect(actionsHeader.className.split(/\s+/)).toContain("max-w-[80px]");
+		expect(actionsHeader.className.split(/\s+/)).toContain("sticky");
+		expect(actionsHeader.className.split(/\s+/)).toContain("right-0");
 		expect(actionsHeader.className.split(/\s+/)).toContain("md:w-[18%]");
 		const actionsCell = screen
 			.getByRole("button", { name: "Preview acme-backend-v2.pdf" })

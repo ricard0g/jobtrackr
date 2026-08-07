@@ -131,8 +131,10 @@ function BaseCvActions({
     const deleteFetcher = useFetcher<DocumentsActionData>();
     const downloadFetcher = useFetcher<DocumentsActionData>();
     const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
-    const [menuOpen, setMenuOpen] = useState(false);
+    const [desktopMenuOpen, setDesktopMenuOpen] = useState(false);
+    const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
     const openedDownloadRef = useRef<DocumentsActionData | null>(null);
+    const mobileDownloadPendingRef = useRef(false);
     const reportedDeleteErrorRef = useRef<DocumentsActionData | null>(null);
     const reportedDownloadErrorRef = useRef<DocumentsActionData | null>(null);
     const deleting = deleteFetcher.state !== "idle";
@@ -141,6 +143,10 @@ function BaseCvActions({
     useEffect(() => {
         if (downloadFetcher.state !== "idle") return;
         const data = downloadFetcher.data;
+        if (data && mobileDownloadPendingRef.current) {
+            mobileDownloadPendingRef.current = false;
+            queueMicrotask(() => setMobileMenuOpen(false));
+        }
         if (data?.ok === false && data.intent === "download") {
             if (reportedDownloadErrorRef.current === data) return;
             reportedDownloadErrorRef.current = data;
@@ -164,7 +170,8 @@ function BaseCvActions({
     }, [deleteFetcher.state, deleteFetcher.data, onFailure]);
 
     const requestDelete = () => {
-        setMenuOpen(false);
+        setDesktopMenuOpen(false);
+        setMobileMenuOpen(false);
         setDeleteDialogOpen(true);
     };
 
@@ -176,9 +183,14 @@ function BaseCvActions({
         setDeleteDialogOpen(false);
     };
 
+    const preview = () => {
+        setMobileMenuOpen(false);
+        onPreview(baseCv);
+    };
+
     return (
         <TooltipProvider delayDuration={0}>
-            <div className="flex items-center justify-center gap-1.5">
+            <div className="hidden items-center justify-center gap-1.5 md:flex">
                 <Tooltip>
                     <TooltipTrigger asChild>
                         <Button
@@ -186,7 +198,7 @@ function BaseCvActions({
                             variant="ghost"
                             size="icon-sm"
                             aria-label={`Preview ${baseCv.originalFilename}`}
-                            onClick={() => onPreview(baseCv)}
+                            onClick={preview}
                         >
                             <Eye aria-hidden="true" />
                         </Button>
@@ -216,7 +228,7 @@ function BaseCvActions({
                         <TooltipContent>Download</TooltipContent>
                     </Tooltip>
                 </downloadFetcher.Form>
-                <Popover open={menuOpen} onOpenChange={setMenuOpen}>
+                <Popover open={desktopMenuOpen} onOpenChange={setDesktopMenuOpen}>
                     <Tooltip>
                         <TooltipTrigger asChild>
                             <PopoverTrigger asChild>
@@ -239,6 +251,84 @@ function BaseCvActions({
                         align="end"
                         className="w-40 min-w-0 bg-documents-surface p-2.5 shadow-cool-light"
                     >
+                        <Button
+                            type="button"
+                            role="menuitem"
+                            variant="ghost"
+                            size="sm"
+                            className="w-full justify-start text-red-700"
+                            disabled={deleting}
+                            onClick={requestDelete}
+                        >
+                            <Trash2 aria-hidden="true" />
+                            Delete
+                        </Button>
+                    </PopoverContent>
+                </Popover>
+            </div>
+            <div className="flex justify-center md:hidden">
+                <Popover open={mobileMenuOpen} onOpenChange={setMobileMenuOpen}>
+                    <Tooltip>
+                        <TooltipTrigger asChild>
+                            <PopoverTrigger asChild>
+                                <Button
+                                    type="button"
+                                    variant="ghost"
+                                    size="icon-lg"
+                                    aria-label={`More actions for ${baseCv.originalFilename} on small screens`}
+                                    aria-haspopup="menu"
+                                    className="bg-documents-surface max-w-full max-h-full  p-4 shadow-inset-crisp"
+                                >
+                                    <EllipsisVertical aria-hidden="true" />
+                                </Button>
+                            </PopoverTrigger>
+                        </TooltipTrigger>
+                        <TooltipContent>More actions</TooltipContent>
+                    </Tooltip>
+                    <PopoverContent
+                        role="menu"
+                        aria-label={`More actions for ${baseCv.originalFilename} on small screens`}
+                        align="end"
+                        className="w-48 min-w-0 bg-documents-surface p-2.5 shadow-cool-light"
+                    >
+                        <Button
+                            type="button"
+                            role="menuitem"
+                            variant="ghost"
+                            size="sm"
+                            className="w-full justify-start"
+                            onClick={preview}
+                        >
+                            <Eye aria-hidden="true" />
+                            Preview
+                        </Button>
+                        <downloadFetcher.Form
+                            method="post"
+                            action="/documents"
+                            className="w-full"
+                            onSubmit={() => {
+                                mobileDownloadPendingRef.current = true;
+                            }}
+                        >
+                            <input type="hidden" name="intent" value="download" />
+                            <input type="hidden" name="baseCvId" value={baseCv.baseCvId} />
+                            <Button
+                                type="submit"
+                                role="menuitem"
+                                variant="ghost"
+                                size="sm"
+                                className="w-full justify-start"
+                                disabled={downloading}
+                                aria-busy={downloading}
+                            >
+                                {downloading ? (
+                                    <LoaderCircle className="animate-spin" />
+                                ) : (
+                                    <CloudDownload aria-hidden="true" />
+                                )}
+                                Download
+                            </Button>
+                        </downloadFetcher.Form>
                         <Button
                             type="button"
                             role="menuitem"
@@ -476,9 +566,10 @@ function GeneratedCvActions({
                                 <Button
                                     type="button"
                                     variant="ghost"
-                                    size="icon-sm"
+                                    size="icon-lg"
                                     aria-label={`More actions for ${generatedCv.originalFilename} on small screens`}
                                     aria-haspopup="menu"
+                                    className="bg-documents-surface max-w-full max-h-full  p-4 shadow-inset-crisp"
                                 >
                                     <EllipsisVertical aria-hidden="true" />
                                 </Button>
@@ -911,29 +1002,30 @@ function BaseCvSection({
             key: "type",
             label: "Type",
             sortable: true,
-            className: "w-[15%]",
+            className: "w-[9%]",
             render: (baseCv) => formatLabels[baseCv.format],
         },
         {
             key: "size",
             label: "Size",
             sortable: true,
-            className: "w-[15%]",
+            className: "w-[9%]",
             render: (baseCv) => formatBytes(baseCv.byteSize),
         },
         {
             key: "uploaded",
             label: "Uploaded",
             sortable: true,
-            className: "w-[22%]",
+            className: "w-[45%] md:w-[34%]",
             render: (baseCv) => formatDate(baseCv.createdAt),
         },
         {
             key: "actions",
             label: "Actions",
-            className: "w-[18%]",
+            className: "sticky right-0 md:w-[18%]",
+            headerClassName: "bg-documents-surface z-10 md:bg-transparent rounded-md md:rounded-none shadow-cool-light-table-head md:shadow-none [padding-inline:10px] md:[padding-inline:24px]",
             cellClassName:
-                "sticky right-0 z-10 bg-documents-surface md:static md:bg-transparent",
+                "rounded-md md:rounded-none z-10 md:static md:bg-transparent",
             render: (baseCv) => (
                 <BaseCvActions
                     baseCv={baseCv}
@@ -1189,7 +1281,7 @@ function GeneratedCvSection({
             key: "created",
             label: "Created",
             sortable: true,
-            className: "w-[19%]",
+            className: "w-[24%]",
             render: (generatedCv) => formatDate(generatedCv.createdAt),
         },
         {
@@ -1203,16 +1295,16 @@ function GeneratedCvSection({
             key: "company",
             label: "Company",
             sortable: true,
-            className: "w-[14%]",
+            className: "w-[20%] md:w-[14%]",
             render: (generatedCv) => generatedCv.companyName,
         },
         {
             key: "actions",
             label: "Actions",
-            className: "max-w-[80px] md:w-[18%]",
-            headerClassName: "[padding-inline:10px] md:[padding-inline:24px]",
+            className: "sticky right-0 md:w-[18%]",
+            headerClassName: "bg-documents-surface z-10 md:bg-transparent rounded-md md:rounded-none shadow-cool-light-table-head md:shadow-none [padding-inline:10px] md:[padding-inline:24px]",
             cellClassName:
-                "sticky right-0 z-10 bg-documents-surface md:static md:bg-transparent",
+                "rounded-md md:rounded-none z-10 md:static md:bg-transparent",
             render: (generatedCv) => (
                 <GeneratedCvActions
                     generatedCv={generatedCv}
