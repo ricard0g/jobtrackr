@@ -16,6 +16,11 @@ import {
 	applicationDetailLoader,
 	applicationDetailShouldRevalidate,
 } from "@/routes/application-detail-data";
+import {
+	APPLICATION_GENERATE_ROUTE_ID,
+	applicationGenerateAction,
+	applicationGenerateLoader,
+} from "@/routes/application-generate-data";
 import { loginAction, publicAuthLoader, registerAction } from "@/routes/auth-data";
 import { LoginPage, RegisterPage } from "@/routes/auth";
 import { KanbanRoute } from "@/routes/KanbanRoute";
@@ -74,7 +79,12 @@ const router = createBrowserRouter([
 						ErrorBoundary: ApplicationDetailErrorBoundary,
 						children: [
 							{ index: true },
-							{ path: "generate" },
+							{
+								id: APPLICATION_GENERATE_ROUTE_ID,
+								path: "generate",
+								loader: applicationGenerateLoader,
+								action: applicationGenerateAction,
+							},
 						],
 					},
 				],

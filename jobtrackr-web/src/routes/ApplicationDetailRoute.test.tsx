@@ -1,4 +1,4 @@
-import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
     createMemoryRouter,
@@ -8,7 +8,14 @@ import {
 
 import { BoardProvider } from "@/components/kanban/BoardProvider";
 import { ApplicationDetailRoute } from "@/routes/ApplicationDetailRoute";
+import type {
+    ApplicationGenerateActionData,
+    ApplicationGenerateLoaderData,
+} from "@/routes/application-generate-data";
 import type { Application } from "@/types/application";
+import type { BaseCv } from "@/types/base-cv";
+import type { AiConsent, CvGeneration } from "@/types/cv-generation";
+import type { GeneratedCv } from "@/types/generated-cv";
 import type { User } from "@/types/user";
 
 class ResizeObserverMock {
@@ -82,6 +89,69 @@ const user: User = {
     userUpdatedAt: "2026-07-01T10:00:00.000Z",
 };
 
+const baseCv: BaseCv = {
+    baseCvId: 1,
+    originalFilename: "ricardo-base.pdf",
+    format: "PDF",
+    contentType: "application/pdf",
+    byteSize: 1024,
+    createdAt: "2026-07-10T09:00:00.000Z",
+};
+
+const consent = (overrides: Partial<AiConsent> = {}): AiConsent => ({
+    consentVersion: "v1",
+    consentedAt: "2026-07-01T12:00:00.000Z",
+    current: true,
+    ...overrides,
+});
+
+const generation = (overrides: Partial<CvGeneration> = {}): CvGeneration => ({
+    cvGenerationId: 10,
+    applicationId: 3,
+    baseCvId: 1,
+    requestedFormat: "DOCX",
+    status: "COMPLETED",
+    idempotencyKey: "idem-10",
+    correlationId: "corr-10",
+    errorCode: null,
+    errorMessage: null,
+    generatedCvId: 5,
+    modelId: null,
+    workflowVersion: null,
+    createdAt: "2026-07-16T10:00:00.000Z",
+    updatedAt: "2026-07-16T10:00:00.000Z",
+    startedAt: null,
+    completedAt: "2026-07-16T10:05:00.000Z",
+    statusUrl: "/api/v1/cv-generations/10",
+    ...overrides,
+});
+
+const generatedCv = (overrides: Partial<GeneratedCv> = {}): GeneratedCv => ({
+    generatedCvId: 5,
+    applicationId: 3,
+    version: 1,
+    originalFilename: "application-3-v1.docx",
+    format: "DOCX",
+    contentType:
+        "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    byteSize: 2048,
+    generationId: 10,
+    createdAt: "2026-07-15T09:00:00.000Z",
+    ...overrides,
+});
+
+const generateLoaderData = (
+    overrides: Partial<ApplicationGenerateLoaderData> = {},
+): ApplicationGenerateLoaderData => ({
+    applicationId: 3,
+    baseCvs: [baseCv],
+    consent: consent(),
+    jobDescription: "Build resilient APIs.",
+    generations: [],
+    generatedCvs: [],
+    ...overrides,
+});
+
 function BoardShell() {
     return (
         <BoardProvider data={{ user, applications: [application], tags: [] }}>
@@ -114,6 +184,14 @@ const renderApplicationDetail = (
     initialEntry = "/applications/3",
     options?: {
         action?: () => Promise<unknown> | unknown;
+        generateLoader?: () =>
+            | ApplicationGenerateLoaderData
+            | Promise<ApplicationGenerateLoaderData>;
+        generateAction?: (
+            args: import("react-router").ActionFunctionArgs,
+        ) =>
+            | ApplicationGenerateActionData
+            | Promise<ApplicationGenerateActionData>;
     },
 ) => {
     const router = createMemoryRouter(
@@ -130,7 +208,20 @@ const renderApplicationDetail = (
                         action: options?.action,
                         children: [
                             { index: true },
-                            { path: "generate" },
+                            {
+                                id: "application-generate",
+                                path: "generate",
+                                loader:
+                                    options?.generateLoader ??
+                                    (() => generateLoaderData()),
+                                action:
+                                    options?.generateAction ??
+                                    (async () =>
+                                        ({
+                                            ok: true,
+                                            intent: "create",
+                                        }) satisfies ApplicationGenerateActionData),
+                            },
                         ],
                     },
                 ],
@@ -181,7 +272,10 @@ describe("Application dialog Details | Generate shell", () => {
         expect(screen.getByRole("tab", { name: /Details/i }).getAttribute("aria-selected")).toBe(
             "false",
         );
-        expect(screen.getByText(/Generate pane placeholder/i)).toBeTruthy();
+        expect(
+            screen.getByRole("button", { name: "Generate CV", expanded: true }),
+        ).toBeTruthy();
+        expect(screen.getByLabelText("Job Description")).toBeTruthy();
         expect(router.state.location.pathname).toBe("/applications/3/generate");
     });
 
@@ -195,7 +289,7 @@ describe("Application dialog Details | Generate shell", () => {
             expect(router.state.location.pathname).toBe("/applications/3/generate");
             expect(router.state.historyAction).toBe("REPLACE");
         });
-        expect(screen.getByText(/Generate pane placeholder/i)).toBeTruthy();
+        expect(await screen.findByLabelText("Job Description")).toBeTruthy();
 
         fireEvent.click(screen.getByRole("tab", { name: /Details/i }));
 
@@ -214,7 +308,7 @@ describe("Application dialog Details | Generate shell", () => {
         expect(await screen.findByRole("button", { name: /Save/i })).toBeTruthy();
 
         fireEvent.click(screen.getByRole("tab", { name: /Generate/i }));
-        expect(await screen.findByText(/Generate pane placeholder/i)).toBeTruthy();
+        expect(await screen.findByLabelText("Job Description")).toBeTruthy();
 
         fireEvent.click(screen.getByRole("tab", { name: /Details/i }));
         expect(await screen.findByRole("button", { name: /Save/i })).toBeTruthy();
@@ -340,5 +434,150 @@ describe("Application dialog Details | Generate shell", () => {
         expect(screen.getByRole("tab", { name: /Details/i }).getAttribute("aria-selected")).toBe(
             "true",
         );
+    });
+});
+
+describe("Application Generate tab — start CV Generation", () => {
+    it("expands Generate CV when idle with no Generated CVs", async () => {
+        renderApplicationDetail("/applications/3/generate");
+
+        expect(
+            await screen.findByRole("button", { name: "Generate CV", expanded: true }),
+        ).toBeTruthy();
+        expect(screen.getByLabelText("Job Description")).toBeTruthy();
+        expect(
+            screen.getByRole("form", { name: "Start CV Generation" }),
+        ).toBeTruthy();
+    });
+
+    it("collapses as Generate another when Generated CVs exist", async () => {
+        renderApplicationDetail("/applications/3/generate", {
+            generateLoader: () =>
+                generateLoaderData({
+                    generations: [generation()],
+                    generatedCvs: [generatedCv()],
+                }),
+        });
+
+        expect(
+            await screen.findByRole("button", { name: "Generate another", expanded: false }),
+        ).toBeTruthy();
+        expect(screen.queryByLabelText("Job Description")).toBeNull();
+
+        fireEvent.click(screen.getByRole("button", { name: "Generate another" }));
+        expect(await screen.findByLabelText("Job Description")).toBeTruthy();
+    });
+
+    it("creates a CV Generation from the Generate tab action path", async () => {
+        const submitted: Array<Record<string, FormDataEntryValue>> = [];
+
+        renderApplicationDetail("/applications/3/generate", {
+            generateAction: async ({ request }) => {
+                const formData = await request.formData();
+                submitted.push(Object.fromEntries(formData.entries()));
+                expect(new URL(request.url).pathname).toBe("/applications/3/generate");
+                return { ok: true, intent: "create" };
+            },
+        });
+
+        await screen.findByLabelText("Job Description");
+        fireEvent.click(
+            within(screen.getByRole("form", { name: "Start CV Generation" })).getByRole(
+                "button",
+                { name: /^Generate CV$/ },
+            ),
+        );
+
+        await waitFor(() => {
+            expect(submitted).toHaveLength(1);
+        });
+        expect(submitted[0]?.intent).toBe("create");
+        expect(submitted[0]?.baseCvId).toBe("1");
+        expect(submitted[0]?.format).toBe("DOCX");
+        expect(String(submitted[0]?.jobDescription)).toContain("Build resilient APIs");
+    });
+
+    it("surfaces validation errors inside the expanded form", async () => {
+        renderApplicationDetail("/applications/3/generate", {
+            generateLoader: () =>
+                generateLoaderData({
+                    consent: consent({ current: false, consentVersion: null, consentedAt: null }),
+                    jobDescription: "",
+                }),
+            generateAction: async () => ({
+                ok: false,
+                intent: "create",
+                error: "unexpected",
+            }),
+        });
+
+        const form = await screen.findByRole("form", { name: "Start CV Generation" });
+        fireEvent.click(within(form).getByRole("button", { name: /^Generate CV$/ }));
+        expect(await screen.findByText("A Job Description is required.")).toBeTruthy();
+
+        fireEvent.change(screen.getByLabelText("Job Description"), {
+            target: { value: "Senior backend role." },
+        });
+        fireEvent.click(within(form).getByRole("button", { name: /^Generate CV$/ }));
+        expect(
+            await screen.findByText(/You must consent to sending your Base CV/i),
+        ).toBeTruthy();
+    });
+
+    it("shows limit messaging and blocks submit at the Generated CV cap", async () => {
+        renderApplicationDetail("/applications/3/generate", {
+            generateLoader: () =>
+                generateLoaderData({
+                    generatedCvs: Array.from({ length: 20 }, (_, index) =>
+                        generatedCv({ generatedCvId: index + 1, version: index + 1 }),
+                    ),
+                }),
+        });
+
+        fireEvent.click(await screen.findByRole("button", { name: "Generate another" }));
+        expect(
+            await screen.findByText(/already has 20 generated CVs/i),
+        ).toBeTruthy();
+        expect(
+            within(screen.getByRole("form", { name: "Start CV Generation" }))
+                .getByRole("button", { name: /^Generate CV$/ })
+                .hasAttribute("disabled"),
+        ).toBe(true);
+    });
+
+    it("keeps the dialog shell up with in-pane pending while Generate heavy data loads", async () => {
+        let resolveLoader: ((value: ApplicationGenerateLoaderData) => void) | undefined;
+        const loaderPromise = new Promise<ApplicationGenerateLoaderData>((resolve) => {
+            resolveLoader = resolve;
+        });
+
+        renderApplicationDetail("/applications/3", {
+            generateLoader: () => loaderPromise,
+        });
+
+        await screen.findByRole("dialog", { name: "Backend Engineer" });
+        fireEvent.click(screen.getByRole("tab", { name: /Generate/i }));
+
+        expect(screen.getByRole("dialog", { name: "Backend Engineer" })).toBeTruthy();
+        expect(await screen.findByText(/Loading Generate/i)).toBeTruthy();
+        expect(screen.queryByLabelText("Job Description")).toBeNull();
+
+        await act(async () => {
+            resolveLoader?.(generateLoaderData());
+            await loaderPromise;
+        });
+
+        expect(await screen.findByLabelText("Job Description")).toBeTruthy();
+        expect(screen.getByRole("dialog", { name: "Backend Engineer" })).toBeTruthy();
+    });
+
+    it("does not load Generate heavy data when opening Details alone", async () => {
+        const generateLoader = vi.fn(() => generateLoaderData());
+
+        renderApplicationDetail("/applications/3", { generateLoader });
+
+        await screen.findByRole("dialog", { name: "Backend Engineer" });
+        expect(screen.getByRole("button", { name: /^Edit$/i })).toBeTruthy();
+        expect(generateLoader).not.toHaveBeenCalled();
     });
 });

@@ -12,6 +12,7 @@ import {
     useLoaderData,
     useLocation,
     useNavigate,
+    useNavigation,
     useParams,
     useRouteError,
 } from "react-router";
@@ -20,6 +21,7 @@ import {
     ApplicationDialogPager,
     type ApplicationDialogPane,
 } from "@/components/applications/ApplicationDialogPager";
+import { ApplicationGeneratePane } from "@/components/applications/ApplicationGeneratePane";
 
 import { useBoard } from "@/components/kanban/useBoard";
 import { TagMultiSelectCombobox } from "@/components/postulations/TagMultiSelectCombobox";
@@ -1143,14 +1145,6 @@ export function ApplicationDetailsPane({
     );
 }
 
-export function ApplicationGeneratePane() {
-    return (
-        <div className="flex h-full flex-col gap-3 p-1">
-            <p className="text-sm text-medium-gray">Generate pane placeholder</p>
-        </div>
-    );
-}
-
 function applicationPaneFromPathname(pathname: string): ApplicationDialogPane {
     return pathname.endsWith("/generate") ? "generate" : "details";
 }
@@ -1164,15 +1158,24 @@ export function ApplicationDetailRoute() {
             (item) => item.applicationId === loaderApplication.applicationId,
         ) ?? loaderApplication;
     const navigate = useNavigate();
+    const navigation = useNavigation();
     const location = useLocation();
     const params = useParams();
     const applicationId = params.applicationId;
-    const activePane = applicationPaneFromPathname(location.pathname);
+    const displayPathname =
+        navigation.state !== "idle" && navigation.location
+            ? navigation.location.pathname
+            : location.pathname;
+    const activePane = applicationPaneFromPathname(displayPathname);
+    const generateLoading =
+        navigation.state === "loading" &&
+        Boolean(navigation.location?.pathname.endsWith("/generate"));
     const [dialogContentElement, setDialogContentElement] =
         useState<HTMLDivElement | null>(null);
     const [generateVisited, setGenerateVisited] = useState(
         activePane === "generate",
     );
+    const showGeneratePane = generateVisited || activePane === "generate";
 
     useEffect(() => {
         if (activePane === "generate") {
@@ -1232,7 +1235,9 @@ export function ApplicationDetailRoute() {
                             />
                         }
                         generate={
-                            generateVisited ? <ApplicationGeneratePane /> : null
+                            showGeneratePane ? (
+                                <ApplicationGeneratePane loading={generateLoading} />
+                            ) : null
                         }
                     />
 
