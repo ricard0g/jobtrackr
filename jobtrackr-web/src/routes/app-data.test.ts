@@ -72,4 +72,14 @@ describe("kanbanLoader", () => {
 			},
 		]);
 	});
+
+	it("still loads the board when CV generations fail", async () => {
+		vi.mocked(api.getCvGenerations).mockRejectedValue(new Error("generations unavailable"));
+
+		const data = await kanbanLoader();
+
+		expect(data.applications).toEqual([application]);
+		expect(data.tags).toEqual([tag]);
+		expect(data.generationReminders).toEqual([]);
+	});
 });

@@ -14,7 +14,7 @@ export async function kanbanLoader(): Promise<KanbanLoaderData> {
 	const [applications, tags, generations] = await Promise.all([
 		api.getApplications(),
 		api.getTags(),
-		api.getCvGenerations(),
+		api.getCvGenerations().catch(() => []),
 	]);
 	return {
 		applications,

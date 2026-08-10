@@ -561,12 +561,14 @@ export function ApplicationGeneratePane({ loading = false }: { loading?: boolean
 	// another Application's CVs / generation state.
 	const retainedDataRef = useRef<ApplicationGenerateLoaderData | undefined>(undefined);
 	const retainedApplicationIdRef = useRef<number | null>(null);
+	const prefetchAttemptedForRef = useRef<number | null>(null);
 
 	if (
 		retainedApplicationIdRef.current !== null &&
 		retainedApplicationIdRef.current !== applicationId
 	) {
 		retainedDataRef.current = undefined;
+		prefetchAttemptedForRef.current = null;
 	}
 	retainedApplicationIdRef.current = Number.isInteger(applicationId) ? applicationId : null;
 
@@ -591,10 +593,13 @@ export function ApplicationGeneratePane({ loading = false }: { loading?: boolean
 
 	// Prefetch only: when the pane is mounted off /generate without data (active-run
 	// early mount). First visits to /generate rely on the child route loader alone.
+	// Attempt at most once per Application so a failed loader cannot spin forever.
 	useEffect(() => {
 		if (onGenerateUrl) return;
 		if (data || !Number.isInteger(applicationId) || applicationId <= 0) return;
 		if (refreshFetcher.state !== "idle") return;
+		if (prefetchAttemptedForRef.current === applicationId) return;
+		prefetchAttemptedForRef.current = applicationId;
 		void refreshFetcher.load(`/applications/${applicationId}/generate`);
 	}, [onGenerateUrl, data, applicationId, refreshFetcher]);
 

@@ -911,6 +911,38 @@ describe("Application Generate tab — watch run and manage Generated CVs", () =
         );
     });
 
+    it("does not endlessly retry Generate prefetch when the loader fails", async () => {
+        const generateLoader = vi.fn(() => {
+            throw new Response("Generate unavailable", { status: 500 });
+        });
+
+        renderApplicationDetail("/applications/3", {
+            detailLoader: () => ({
+                application,
+                interviews: [] as [],
+                generations: [
+                    generation({
+                        status: "PROCESSING",
+                        generatedCvId: null,
+                        completedAt: null,
+                    }),
+                ],
+            }),
+            generateLoader,
+        });
+
+        await screen.findByRole("dialog", { name: "Backend Engineer" });
+        await waitFor(() => {
+            expect(generateLoader).toHaveBeenCalled();
+        });
+
+        const callsAfterFirstAttempt = generateLoader.mock.calls.length;
+        await act(async () => {
+            await new Promise((resolve) => window.setTimeout(resolve, 50));
+        });
+        expect(generateLoader.mock.calls.length).toBe(callsAfterFirstAttempt);
+    });
+
     it("polls parent generation statuses while the dialog is open with an active run", async () => {
         vi.useFakeTimers({ shouldAdvanceTime: true });
         let detailLoads = 0;
