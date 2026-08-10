@@ -184,6 +184,17 @@ const renderApplicationDetail = (
     initialEntry = "/applications/3",
     options?: {
         action?: () => Promise<unknown> | unknown;
+        detailLoader?: () =>
+            | {
+                  application: Application;
+                  interviews: [];
+                  generations: CvGeneration[];
+              }
+            | Promise<{
+                  application: Application;
+                  interviews: [];
+                  generations: CvGeneration[];
+              }>;
         generateLoader?: () =>
             | ApplicationGenerateLoaderData
             | Promise<ApplicationGenerateLoaderData>;
@@ -204,7 +215,13 @@ const renderApplicationDetail = (
                     {
                         path: "applications/:applicationId",
                         Component: ApplicationDetailRoute,
-                        loader: () => ({ application, interviews: [] }),
+                        loader:
+                            options?.detailLoader ??
+                            (() => ({
+                                application,
+                                interviews: [],
+                                generations: [],
+                            })),
                         action: options?.action,
                         children: [
                             { index: true },
@@ -670,5 +687,248 @@ describe("Application Generate tab — start CV Generation", () => {
                 .getByRole("button", { name: /^Generate CV$/ })
                 .hasAttribute("disabled"),
         ).toBe(false);
+    });
+});
+
+describe("Application Generate tab — watch run and manage Generated CVs", () => {
+    it("shows the active run above the collapsed form with status, elapsed time, and cancel", async () => {
+        vi.useFakeTimers({ shouldAdvanceTime: true });
+        vi.setSystemTime(new Date("2026-07-16T10:02:00.000Z"));
+
+        renderApplicationDetail("/applications/3/generate", {
+            detailLoader: () => ({
+                application,
+                interviews: [],
+                generations: [
+                    generation({
+                        status: "PENDING",
+                        generatedCvId: null,
+                        createdAt: "2026-07-16T10:00:00.000Z",
+                        startedAt: null,
+                        completedAt: null,
+                    }),
+                ],
+            }),
+            generateLoader: () =>
+                generateLoaderData({
+                    generations: [
+                        generation({
+                            status: "PENDING",
+                            generatedCvId: null,
+                            createdAt: "2026-07-16T10:00:00.000Z",
+                            startedAt: null,
+                            completedAt: null,
+                        }),
+                    ],
+                }),
+        });
+
+        const active = await screen.findByRole("region", { name: "Active CV Generation" });
+        expect(within(active).getByText("Queued")).toBeTruthy();
+        expect(within(active).getByLabelText("Elapsed time").textContent).toMatch(/2m/);
+        expect(within(active).getByRole("button", { name: "Cancel CV Generation" })).toBeTruthy();
+
+        expect(
+            screen.getByRole("button", { name: "Generate CV", expanded: false }),
+        ).toBeTruthy();
+        expect(screen.getByRole("region", { name: "Generated CVs" })).toBeTruthy();
+
+        const pane = active.parentElement;
+        expect(pane).toBeTruthy();
+        const children = Array.from(pane!.children);
+        expect(children[0]).toBe(active);
+        expect(children[1]?.textContent).toMatch(/Generate CV/);
+        expect(children[2]).toBe(screen.getByRole("region", { name: "Generated CVs" }));
+    });
+
+    it("cancels a queued CV Generation from the Generate tab", async () => {
+        const submitted: Array<Record<string, FormDataEntryValue>> = [];
+
+        renderApplicationDetail("/applications/3/generate", {
+            generateLoader: () =>
+                generateLoaderData({
+                    generations: [
+                        generation({
+                            status: "PENDING",
+                            generatedCvId: null,
+                            completedAt: null,
+                        }),
+                    ],
+                }),
+            generateAction: async ({ request }) => {
+                const formData = await request.formData();
+                submitted.push(Object.fromEntries(formData.entries()));
+                return { ok: true, intent: "cancel" };
+            },
+        });
+
+        fireEvent.click(
+            await screen.findByRole("button", { name: "Cancel CV Generation" }),
+        );
+
+        await waitFor(() => {
+            expect(submitted).toHaveLength(1);
+        });
+        expect(submitted[0]?.intent).toBe("cancel");
+        expect(submitted[0]?.cvGenerationId).toBe("10");
+    });
+
+    it("lists Generated CVs with download and delete actions", async () => {
+        const openSpy = vi
+            .spyOn(HTMLAnchorElement.prototype, "click")
+            .mockImplementation(() => undefined);
+        const confirmSpy = vi.spyOn(window, "confirm").mockReturnValue(true);
+        const intents: string[] = [];
+
+        renderApplicationDetail("/applications/3/generate", {
+            generateLoader: () =>
+                generateLoaderData({
+                    generations: [generation()],
+                    generatedCvs: [generatedCv()],
+                }),
+            generateAction: async ({ request }) => {
+                const formData = await request.formData();
+                const intent = String(formData.get("intent"));
+                intents.push(intent);
+                if (intent === "download-cv") {
+                    return {
+                        ok: true,
+                        intent: "download-cv",
+                        uri: "https://example.test/cv.docx",
+                    };
+                }
+                if (intent === "delete-cv") {
+                    return { ok: true, intent: "delete-cv" };
+                }
+                return { ok: true, intent: "create" };
+            },
+        });
+
+        expect(await screen.findByText("application-3-v1.docx")).toBeTruthy();
+        fireEvent.click(
+            screen.getByRole("button", { name: "Download application-3-v1.docx" }),
+        );
+        await waitFor(() => expect(intents).toContain("download-cv"));
+        await waitFor(() => expect(openSpy).toHaveBeenCalled());
+
+        fireEvent.click(
+            screen.getByRole("button", { name: "Delete application-3-v1.docx" }),
+        );
+        await waitFor(() => expect(intents).toContain("delete-cv"));
+        expect(confirmSpy).toHaveBeenCalled();
+    });
+
+    it("shows an in-progress indicator on the Generate tab while viewing Details", async () => {
+        renderApplicationDetail("/applications/3", {
+            detailLoader: () => ({
+                application,
+                interviews: [],
+                generations: [
+                    generation({
+                        status: "PROCESSING",
+                        generatedCvId: null,
+                        completedAt: null,
+                    }),
+                ],
+            }),
+            generateLoader: () =>
+                generateLoaderData({
+                    generations: [
+                        generation({
+                            status: "PROCESSING",
+                            generatedCvId: null,
+                            completedAt: null,
+                        }),
+                    ],
+                }),
+        });
+
+        const generateTab = await screen.findByRole("tab", { name: /Generate/i });
+        expect(generateTab.getAttribute("aria-busy")).toBe("true");
+        expect(within(generateTab).getByText("in progress")).toBeTruthy();
+        expect(screen.getByRole("tab", { name: /Details/i }).getAttribute("aria-selected")).toBe(
+            "true",
+        );
+    });
+
+    it("prefetches Generate heavy data when an active run makes Generate likely", async () => {
+        const generateLoader = vi.fn(() =>
+            generateLoaderData({
+                generations: [
+                    generation({
+                        status: "PROCESSING",
+                        generatedCvId: null,
+                        completedAt: null,
+                    }),
+                ],
+            }),
+        );
+
+        renderApplicationDetail("/applications/3", {
+            detailLoader: () => ({
+                application,
+                interviews: [],
+                generations: [
+                    generation({
+                        status: "PROCESSING",
+                        generatedCvId: null,
+                        completedAt: null,
+                    }),
+                ],
+            }),
+            generateLoader,
+        });
+
+        await screen.findByRole("dialog", { name: "Backend Engineer" });
+        await waitFor(() => {
+            expect(generateLoader).toHaveBeenCalled();
+        });
+        expect(screen.getByRole("tab", { name: /Details/i }).getAttribute("aria-selected")).toBe(
+            "true",
+        );
+    });
+
+    it("polls parent generation statuses while the dialog is open with an active run", async () => {
+        vi.useFakeTimers({ shouldAdvanceTime: true });
+        let detailLoads = 0;
+        const detailLoader = vi.fn(() => {
+            detailLoads += 1;
+            return {
+                application,
+                interviews: [],
+                generations: [
+                    generation({
+                        status: "PROCESSING",
+                        generatedCvId: null,
+                        completedAt: null,
+                    }),
+                ],
+            };
+        });
+
+        renderApplicationDetail("/applications/3", {
+            detailLoader,
+            generateLoader: () =>
+                generateLoaderData({
+                    generations: [
+                        generation({
+                            status: "PROCESSING",
+                            generatedCvId: null,
+                            completedAt: null,
+                        }),
+                    ],
+                }),
+        });
+
+        await screen.findByRole("dialog", { name: "Backend Engineer" });
+        const initialLoads = detailLoads;
+
+        await act(async () => {
+            await vi.advanceTimersByTimeAsync(3_000);
+        });
+
+        await waitFor(() => {
+            expect(detailLoads).toBeGreaterThan(initialLoads);
+        });
     });
 });

@@ -20,10 +20,12 @@ import type {
 } from "@/types/interview";
 import type { BoardPlacement } from "@/components/kanban/board-state";
 import type { Tag, TagCategory } from "@/types/tag";
+import type { CvGeneration } from "@/types/cv-generation";
 
 export type ApplicationDetailLoaderData = {
 	application: Application;
 	interviews: Interview[];
+	generations: CvGeneration[];
 };
 
 export type ApplicationFormField =
@@ -161,14 +163,16 @@ export async function applicationDetailLoader({
 	await requireSession();
 
 	const applicationId = parsePositiveApplicationId(params.applicationId);
-	const [application, interviews] = await Promise.all([
+	const [application, interviews, generations] = await Promise.all([
 		api.getApplicationById(applicationId),
 		api.getInterviews(applicationId),
+		api.getCvGenerations(applicationId),
 	]);
 
 	return {
 		application,
 		interviews: interviews.toSorted(byScheduledAt),
+		generations,
 	};
 }
 
@@ -546,12 +550,26 @@ export function applicationDetailShouldRevalidate({
 		typeof actionResult === "object" &&
 		"intent" in actionResult
 	) {
-		const intent = (actionResult as ApplicationDetailActionData).intent;
-		return (
+		const intent = (actionResult as { intent?: string }).intent;
+		if (
 			intent === "createInterview" ||
 			intent === "deleteInterview" ||
-			intent === "patchInterviewOutcome"
-		);
+			intent === "patchInterviewOutcome" ||
+			intent === "create" ||
+			intent === "cancel" ||
+			intent === "delete-cv"
+		) {
+			return true;
+		}
+		if (
+			intent === "updateApplication" ||
+			intent === "updateTags" ||
+			intent === "createTag" ||
+			intent === "deleteApplication" ||
+			intent === "download-cv"
+		) {
+			return false;
+		}
 	}
 
 	return defaultShouldRevalidate;

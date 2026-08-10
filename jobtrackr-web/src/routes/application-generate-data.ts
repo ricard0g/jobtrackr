@@ -24,7 +24,11 @@ export type ApplicationGenerateLoaderData = {
 	generatedCvs: GeneratedCv[];
 };
 
-export type ApplicationGenerateActionIntent = "create";
+export type ApplicationGenerateActionIntent =
+	| "create"
+	| "cancel"
+	| "delete-cv"
+	| "download-cv";
 
 export type ApplicationGenerateActionData = {
 	ok: boolean;
@@ -36,6 +40,7 @@ export type ApplicationGenerateActionData = {
 			string
 		>
 	>;
+	uri?: string;
 };
 
 const generatedFormats: GeneratedCvFormat[] = ["PDF", "DOCX", "MARKDOWN"];
@@ -56,6 +61,10 @@ const errorMessages: Record<string, string> = {
 		"This application already has 20 generated CVs. Delete one before generating another.",
 	MISSING_IDEMPOTENCY_KEY: "The generation request could not be started. Please try again.",
 	APPLICATION_NOT_FOUND: "This application is no longer available.",
+	CV_GENERATION_NOT_FOUND: "This generation is no longer available.",
+	INVALID_STATUS_TRANSITION: "Only queued generations can be cancelled.",
+	GENERATED_CV_NOT_FOUND: "This generated CV is no longer available.",
+	STORAGE_UNAVAILABLE: "Document storage is temporarily unavailable. Please try again.",
 };
 
 const parsePositiveApplicationId = (value: string | undefined) => {
@@ -189,11 +198,45 @@ export async function applicationGenerateAction({
 			return { ok: true, intent };
 		}
 
+		if (intent === "cancel") {
+			const cvGenerationId = Number(formData.get("cvGenerationId"));
+			if (!Number.isInteger(cvGenerationId) || cvGenerationId <= 0) {
+				return { ok: false, intent, error: "Invalid generation." };
+			}
+			await api.cancelCvGeneration(cvGenerationId);
+			return { ok: true, intent };
+		}
+
+		if (intent === "delete-cv") {
+			const generatedCvId = Number(formData.get("generatedCvId"));
+			if (!Number.isInteger(generatedCvId) || generatedCvId <= 0) {
+				return { ok: false, intent, error: "Invalid generated CV." };
+			}
+			await api.deleteGeneratedCv(generatedCvId);
+			return { ok: true, intent };
+		}
+
+		if (intent === "download-cv") {
+			const generatedCvId = Number(formData.get("generatedCvId"));
+			if (!Number.isInteger(generatedCvId) || generatedCvId <= 0) {
+				return { ok: false, intent, error: "Invalid generated CV." };
+			}
+			const download = await api.getGeneratedCvDownload(generatedCvId);
+			return { ok: true, intent, uri: download.uri };
+		}
+
 		throw new Response("Unsupported action", { status: 400 });
 	} catch (error) {
 		if (error instanceof Response) {
 			throw error;
 		}
-		return actionError(intent === "create" ? intent : "create", error);
+		const fallbackIntent: ApplicationGenerateActionIntent =
+			intent === "cancel" ||
+			intent === "delete-cv" ||
+			intent === "download-cv" ||
+			intent === "create"
+				? intent
+				: "create";
+		return actionError(fallbackIntent, error);
 	}
 }

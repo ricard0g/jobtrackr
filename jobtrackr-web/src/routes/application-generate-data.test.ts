@@ -291,4 +291,68 @@ describe("applicationGenerateAction", () => {
 
 		expect(createCvGeneration.mock.calls[0]?.[0].applicationId).toBe(3);
 	});
+
+	it("cancels a CV Generation by id", async () => {
+		setAccessToken("test-token");
+		const cancelCvGeneration = vi
+			.spyOn(api, "cancelCvGeneration")
+			.mockResolvedValue({ ...generation, status: "CANCELLED" });
+
+		const result = await applicationGenerateAction(
+			actionArgs(
+				"3",
+				createFormData({
+					intent: "cancel",
+					cvGenerationId: "10",
+				}),
+			),
+		);
+
+		expect(result).toEqual({ ok: true, intent: "cancel" });
+		expect(cancelCvGeneration).toHaveBeenCalledWith(10);
+	});
+
+	it("downloads a Generated CV and returns the signed URI", async () => {
+		setAccessToken("test-token");
+		const getGeneratedCvDownload = vi
+			.spyOn(api, "getGeneratedCvDownload")
+			.mockResolvedValue({
+				uri: "https://example.test/cv.docx",
+			});
+
+		const result = await applicationGenerateAction(
+			actionArgs(
+				"3",
+				createFormData({
+					intent: "download-cv",
+					generatedCvId: "5",
+				}),
+			),
+		);
+
+		expect(result).toEqual({
+			ok: true,
+			intent: "download-cv",
+			uri: "https://example.test/cv.docx",
+		});
+		expect(getGeneratedCvDownload).toHaveBeenCalledWith(5);
+	});
+
+	it("deletes a Generated CV by id", async () => {
+		setAccessToken("test-token");
+		const deleteGeneratedCv = vi.spyOn(api, "deleteGeneratedCv").mockResolvedValue();
+
+		const result = await applicationGenerateAction(
+			actionArgs(
+				"3",
+				createFormData({
+					intent: "delete-cv",
+					generatedCvId: "5",
+				}),
+			),
+		);
+
+		expect(result).toEqual({ ok: true, intent: "delete-cv" });
+		expect(deleteGeneratedCv).toHaveBeenCalledWith(5);
+	});
 });

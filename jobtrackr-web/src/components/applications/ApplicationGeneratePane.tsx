@@ -1,4 +1,12 @@
-import { ChevronDown, LoaderCircle, Loader2, Sparkles } from "lucide-react";
+import {
+	ChevronDown,
+	Download,
+	Loader2,
+	LoaderCircle,
+	Sparkles,
+	Trash2,
+	XCircle,
+} from "lucide-react";
 import { useEffect, useId, useRef, useState } from "react";
 import {
 	useFetcher,
@@ -25,10 +33,237 @@ import {
 	type ApplicationGenerateActionData,
 	type ApplicationGenerateLoaderData,
 } from "@/routes/application-generate-data";
+import {
+	activeElapsedStartedAt,
+	formatAbsoluteTime,
+	formatElapsedDuration,
+} from "@/routes/generate-display";
 import { MAX_GENERATED_CVS } from "@/routes/generate-data";
-import { isActiveCvGenerationStatus, type GeneratedCvFormat } from "@/types/cv-generation";
+import {
+	cvGenerationStatusLabels,
+	isActiveCvGenerationStatus,
+	type CvGeneration,
+	type GeneratedCvFormat,
+} from "@/types/cv-generation";
+import type { GeneratedCv } from "@/types/generated-cv";
 
 const GENERATE_POLL_INTERVAL_MS = 3_000;
+const ELAPSED_TICK_MS = 1_000;
+
+const formatLabels = { PDF: "PDF", DOCX: "DOCX", MARKDOWN: "Markdown" } as const;
+
+const formatBytes = (bytes: number) =>
+	new Intl.NumberFormat("en", {
+		style: "unit",
+		unit: bytes >= 1024 * 1024 ? "megabyte" : "kilobyte",
+		maximumFractionDigits: 1,
+	}).format(bytes / (bytes >= 1024 * 1024 ? 1024 * 1024 : 1024));
+
+const openSignedDownload = (uri: string) => {
+	const link = document.createElement("a");
+	link.href = uri;
+	link.rel = "noopener noreferrer";
+	link.target = "_blank";
+	link.click();
+};
+
+function useNow(enabled: boolean): Date {
+	const [now, setNow] = useState(() => new Date());
+	useEffect(() => {
+		if (!enabled) return;
+		setNow(new Date());
+		const intervalId = window.setInterval(() => setNow(new Date()), ELAPSED_TICK_MS);
+		return () => window.clearInterval(intervalId);
+	}, [enabled]);
+	return enabled ? now : new Date();
+}
+
+function pickActiveGeneration(generations: CvGeneration[]): CvGeneration | null {
+	return (
+		generations.find((generation) => generation.status === "PROCESSING") ??
+		generations.find((generation) => generation.status === "PENDING") ??
+		null
+	);
+}
+
+function ActiveCvGenerationCard({
+	generation,
+	applicationId,
+	now,
+}: {
+	generation: CvGeneration;
+	applicationId: number;
+	now: Date;
+}) {
+	const cancelFetcher = useFetcher<ApplicationGenerateActionData>();
+	const cancelling = cancelFetcher.state !== "idle";
+	const statusLabel = cvGenerationStatusLabels[generation.status];
+	const elapsed = formatElapsedDuration(activeElapsedStartedAt(generation), now);
+	const canCancel = generation.status === "PENDING";
+
+	return (
+		<section
+			aria-label="Active CV Generation"
+			className="rounded-lg border border-light-gray bg-off-white px-3 py-3"
+		>
+			<div className="flex flex-wrap items-center gap-2 text-sm font-medium text-dark-accent">
+				<LoaderCircle className="size-4 animate-spin" aria-hidden />
+				<span>{statusLabel}</span>
+				<span className="text-medium-gray" aria-label="Elapsed time">
+					· {elapsed}
+				</span>
+			</div>
+			{canCancel ? (
+				<cancelFetcher.Form
+					method="post"
+					action={`/applications/${applicationId}/generate`}
+					className="mt-2"
+				>
+					<input type="hidden" name="intent" value="cancel" />
+					<input type="hidden" name="cvGenerationId" value={generation.cvGenerationId} />
+					<Button
+						type="submit"
+						variant="outline"
+						size="sm"
+						disabled={cancelling}
+						aria-label="Cancel CV Generation"
+					>
+						{cancelling ? <LoaderCircle className="animate-spin" /> : <XCircle />}
+						Cancel
+					</Button>
+				</cancelFetcher.Form>
+			) : null}
+			{cancelFetcher.data?.ok === false ? (
+				<p role="alert" className="mt-2 text-sm text-red-700">
+					{cancelFetcher.data.error}
+				</p>
+			) : null}
+		</section>
+	);
+}
+
+function GeneratedCvRow({
+	generatedCv,
+	applicationId,
+}: {
+	generatedCv: GeneratedCv;
+	applicationId: number;
+}) {
+	const deleteFetcher = useFetcher<ApplicationGenerateActionData>();
+	const downloadFetcher = useFetcher<ApplicationGenerateActionData>();
+	const openedDownloadRef = useRef<ApplicationGenerateActionData | null>(null);
+	const deleting = deleteFetcher.state !== "idle";
+	const downloading = downloadFetcher.state !== "idle";
+	const actionPath = `/applications/${applicationId}/generate`;
+
+	useEffect(() => {
+		if (downloadFetcher.state !== "idle") return;
+		const data = downloadFetcher.data;
+		if (!data?.ok || data.intent !== "download-cv" || !data.uri) return;
+		if (openedDownloadRef.current === data) return;
+		openedDownloadRef.current = data;
+		openSignedDownload(data.uri);
+	}, [downloadFetcher.state, downloadFetcher.data]);
+
+	const confirmDelete = (event: React.FormEvent<HTMLFormElement>) => {
+		if (!window.confirm(`Permanently delete ${generatedCv.originalFilename}?`)) {
+			event.preventDefault();
+		}
+	};
+
+	return (
+		<li className="flex flex-wrap items-start gap-3 rounded-lg border border-light-gray bg-white px-3 py-2">
+			<div className="min-w-0 flex-1">
+				<p className="truncate text-sm font-semibold text-dark-gray">
+					{generatedCv.originalFilename}
+				</p>
+				<p className="mt-0.5 text-xs text-medium-gray">
+					v{generatedCv.version} · {formatLabels[generatedCv.format]} ·{" "}
+					{formatBytes(generatedCv.byteSize)} · {formatAbsoluteTime(generatedCv.createdAt)}
+				</p>
+			</div>
+			<div className="flex gap-1">
+				<downloadFetcher.Form method="post" action={actionPath}>
+					<input type="hidden" name="intent" value="download-cv" />
+					<input type="hidden" name="generatedCvId" value={generatedCv.generatedCvId} />
+					<Button
+						type="submit"
+						variant="ghost"
+						size="sm"
+						disabled={downloading}
+						aria-label={`Download ${generatedCv.originalFilename}`}
+					>
+						{downloading ? <LoaderCircle className="animate-spin" /> : <Download />}
+					</Button>
+				</downloadFetcher.Form>
+				<deleteFetcher.Form method="post" action={actionPath} onSubmit={confirmDelete}>
+					<input type="hidden" name="intent" value="delete-cv" />
+					<input type="hidden" name="generatedCvId" value={generatedCv.generatedCvId} />
+					<Button
+						type="submit"
+						variant="ghost"
+						size="sm"
+						disabled={deleting}
+						aria-label={`Delete ${generatedCv.originalFilename}`}
+					>
+						{deleting ? <LoaderCircle className="animate-spin" /> : <Trash2 />}
+					</Button>
+				</deleteFetcher.Form>
+			</div>
+			{downloadFetcher.data?.ok === false ? (
+				<p role="alert" className="basis-full text-sm text-red-700">
+					{downloadFetcher.data.error}
+				</p>
+			) : null}
+			{deleteFetcher.data?.ok === false ? (
+				<p role="alert" className="basis-full text-sm text-red-700">
+					{deleteFetcher.data.error}
+				</p>
+			) : null}
+		</li>
+	);
+}
+
+function GeneratedCvList({
+	generatedCvs,
+	applicationId,
+}: {
+	generatedCvs: GeneratedCv[];
+	applicationId: number;
+}) {
+	const sortedCvs = generatedCvs.toSorted((left, right) => right.version - left.version);
+	const atLimit = generatedCvs.length >= MAX_GENERATED_CVS;
+
+	return (
+		<section aria-label="Generated CVs" className="space-y-2">
+			<div className="flex items-baseline justify-between gap-2">
+				<h3 className="text-sm font-semibold text-darkest-accent">Generated CVs</h3>
+				<span className="text-xs text-medium-gray">
+					{generatedCvs.length} / {MAX_GENERATED_CVS}
+				</span>
+			</div>
+			{atLimit ? (
+				<p className="text-sm text-amber-800">
+					Generated CV limit reached ({generatedCvs.length} / {MAX_GENERATED_CVS}). Delete one
+					to make room.
+				</p>
+			) : null}
+			{sortedCvs.length === 0 ? (
+				<p className="text-sm text-medium-gray">No Generated CVs yet for this Application.</p>
+			) : (
+				<ul className="space-y-2">
+					{sortedCvs.map((generatedCv) => (
+						<GeneratedCvRow
+							key={generatedCv.generatedCvId}
+							generatedCv={generatedCv}
+							applicationId={applicationId}
+						/>
+					))}
+				</ul>
+			)}
+		</section>
+	);
+}
 
 function ApplicationGenerateForm({
 	data,
@@ -320,6 +555,17 @@ export function ApplicationGeneratePane({ loading = false }: { loading?: boolean
 		data?.generations.some((generation) =>
 			isActiveCvGenerationStatus(generation.status),
 		) ?? false;
+	const activeGeneration = data ? pickActiveGeneration(data.generations) : null;
+	const now = useNow(Boolean(activeGeneration));
+
+	// Prefetch only: when the pane is mounted off /generate without data (active-run
+	// early mount). First visits to /generate rely on the child route loader alone.
+	useEffect(() => {
+		if (onGenerateUrl) return;
+		if (data || !Number.isInteger(applicationId) || applicationId <= 0) return;
+		if (refreshFetcher.state !== "idle") return;
+		void refreshFetcher.load(`/applications/${applicationId}/generate`);
+	}, [onGenerateUrl, data, applicationId, refreshFetcher]);
 
 	useEffect(() => {
 		if (!hasActiveGeneration || !Number.isInteger(applicationId) || applicationId <= 0) {
@@ -350,7 +596,15 @@ export function ApplicationGeneratePane({ loading = false }: { loading?: boolean
 
 	return (
 		<div className="flex h-full flex-col gap-3 p-1">
+			{activeGeneration ? (
+				<ActiveCvGenerationCard
+					generation={activeGeneration}
+					applicationId={applicationId}
+					now={now}
+				/>
+			) : null}
 			<ApplicationGenerateForm data={data} applicationId={applicationId} />
+			<GeneratedCvList generatedCvs={data.generatedCvs} applicationId={applicationId} />
 		</div>
 	);
 }

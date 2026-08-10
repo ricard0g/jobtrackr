@@ -1,4 +1,4 @@
-import { FileText, Loader2, Pencil, Plus, Sparkles, Trash2 } from "lucide-react";
+import { FileText, Loader2, LoaderCircle, Pencil, Plus, Sparkles, Trash2 } from "lucide-react";
 import {
     type ReactNode,
     useEffect,
@@ -14,6 +14,7 @@ import {
     useNavigate,
     useNavigation,
     useParams,
+    useRevalidator,
     useRouteError,
 } from "react-router";
 
@@ -53,6 +54,7 @@ import {
     type ApplicationStatus,
     type RemoteType,
 } from "@/types/application";
+import { isActiveCvGenerationStatus } from "@/types/cv-generation";
 import type {
     InterviewOutcome,
     InterviewType,
@@ -62,6 +64,9 @@ import type {
     ApplicationDetailActionData,
     ApplicationDetailLoaderData,
 } from "./application-detail-data";
+
+const GENERATE_POLL_INTERVAL_MS = 3_000;
+
 type DrawerMode = "view" | "edit";
 
 type InterviewFormValues = {
@@ -1150,7 +1155,7 @@ function applicationPaneFromPathname(pathname: string): ApplicationDialogPane {
 }
 
 export function ApplicationDetailRoute() {
-    const { application: loaderApplication } =
+    const { application: loaderApplication, generations } =
         useLoaderData() as ApplicationDetailLoaderData;
     const { allApplications } = useBoard();
     const application =
@@ -1161,6 +1166,7 @@ export function ApplicationDetailRoute() {
     const navigation = useNavigation();
     const location = useLocation();
     const params = useParams();
+    const revalidator = useRevalidator();
     const applicationId = params.applicationId;
     const displayPathname =
         navigation.state !== "idle" && navigation.location
@@ -1172,16 +1178,30 @@ export function ApplicationDetailRoute() {
         Boolean(navigation.location?.pathname.endsWith("/generate"));
     const [dialogContentElement, setDialogContentElement] =
         useState<HTMLDivElement | null>(null);
+    const hasActiveGeneration = generations.some((generation) =>
+        isActiveCvGenerationStatus(generation.status),
+    );
     const [generateVisited, setGenerateVisited] = useState(
-        activePane === "generate",
+        activePane === "generate" || hasActiveGeneration,
     );
     const showGeneratePane = generateVisited || activePane === "generate";
 
     useEffect(() => {
-        if (activePane === "generate") {
+        if (activePane === "generate" || hasActiveGeneration) {
             setGenerateVisited(true);
         }
-    }, [activePane]);
+    }, [activePane, hasActiveGeneration]);
+
+    useEffect(() => {
+        // On /generate the Generate pane revalidator already refreshes parent + child.
+        if (!hasActiveGeneration || activePane === "generate") return;
+        const intervalId = window.setInterval(() => {
+            if (revalidator.state === "idle") {
+                void revalidator.revalidate();
+            }
+        }, GENERATE_POLL_INTERVAL_MS);
+        return () => window.clearInterval(intervalId);
+    }, [hasActiveGeneration, activePane, revalidator]);
 
     const goToPane = (pane: ApplicationDialogPane) => {
         if (!applicationId) return;
@@ -1263,12 +1283,15 @@ export function ApplicationDetailRoute() {
                                 ] as const
                             ).map(({ pane, label, icon: Icon }) => {
                                 const selected = activePane === pane;
+                                const showGenerating =
+                                    pane === "generate" && hasActiveGeneration;
                                 return (
                                     <button
                                         key={pane}
                                         type="button"
                                         role="tab"
                                         aria-selected={selected}
+                                        aria-busy={showGenerating || undefined}
                                         className={
                                             selected
                                                 ? "flex flex-col items-center gap-1 rounded-md px-3 py-2 text-sm font-medium text-foreground"
@@ -1276,8 +1299,20 @@ export function ApplicationDetailRoute() {
                                         }
                                         onClick={() => goToPane(pane)}
                                     >
-                                        <Icon className="size-4" aria-hidden />
-                                        {label}
+                                        {showGenerating ? (
+                                            <LoaderCircle
+                                                className="size-4 animate-spin"
+                                                aria-hidden
+                                            />
+                                        ) : (
+                                            <Icon className="size-4" aria-hidden />
+                                        )}
+                                        <span className="inline-flex items-center gap-1">
+                                            {label}
+                                            {showGenerating ? (
+                                                <span className="sr-only">in progress</span>
+                                            ) : null}
+                                        </span>
                                     </button>
                                 );
                             })}
