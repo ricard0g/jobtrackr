@@ -90,17 +90,32 @@ function BoardShell() {
     );
 }
 
-const applicationRoute = {
-    path: "applications/:applicationId",
-    Component: ApplicationDetailRoute,
-    loader: () => ({ application, interviews: [] }),
-    children: [
-        { index: true },
-        { path: "generate" },
-    ],
-};
+function dispatchSwipe(
+    target: Element,
+    from: { x: number; y: number },
+    to: { x: number; y: number },
+) {
+    const startEvent = new Event("touchstart", { bubbles: true, cancelable: true });
+    Object.defineProperty(startEvent, "touches", {
+        value: [{ clientX: from.x, clientY: from.y }],
+    });
+    const endEvent = new Event("touchend", { bubbles: true, cancelable: true });
+    Object.defineProperty(endEvent, "touches", {
+        value: [{ clientX: to.x, clientY: to.y }],
+    });
+    Object.defineProperty(endEvent, "changedTouches", {
+        value: [{ clientX: to.x, clientY: to.y }],
+    });
+    target.dispatchEvent(startEvent);
+    target.dispatchEvent(endEvent);
+}
 
-const renderApplicationDetail = (initialEntry = "/applications/3") => {
+const renderApplicationDetail = (
+    initialEntry = "/applications/3",
+    options?: {
+        action?: () => Promise<unknown> | unknown;
+    },
+) => {
     const router = createMemoryRouter(
         [
             {
@@ -108,7 +123,16 @@ const renderApplicationDetail = (initialEntry = "/applications/3") => {
                 Component: BoardShell,
                 children: [
                     { index: true, element: <div>Kanban route</div> },
-                    applicationRoute,
+                    {
+                        path: "applications/:applicationId",
+                        Component: ApplicationDetailRoute,
+                        loader: () => ({ application, interviews: [] }),
+                        action: options?.action,
+                        children: [
+                            { index: true },
+                            { path: "generate" },
+                        ],
+                    },
                 ],
             },
         ],
@@ -197,6 +221,33 @@ describe("Application dialog Details | Generate shell", () => {
         expect(screen.queryByRole("button", { name: /^Edit$/i })).toBeNull();
     });
 
+    it("updates the dialog header after saving application details", async () => {
+        const updatedApplication: Application = {
+            ...application,
+            applicationTitle: "Staff Engineer",
+        };
+
+        renderApplicationDetail("/applications/3", {
+            action: async () => ({
+                ok: true,
+                intent: "updateApplication",
+                application: updatedApplication,
+                boardPlacement: "preserve-position",
+            }),
+        });
+
+        await screen.findByRole("dialog", { name: "Backend Engineer" });
+        fireEvent.click(screen.getByRole("button", { name: /^Edit$/i }));
+
+        const titleInput = await screen.findByDisplayValue("Backend Engineer");
+        fireEvent.change(titleInput, { target: { value: "Staff Engineer" } });
+        fireEvent.click(screen.getByRole("button", { name: /Save/i }));
+
+        expect(
+            await screen.findByRole("dialog", { name: "Staff Engineer" }),
+        ).toBeTruthy();
+    });
+
     it("closes to the Kanban root with Escape from Details", async () => {
         const router = renderApplicationDetail("/applications/3");
 
@@ -250,20 +301,7 @@ describe("Application dialog Details | Generate shell", () => {
         const pager = dialog.querySelector("[data-application-pager]");
         expect(pager).toBeTruthy();
 
-        // jsdom + remove-scroll: build touch-like events that include clientX on touches.
-        const startEvent = new Event("touchstart", { bubbles: true, cancelable: true });
-        Object.defineProperty(startEvent, "touches", {
-            value: [{ clientX: 200, clientY: 100 }],
-        });
-        const endEvent = new Event("touchend", { bubbles: true, cancelable: true });
-        Object.defineProperty(endEvent, "touches", {
-            value: [{ clientX: 40, clientY: 100 }],
-        });
-        Object.defineProperty(endEvent, "changedTouches", {
-            value: [{ clientX: 40, clientY: 100 }],
-        });
-        pager!.dispatchEvent(startEvent);
-        pager!.dispatchEvent(endEvent);
+        dispatchSwipe(pager!, { x: 200, y: 100 }, { x: 40, y: 100 });
 
         await waitFor(() => {
             expect(router.state.location.pathname).toBe("/applications/3/generate");
@@ -279,19 +317,24 @@ describe("Application dialog Details | Generate shell", () => {
         const pager = dialog.querySelector("[data-application-pager]");
         expect(pager).toBeTruthy();
 
-        const startEvent = new Event("touchstart", { bubbles: true, cancelable: true });
-        Object.defineProperty(startEvent, "touches", {
-            value: [{ clientX: 200, clientY: 100 }],
-        });
-        const endEvent = new Event("touchend", { bubbles: true, cancelable: true });
-        Object.defineProperty(endEvent, "touches", {
-            value: [{ clientX: 40, clientY: 100 }],
-        });
-        Object.defineProperty(endEvent, "changedTouches", {
-            value: [{ clientX: 40, clientY: 100 }],
-        });
-        pager!.dispatchEvent(startEvent);
-        pager!.dispatchEvent(endEvent);
+        dispatchSwipe(pager!, { x: 200, y: 100 }, { x: 40, y: 100 });
+
+        expect(router.state.location.pathname).toBe("/applications/3");
+        expect(screen.getByRole("tab", { name: /Details/i }).getAttribute("aria-selected")).toBe(
+            "true",
+        );
+    });
+
+    it("does not swipe when the gesture is mostly vertical scrolling", async () => {
+        stubMatchMedia(true);
+
+        const router = renderApplicationDetail("/applications/3");
+        const dialog = await screen.findByRole("dialog", { name: "Backend Engineer" });
+        const pager = dialog.querySelector("[data-application-pager]");
+        expect(pager).toBeTruthy();
+
+        // Large vertical movement with enough horizontal drift to formerly trip the threshold.
+        dispatchSwipe(pager!, { x: 200, y: 40 }, { x: 120, y: 220 });
 
         expect(router.state.location.pathname).toBe("/applications/3");
         expect(screen.getByRole("tab", { name: /Details/i }).getAttribute("aria-selected")).toBe(

@@ -1156,7 +1156,13 @@ function applicationPaneFromPathname(pathname: string): ApplicationDialogPane {
 }
 
 export function ApplicationDetailRoute() {
-    const { application } = useLoaderData() as ApplicationDetailLoaderData;
+    const { application: loaderApplication } =
+        useLoaderData() as ApplicationDetailLoaderData;
+    const { allApplications } = useBoard();
+    const application =
+        allApplications.find(
+            (item) => item.applicationId === loaderApplication.applicationId,
+        ) ?? loaderApplication;
     const navigate = useNavigate();
     const location = useLocation();
     const params = useParams();

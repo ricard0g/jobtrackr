@@ -20,6 +20,31 @@ type ApplicationDialogPagerProps = {
 
 const SWIPE_THRESHOLD_PX = 56;
 
+type TouchPoint = {
+    x: number;
+    y: number;
+};
+
+export function paneFromSwipeGesture({
+    activePane,
+    deltaX,
+    deltaY,
+    threshold = SWIPE_THRESHOLD_PX,
+}: {
+    activePane: ApplicationDialogPane;
+    deltaX: number;
+    deltaY: number;
+    threshold?: number;
+}): ApplicationDialogPane | null {
+    if (Math.abs(deltaX) < threshold) return null;
+    // Prefer scroll: ignore gestures that are not clearly horizontal.
+    if (Math.abs(deltaX) <= Math.abs(deltaY)) return null;
+
+    if (deltaX < 0 && activePane === "details") return "generate";
+    if (deltaX > 0 && activePane === "generate") return "details";
+    return null;
+}
+
 function useMobileViewport() {
     const [isMobile, setIsMobile] = useState(() => {
         if (typeof window === "undefined" || typeof window.matchMedia !== "function") {
@@ -48,31 +73,36 @@ export function ApplicationDialogPager({
     className,
 }: ApplicationDialogPagerProps) {
     const allowSwipe = useMobileViewport();
-    const touchStartX = useRef<number | null>(null);
+    const touchStart = useRef<TouchPoint | null>(null);
 
     const handleTouchStart = (event: TouchEvent<HTMLDivElement>) => {
         if (!allowSwipe) return;
-        touchStartX.current = event.touches[0]?.clientX ?? null;
+        const touch = event.touches[0];
+        if (!touch) return;
+        touchStart.current = { x: touch.clientX, y: touch.clientY };
     };
 
     const handleTouchEnd = (event: TouchEvent<HTMLDivElement>) => {
-        if (!allowSwipe || touchStartX.current === null) return;
-        const endX = event.changedTouches[0]?.clientX;
-        if (endX === undefined) {
-            touchStartX.current = null;
+        if (!allowSwipe || touchStart.current === null) return;
+        const touch = event.changedTouches[0];
+        if (!touch) {
+            touchStart.current = null;
             return;
         }
 
-        const deltaX = endX - touchStartX.current;
-        touchStartX.current = null;
+        const deltaX = touch.clientX - touchStart.current.x;
+        const deltaY = touch.clientY - touchStart.current.y;
+        touchStart.current = null;
 
-        if (deltaX <= -SWIPE_THRESHOLD_PX && activePane === "details") {
-            event.preventDefault();
-            onPaneChange("generate");
-        } else if (deltaX >= SWIPE_THRESHOLD_PX && activePane === "generate") {
-            event.preventDefault();
-            onPaneChange("details");
-        }
+        const nextPane = paneFromSwipeGesture({
+            activePane,
+            deltaX,
+            deltaY,
+        });
+        if (!nextPane) return;
+
+        event.preventDefault();
+        onPaneChange(nextPane);
     };
 
     return (
