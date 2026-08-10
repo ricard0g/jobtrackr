@@ -1189,7 +1189,9 @@ export function ApplicationDetailRoute() {
             pane === "generate"
                 ? `/applications/${applicationId}/generate`
                 : `/applications/${applicationId}`;
-        if (location.pathname === path) return;
+        // Compare against the displayed (possibly in-flight) path so the opposite
+        // tab can cancel a pending pane transition.
+        if (displayPathname === path) return;
         void navigate(path, { replace: true });
     };
 

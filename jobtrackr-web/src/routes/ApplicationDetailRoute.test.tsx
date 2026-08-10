@@ -238,6 +238,7 @@ const renderApplicationDetail = (
 
 afterEach(() => {
     cleanup();
+    vi.useRealTimers();
     vi.restoreAllMocks();
     stubMatchMedia(false);
     vi.stubGlobal("ResizeObserver", ResizeObserverMock);
@@ -435,6 +436,39 @@ describe("Application dialog Details | Generate shell", () => {
             "true",
         );
     });
+
+    it("lets the opposite tab cancel an in-flight Generate navigation", async () => {
+        let resolveLoader: ((value: ApplicationGenerateLoaderData) => void) | undefined;
+        const loaderPromise = new Promise<ApplicationGenerateLoaderData>((resolve) => {
+            resolveLoader = resolve;
+        });
+
+        const router = renderApplicationDetail("/applications/3", {
+            generateLoader: () => loaderPromise,
+        });
+
+        await screen.findByRole("dialog", { name: "Backend Engineer" });
+        fireEvent.click(screen.getByRole("tab", { name: /Generate/i }));
+        expect(await screen.findByText(/Loading Generate/i)).toBeTruthy();
+
+        fireEvent.click(screen.getByRole("tab", { name: /Details/i }));
+
+        await waitFor(() => {
+            expect(router.state.location.pathname).toBe("/applications/3");
+            expect(screen.getByRole("tab", { name: /Details/i }).getAttribute("aria-selected")).toBe(
+                "true",
+            );
+        });
+        expect(screen.getByRole("button", { name: /^Edit$/i })).toBeTruthy();
+
+        await act(async () => {
+            resolveLoader?.(generateLoaderData());
+            await loaderPromise;
+        });
+
+        expect(router.state.location.pathname).toBe("/applications/3");
+        expect(screen.getByRole("button", { name: /^Edit$/i })).toBeTruthy();
+    });
 });
 
 describe("Application Generate tab — start CV Generation", () => {
@@ -579,5 +613,62 @@ describe("Application Generate tab — start CV Generation", () => {
         await screen.findByRole("dialog", { name: "Backend Engineer" });
         expect(screen.getByRole("button", { name: /^Edit$/i })).toBeTruthy();
         expect(generateLoader).not.toHaveBeenCalled();
+    });
+
+    it("polls Generate data while a CV Generation is active and unlocks submit when it finishes", async () => {
+        vi.useFakeTimers({ shouldAdvanceTime: true });
+        let loadCount = 0;
+        const generateLoader = vi.fn(() => {
+            loadCount += 1;
+            if (loadCount === 1) {
+                return generateLoaderData({
+                    generations: [generation({ status: "PROCESSING", generatedCvId: null })],
+                    generatedCvs: [],
+                });
+            }
+            return generateLoaderData({
+                generations: [
+                    generation({
+                        status: "COMPLETED",
+                        generatedCvId: 5,
+                        completedAt: "2026-07-16T10:05:00.000Z",
+                    }),
+                ],
+                generatedCvs: [generatedCv()],
+            });
+        });
+
+        renderApplicationDetail("/applications/3/generate", { generateLoader });
+
+        fireEvent.click(
+            await screen.findByRole("button", { name: "Generate CV", expanded: false }),
+        );
+        expect(
+            await screen.findByText(/already in progress for this Application/i),
+        ).toBeTruthy();
+        expect(
+            within(screen.getByRole("form", { name: "Start CV Generation" }))
+                .getByRole("button", { name: /^Generate CV$/ })
+                .hasAttribute("disabled"),
+        ).toBe(true);
+
+        await act(async () => {
+            await vi.advanceTimersByTimeAsync(3_000);
+        });
+
+        await waitFor(() => {
+            expect(generateLoader.mock.calls.length).toBeGreaterThan(1);
+        });
+        expect(screen.queryByText(/already in progress for this Application/i)).toBeNull();
+
+        const disclosure = screen.getByRole("button", { name: "Generate another" });
+        if (disclosure.getAttribute("aria-expanded") !== "true") {
+            fireEvent.click(disclosure);
+        }
+        expect(
+            within(screen.getByRole("form", { name: "Start CV Generation" }))
+                .getByRole("button", { name: /^Generate CV$/ })
+                .hasAttribute("disabled"),
+        ).toBe(false);
     });
 });

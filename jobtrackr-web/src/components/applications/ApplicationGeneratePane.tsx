@@ -2,7 +2,9 @@ import { ChevronDown, LoaderCircle, Loader2, Sparkles } from "lucide-react";
 import { useEffect, useId, useRef, useState } from "react";
 import {
 	useFetcher,
+	useLocation,
 	useParams,
+	useRevalidator,
 	useRouteLoaderData,
 } from "react-router";
 
@@ -25,6 +27,8 @@ import {
 } from "@/routes/application-generate-data";
 import { MAX_GENERATED_CVS } from "@/routes/generate-data";
 import { isActiveCvGenerationStatus, type GeneratedCvFormat } from "@/types/cv-generation";
+
+const GENERATE_POLL_INTERVAL_MS = 3_000;
 
 function ApplicationGenerateForm({
 	data,
@@ -294,17 +298,46 @@ function ApplicationGenerateForm({
 
 export function ApplicationGeneratePane({ loading = false }: { loading?: boolean }) {
 	const params = useParams();
+	const location = useLocation();
+	const revalidator = useRevalidator();
 	const applicationId = Number(params.applicationId);
 	const routeData = useRouteLoaderData(
 		APPLICATION_GENERATE_ROUTE_ID,
 	) as ApplicationGenerateLoaderData | undefined;
+	const refreshFetcher = useFetcher<ApplicationGenerateLoaderData>();
+	const onGenerateUrl = location.pathname.endsWith("/generate");
 	// Retain last Generate payload while the pane stays mounted after leaving the
-	// child URL (Details tab). Prefer live route data when the Generate route matches.
+	// child URL (Details tab). Prefer live route / refresh fetcher data when available.
 	const retainedDataRef = useRef(routeData);
 	if (routeData) {
 		retainedDataRef.current = routeData;
 	}
-	const data = routeData ?? retainedDataRef.current;
+	if (refreshFetcher.data) {
+		retainedDataRef.current = refreshFetcher.data;
+	}
+	const data = routeData ?? refreshFetcher.data ?? retainedDataRef.current;
+	const hasActiveGeneration =
+		data?.generations.some((generation) =>
+			isActiveCvGenerationStatus(generation.status),
+		) ?? false;
+
+	useEffect(() => {
+		if (!hasActiveGeneration || !Number.isInteger(applicationId) || applicationId <= 0) {
+			return;
+		}
+		const intervalId = window.setInterval(() => {
+			if (onGenerateUrl) {
+				if (revalidator.state === "idle") {
+					void revalidator.revalidate();
+				}
+				return;
+			}
+			if (refreshFetcher.state === "idle") {
+				void refreshFetcher.load(`/applications/${applicationId}/generate`);
+			}
+		}, GENERATE_POLL_INTERVAL_MS);
+		return () => window.clearInterval(intervalId);
+	}, [hasActiveGeneration, applicationId, onGenerateUrl, revalidator, refreshFetcher]);
 
 	if ((loading && !data) || !data || !Number.isInteger(applicationId) || applicationId <= 0) {
 		return (
