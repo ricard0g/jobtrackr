@@ -152,39 +152,14 @@ const generateLoaderData = (
     ...overrides,
 });
 
-function BoardShell() {
-    return (
-        <BoardProvider data={{ user, applications: [application], tags: [] }}>
-            <Outlet />
-        </BoardProvider>
-    );
-}
-
-function dispatchSwipe(
-    target: Element,
-    from: { x: number; y: number },
-    to: { x: number; y: number },
-) {
-    const startEvent = new Event("touchstart", { bubbles: true, cancelable: true });
-    Object.defineProperty(startEvent, "touches", {
-        value: [{ clientX: from.x, clientY: from.y }],
-    });
-    const endEvent = new Event("touchend", { bubbles: true, cancelable: true });
-    Object.defineProperty(endEvent, "touches", {
-        value: [{ clientX: to.x, clientY: to.y }],
-    });
-    Object.defineProperty(endEvent, "changedTouches", {
-        value: [{ clientX: to.x, clientY: to.y }],
-    });
-    target.dispatchEvent(startEvent);
-    target.dispatchEvent(endEvent);
-}
-
 const renderApplicationDetail = (
     initialEntry = "/applications/3",
     options?: {
         action?: () => Promise<unknown> | unknown;
-        detailLoader?: () =>
+        applications?: Application[];
+        detailLoader?: (
+            args: import("react-router").LoaderFunctionArgs,
+        ) =>
             | {
                   application: Application;
                   interviews: [];
@@ -195,7 +170,9 @@ const renderApplicationDetail = (
                   interviews: [];
                   generations: CvGeneration[];
               }>;
-        generateLoader?: () =>
+        generateLoader?: (
+            args: import("react-router").LoaderFunctionArgs,
+        ) =>
             | ApplicationGenerateLoaderData
             | Promise<ApplicationGenerateLoaderData>;
         generateAction?: (
@@ -205,11 +182,19 @@ const renderApplicationDetail = (
             | Promise<ApplicationGenerateActionData>;
     },
 ) => {
+    const boardApplications = options?.applications ?? [application];
+    function Shell() {
+        return (
+            <BoardProvider data={{ user, applications: boardApplications, tags: [] }}>
+                <Outlet />
+            </BoardProvider>
+        );
+    }
     const router = createMemoryRouter(
         [
             {
                 path: "/",
-                Component: BoardShell,
+                Component: Shell,
                 children: [
                     { index: true, element: <div>Kanban route</div> },
                     {
@@ -252,6 +237,26 @@ const renderApplicationDetail = (
     render(<RouterProvider router={router} />);
     return router;
 };
+
+function dispatchSwipe(
+    target: Element,
+    from: { x: number; y: number },
+    to: { x: number; y: number },
+) {
+    const startEvent = new Event("touchstart", { bubbles: true, cancelable: true });
+    Object.defineProperty(startEvent, "touches", {
+        value: [{ clientX: from.x, clientY: from.y }],
+    });
+    const endEvent = new Event("touchend", { bubbles: true, cancelable: true });
+    Object.defineProperty(endEvent, "touches", {
+        value: [{ clientX: to.x, clientY: to.y }],
+    });
+    Object.defineProperty(endEvent, "changedTouches", {
+        value: [{ clientX: to.x, clientY: to.y }],
+    });
+    target.dispatchEvent(startEvent);
+    target.dispatchEvent(endEvent);
+}
 
 afterEach(() => {
     cleanup();
@@ -454,6 +459,22 @@ describe("Application dialog Details | Generate shell", () => {
         );
     });
 
+    it("keeps vertical overflow on each pane rather than the pager viewport", async () => {
+        renderApplicationDetail("/applications/3");
+        const dialog = await screen.findByRole("dialog", { name: "Backend Engineer" });
+        const pager = dialog.querySelector("[data-application-pager]");
+        const detailsPane = dialog.querySelector('[data-application-pane="details"]');
+        const generatePane = dialog.querySelector('[data-application-pane="generate"]');
+
+        expect(pager).toBeTruthy();
+        expect(detailsPane).toBeTruthy();
+        expect(generatePane).toBeTruthy();
+        expect(pager!.className).toMatch(/overflow-hidden/);
+        expect(pager!.className).not.toMatch(/overflow-y-scroll/);
+        expect(detailsPane!.className).toMatch(/overflow-y-auto/);
+        expect(generatePane!.className).toMatch(/overflow-y-auto/);
+    });
+
     it("lets the opposite tab cancel an in-flight Generate navigation", async () => {
         let resolveLoader: ((value: ApplicationGenerateLoaderData) => void) | undefined;
         const loaderPromise = new Promise<ApplicationGenerateLoaderData>((resolve) => {
@@ -513,10 +534,10 @@ describe("Application Generate tab — start CV Generation", () => {
         expect(
             await screen.findByRole("button", { name: "Generate another", expanded: false }),
         ).toBeTruthy();
-        expect(screen.queryByLabelText("Job Description")).toBeNull();
+        expect(screen.queryByRole("textbox", { name: "Job Description" })).toBeNull();
 
         fireEvent.click(screen.getByRole("button", { name: "Generate another" }));
-        expect(await screen.findByLabelText("Job Description")).toBeTruthy();
+        expect(await screen.findByRole("textbox", { name: "Job Description" })).toBeTruthy();
     });
 
     it("creates a CV Generation from the Generate tab action path", async () => {
@@ -930,5 +951,50 @@ describe("Application Generate tab — watch run and manage Generated CVs", () =
         await waitFor(() => {
             expect(detailLoads).toBeGreaterThan(initialLoads);
         });
+    });
+
+    it("does not show Generate data from a previous Application while switching", async () => {
+        const otherApplication: Application = {
+            ...application,
+            applicationId: 4,
+            applicationTitle: "Platform Engineer",
+        };
+
+        const router = renderApplicationDetail("/applications/3/generate", {
+            applications: [application, otherApplication],
+            detailLoader: ({ params }) => {
+                const id = Number(params.applicationId);
+                return {
+                    application: id === 4 ? otherApplication : application,
+                    interviews: [],
+                    generations: [],
+                };
+            },
+            generateLoader: ({ params }) => {
+                const id = Number(params.applicationId);
+                return generateLoaderData({
+                    applicationId: id,
+                    generatedCvs: [
+                        generatedCv({
+                            applicationId: id,
+                            generatedCvId: id,
+                            originalFilename: `application-${id}-v1.docx`,
+                        }),
+                    ],
+                });
+            },
+        });
+
+        expect(await screen.findByText("application-3-v1.docx")).toBeTruthy();
+
+        await act(async () => {
+            await router.navigate("/applications/4/generate", { replace: true });
+        });
+
+        expect(
+            await screen.findByRole("dialog", { name: "Platform Engineer" }),
+        ).toBeTruthy();
+        expect(await screen.findByText("application-4-v1.docx")).toBeTruthy();
+        expect(screen.queryByText("application-3-v1.docx")).toBeNull();
     });
 });
