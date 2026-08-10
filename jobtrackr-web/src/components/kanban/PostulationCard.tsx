@@ -1,5 +1,10 @@
 import { useSortable } from "@dnd-kit/react/sortable";
-import { Building2 } from "lucide-react";
+import {
+	Building2,
+	CheckCircle2,
+	LoaderCircle,
+	XCircle,
+} from "lucide-react";
 import {
 	memo,
 	type DragEvent,
@@ -10,7 +15,12 @@ import {
 } from "react";
 import { useNavigate } from "react-router";
 
+import { useBoardGenerationReminders } from "@/components/kanban/BoardGenerationRemindersProvider";
 import { cn } from "@/lib/utils";
+import {
+	boardGenerationPath,
+	type BoardGenerationSignifier,
+} from "@/lib/board-generation-reminders";
 import type { Application } from "@/types/application";
 
 interface PostulationCardProps {
@@ -51,13 +61,53 @@ const formatSalaryRange = (application: Application): string => {
 
 const dragClickThreshold = 4;
 
+const signifierLabel: Record<BoardGenerationSignifier, string> = {
+	generating: "CV generating",
+	success: "CV generation succeeded",
+	failed: "CV generation failed",
+};
+
+function GenerationSignifierBadge({
+	signifier,
+}: {
+	signifier: BoardGenerationSignifier;
+}) {
+	const label = signifierLabel[signifier];
+	return (
+		<span
+			role="status"
+			aria-label={label}
+			title={label}
+			className={cn(
+				"inline-flex shrink-0 items-center justify-center rounded-full p-1",
+				signifier === "generating" && "text-primary",
+				signifier === "success" && "text-emerald-700",
+				signifier === "failed" && "text-destructive",
+			)}
+		>
+			{signifier === "generating" ? (
+				<LoaderCircle className="size-4 animate-spin" aria-hidden />
+			) : null}
+			{signifier === "success" ? (
+				<CheckCircle2 className="size-4" aria-hidden />
+			) : null}
+			{signifier === "failed" ? <XCircle className="size-4" aria-hidden /> : null}
+		</span>
+	);
+}
+
 export const PostulationCard = memo(function PostulationCard({
 	index,
 	status,
 	application,
 }: PostulationCardProps) {
 	const navigate = useNavigate();
-	const applicationPath = `/applications/${application.applicationId}`;
+	const { signifierFor } = useBoardGenerationReminders();
+	const signifier = signifierFor(application.applicationId);
+	const applicationPath = boardGenerationPath(
+		application.applicationId,
+		signifier,
+	);
 	const { ref, isDragging, isDragSource, isDropTarget, isDropping } =
 		useSortable({
 			id: application.applicationId,
@@ -131,12 +181,20 @@ export const PostulationCard = memo(function PostulationCard({
 		event.preventDefault();
 	};
 
+	const ariaLabel = [
+		application.company.companyName,
+		application.applicationTitle,
+		signifier ? signifierLabel[signifier] : null,
+	]
+		.filter(Boolean)
+		.join(", ");
+
 	return (
 		<div
 			ref={ref}
 			role="link"
 			tabIndex={0}
-			aria-label={`${application.company.companyName}, ${application.applicationTitle}`}
+			aria-label={ariaLabel}
 			draggable={false}
 			data-dragging={isDragging}
 			data-drag-source={isDragSource}
@@ -161,27 +219,30 @@ export const PostulationCard = memo(function PostulationCard({
 				isDropping && "scale-[0.98]",
 			)}
 		>
-			<div className="flex min-w-0 items-center justify-start gap-x-3 pointer-events-none">
-				{application.company.companyLogo ? (
-					<img
-						className="h-10 w-10 rounded-md object-cover"
-						src={application.company.companyLogo}
-						alt={`${application.company.companyName} logo`}
-						draggable={false}
-					/>
-				) : (
-					<div className="flex h-10 w-10 items-center justify-center rounded-md bg-light-gray text-medium-gray">
-						<Building2 size={18} />
+			<div className="flex min-w-0 w-full items-start justify-between gap-x-2 pointer-events-none">
+				<div className="flex min-w-0 items-center justify-start gap-x-3">
+					{application.company.companyLogo ? (
+						<img
+							className="h-10 w-10 rounded-md object-cover"
+							src={application.company.companyLogo}
+							alt={`${application.company.companyName} logo`}
+							draggable={false}
+						/>
+					) : (
+						<div className="flex h-10 w-10 items-center justify-center rounded-md bg-light-gray text-medium-gray">
+							<Building2 size={18} />
+						</div>
+					)}
+					<div className="min-w-0">
+						<p className="truncate font-display font-bold">
+							{application.company.companyName}
+						</p>
+						<p className="truncate text-sm text-medium-gray">
+							{application.applicationTitle}
+						</p>
 					</div>
-				)}
-				<div className="min-w-0">
-					<p className="truncate font-display font-bold">
-						{application.company.companyName}
-					</p>
-					<p className="truncate text-sm text-medium-gray">
-						{application.applicationTitle}
-					</p>
 				</div>
+				{signifier ? <GenerationSignifierBadge signifier={signifier} /> : null}
 			</div>
 			<div className="scrollbar-hide flex w-full gap-x-1 overflow-x-scroll pointer-events-none">
 				{application.tags.slice(0, 4).map((tag) => {

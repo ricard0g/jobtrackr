@@ -30,6 +30,7 @@ import type {
 	CvGeneration,
 	JobDescriptionResponse,
 } from "@/types/cv-generation";
+import type { BoardGenerationReminder } from "@/lib/board-generation-reminders";
 
 let accessToken: string | null = null;
 let csrfToken: string | null = null;
@@ -494,4 +495,5 @@ export type AccountLoaderData = {
 export type KanbanLoaderData = {
 	applications: Application[];
 	tags: Tag[];
+	generationReminders: BoardGenerationReminder[];
 };

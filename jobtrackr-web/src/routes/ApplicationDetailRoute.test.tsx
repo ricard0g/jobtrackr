@@ -12,6 +12,7 @@ import type {
     ApplicationGenerateActionData,
     ApplicationGenerateLoaderData,
 } from "@/routes/application-generate-data";
+import { isTerminalCvGenerationAcknowledged } from "@/lib/generation-terminal-ack";
 import type { Application } from "@/types/application";
 import type { BaseCv } from "@/types/base-cv";
 import type { AiConsent, CvGeneration } from "@/types/cv-generation";
@@ -260,6 +261,7 @@ function dispatchSwipe(
 
 afterEach(() => {
     cleanup();
+    window.localStorage.clear();
     vi.useRealTimers();
     vi.restoreAllMocks();
     stubMatchMedia(false);
@@ -912,11 +914,11 @@ describe("Application Generate tab — watch run and manage Generated CVs", () =
     it("polls parent generation statuses while the dialog is open with an active run", async () => {
         vi.useFakeTimers({ shouldAdvanceTime: true });
         let detailLoads = 0;
-        const detailLoader = vi.fn(() => {
+        const detailLoader = () => {
             detailLoads += 1;
             return {
                 application,
-                interviews: [],
+                interviews: [] as [],
                 generations: [
                     generation({
                         status: "PROCESSING",
@@ -925,7 +927,7 @@ describe("Application Generate tab — watch run and manage Generated CVs", () =
                     }),
                 ],
             };
-        });
+        };
 
         renderApplicationDetail("/applications/3", {
             detailLoader,
@@ -950,6 +952,70 @@ describe("Application Generate tab — watch run and manage Generated CVs", () =
 
         await waitFor(() => {
             expect(detailLoads).toBeGreaterThan(initialLoads);
+        });
+    });
+
+    it("acknowledges a terminal CV Generation when opening Generate", async () => {
+        renderApplicationDetail("/applications/3/generate", {
+            detailLoader: () => ({
+                application,
+                interviews: [] as [],
+                generations: [generation({ status: "COMPLETED", cvGenerationId: 10 })],
+            }),
+            generateLoader: () =>
+                generateLoaderData({
+                    generations: [generation({ status: "COMPLETED", cvGenerationId: 10 })],
+                }),
+        });
+
+        await screen.findByRole("dialog", { name: "Backend Engineer" });
+        await waitFor(() => {
+            expect(isTerminalCvGenerationAcknowledged(3, 10)).toBe(true);
+        });
+    });
+
+    it("acknowledges a terminal outcome watched to completion on Generate", async () => {
+        vi.useFakeTimers({ shouldAdvanceTime: true });
+        let completed = false;
+        const detailLoader = () => ({
+            application,
+            interviews: [] as [],
+            generations: [
+                generation({
+                    cvGenerationId: 10,
+                    status: completed ? "COMPLETED" : "PROCESSING",
+                    generatedCvId: completed ? 5 : null,
+                    completedAt: completed ? "2026-07-16T10:05:00.000Z" : null,
+                }),
+            ],
+        });
+        const generateLoader = () =>
+            generateLoaderData({
+                generations: [
+                    generation({
+                        cvGenerationId: 10,
+                        status: completed ? "COMPLETED" : "PROCESSING",
+                        generatedCvId: completed ? 5 : null,
+                        completedAt: completed ? "2026-07-16T10:05:00.000Z" : null,
+                    }),
+                ],
+            });
+
+        renderApplicationDetail("/applications/3/generate", {
+            detailLoader,
+            generateLoader,
+        });
+
+        await screen.findByRole("region", { name: "Active CV Generation" });
+        expect(isTerminalCvGenerationAcknowledged(3, 10)).toBe(false);
+
+        completed = true;
+        await act(async () => {
+            await vi.advanceTimersByTimeAsync(3_000);
+        });
+
+        await waitFor(() => {
+            expect(isTerminalCvGenerationAcknowledged(3, 10)).toBe(true);
         });
     });
 

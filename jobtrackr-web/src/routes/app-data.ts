@@ -2,6 +2,7 @@ import type { ActionFunctionArgs, ShouldRevalidateFunctionArgs } from "react-rou
 import { redirect } from "react-router";
 
 import { api, logout, requireSession, type AccountLoaderData, type KanbanLoaderData } from "@/lib/api";
+import { buildBoardGenerationReminders } from "@/lib/board-generation-reminders";
 
 export async function appLoader(): Promise<AccountLoaderData> {
 	await requireSession();
@@ -10,11 +11,16 @@ export async function appLoader(): Promise<AccountLoaderData> {
 
 export async function kanbanLoader(): Promise<KanbanLoaderData> {
 	await requireSession();
-	const [applications, tags] = await Promise.all([
+	const [applications, tags, generations] = await Promise.all([
 		api.getApplications(),
 		api.getTags(),
+		api.getCvGenerations(),
 	]);
-	return { applications, tags };
+	return {
+		applications,
+		tags,
+		generationReminders: buildBoardGenerationReminders(generations),
+	};
 }
 
 export async function protectedRouteLoader() {

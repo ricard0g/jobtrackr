@@ -54,6 +54,9 @@ import {
     type ApplicationStatus,
     type RemoteType,
 } from "@/types/application";
+import { useOptionalBoardGenerationReminders } from "@/components/kanban/BoardGenerationRemindersProvider";
+import { buildBoardGenerationReminders } from "@/lib/board-generation-reminders";
+import { acknowledgeLatestTerminalOutcome } from "@/lib/generation-terminal-ack";
 import { isActiveCvGenerationStatus } from "@/types/cv-generation";
 import type {
     InterviewOutcome,
@@ -1181,6 +1184,8 @@ export function ApplicationDetailRoute() {
     const hasActiveGeneration = generations.some((generation) =>
         isActiveCvGenerationStatus(generation.status),
     );
+    const boardGenerationReminders = useOptionalBoardGenerationReminders();
+    const acknowledgeBoardTerminal = boardGenerationReminders?.acknowledgeTerminal;
     const [generateVisited, setGenerateVisited] = useState(
         activePane === "generate" || hasActiveGeneration,
     );
@@ -1191,6 +1196,26 @@ export function ApplicationDetailRoute() {
             setGenerateVisited(true);
         }
     }, [activePane, hasActiveGeneration]);
+
+    useEffect(() => {
+        // Opening Generate (or watching completion there) acknowledges the latest
+        // COMPLETED/FAILED reminder for Kanban card signifiers.
+        if (activePane !== "generate") return;
+        const reminder = buildBoardGenerationReminders(generations).find(
+            (item) => item.applicationId === application.applicationId,
+        );
+        const terminalOutcome = reminder?.terminalOutcome ?? null;
+        if (acknowledgeBoardTerminal) {
+            acknowledgeBoardTerminal(application.applicationId, terminalOutcome);
+            return;
+        }
+        acknowledgeLatestTerminalOutcome(application.applicationId, terminalOutcome);
+    }, [
+        activePane,
+        generations,
+        application.applicationId,
+        acknowledgeBoardTerminal,
+    ]);
 
     useEffect(() => {
         // On /generate the Generate pane revalidator already refreshes parent + child.
