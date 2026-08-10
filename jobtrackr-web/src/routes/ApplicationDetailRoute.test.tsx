@@ -1,4 +1,4 @@
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
     createMemoryRouter,
@@ -18,6 +18,24 @@ class ResizeObserverMock {
 }
 
 vi.stubGlobal("ResizeObserver", ResizeObserverMock);
+
+function stubMatchMedia(matchesMobile = false) {
+    vi.stubGlobal(
+        "matchMedia",
+        vi.fn().mockImplementation((query: string) => ({
+            matches: matchesMobile && query.includes("max-width: 767px"),
+            media: query,
+            onchange: null,
+            addListener: vi.fn(),
+            removeListener: vi.fn(),
+            addEventListener: vi.fn(),
+            removeEventListener: vi.fn(),
+            dispatchEvent: vi.fn(),
+        })),
+    );
+}
+
+stubMatchMedia(false);
 
 const application: Application = {
     applicationId: 3,
@@ -72,7 +90,17 @@ function BoardShell() {
     );
 }
 
-const renderApplicationDetail = () => {
+const applicationRoute = {
+    path: "applications/:applicationId",
+    Component: ApplicationDetailRoute,
+    loader: () => ({ application, interviews: [] }),
+    children: [
+        { index: true },
+        { path: "generate" },
+    ],
+};
+
+const renderApplicationDetail = (initialEntry = "/applications/3") => {
     const router = createMemoryRouter(
         [
             {
@@ -80,16 +108,13 @@ const renderApplicationDetail = () => {
                 Component: BoardShell,
                 children: [
                     { index: true, element: <div>Kanban route</div> },
-                    {
-                        path: "applications/:applicationId",
-                        Component: ApplicationDetailRoute,
-                        loader: () => ({ application, interviews: [] }),
-                    },
+                    applicationRoute,
                 ],
             },
         ],
         {
-            initialEntries: ["/applications/3"],
+            initialEntries: ["/", initialEntry],
+            initialIndex: 1,
         },
     );
     render(<RouterProvider router={router} />);
@@ -99,11 +124,81 @@ const renderApplicationDetail = () => {
 afterEach(() => {
     cleanup();
     vi.restoreAllMocks();
+    stubMatchMedia(false);
+    vi.stubGlobal("ResizeObserver", ResizeObserverMock);
 });
 
-describe("ApplicationDetailRoute return navigation", () => {
-    it("closes to the Kanban root", async () => {
-        const router = renderApplicationDetail();
+describe("Application dialog Details | Generate shell", () => {
+    it("opens the Details pane at /applications/:id", async () => {
+        const router = renderApplicationDetail("/applications/3");
+
+        expect(
+            await screen.findByRole("dialog", { name: "Backend Engineer" }),
+        ).toBeTruthy();
+        expect(screen.getByRole("tab", { name: /Details/i }).getAttribute("aria-selected")).toBe(
+            "true",
+        );
+        expect(screen.getByRole("tab", { name: /Generate/i }).getAttribute("aria-selected")).toBe(
+            "false",
+        );
+        expect(screen.getByRole("button", { name: /^Edit$/i })).toBeTruthy();
+        expect(router.state.location.pathname).toBe("/applications/3");
+    });
+
+    it("opens the Generate pane at /applications/:id/generate", async () => {
+        const router = renderApplicationDetail("/applications/3/generate");
+
+        expect(
+            await screen.findByRole("dialog", { name: "Backend Engineer" }),
+        ).toBeTruthy();
+        expect(screen.getByRole("tab", { name: /Generate/i }).getAttribute("aria-selected")).toBe(
+            "true",
+        );
+        expect(screen.getByRole("tab", { name: /Details/i }).getAttribute("aria-selected")).toBe(
+            "false",
+        );
+        expect(screen.getByText(/Generate pane placeholder/i)).toBeTruthy();
+        expect(router.state.location.pathname).toBe("/applications/3/generate");
+    });
+
+    it("switches panes with bottom tabs using replace navigation", async () => {
+        const router = renderApplicationDetail("/applications/3");
+
+        await screen.findByRole("dialog", { name: "Backend Engineer" });
+        fireEvent.click(screen.getByRole("tab", { name: /Generate/i }));
+
+        await waitFor(() => {
+            expect(router.state.location.pathname).toBe("/applications/3/generate");
+            expect(router.state.historyAction).toBe("REPLACE");
+        });
+        expect(screen.getByText(/Generate pane placeholder/i)).toBeTruthy();
+
+        fireEvent.click(screen.getByRole("tab", { name: /Details/i }));
+
+        await waitFor(() => {
+            expect(router.state.location.pathname).toBe("/applications/3");
+            expect(router.state.historyAction).toBe("REPLACE");
+        });
+        expect(screen.getByRole("button", { name: /^Edit$/i })).toBeTruthy();
+    });
+
+    it("keeps the Details pane alive when switching to Generate and back", async () => {
+        renderApplicationDetail("/applications/3");
+
+        await screen.findByRole("dialog", { name: "Backend Engineer" });
+        fireEvent.click(screen.getByRole("button", { name: /^Edit$/i }));
+        expect(await screen.findByRole("button", { name: /Save/i })).toBeTruthy();
+
+        fireEvent.click(screen.getByRole("tab", { name: /Generate/i }));
+        expect(await screen.findByText(/Generate pane placeholder/i)).toBeTruthy();
+
+        fireEvent.click(screen.getByRole("tab", { name: /Details/i }));
+        expect(await screen.findByRole("button", { name: /Save/i })).toBeTruthy();
+        expect(screen.queryByRole("button", { name: /^Edit$/i })).toBeNull();
+    });
+
+    it("closes to the Kanban root with Escape from Details", async () => {
+        const router = renderApplicationDetail("/applications/3");
 
         const dialog = await screen.findByRole("dialog", { name: "Backend Engineer" });
         fireEvent.keyDown(dialog, { key: "Escape", code: "Escape" });
@@ -112,5 +207,95 @@ describe("ApplicationDetailRoute return navigation", () => {
             expect(router.state.location.pathname).toBe("/");
             expect(screen.getByText("Kanban route")).toBeTruthy();
         });
+    });
+
+    it("closes to the Kanban root with Escape from Generate", async () => {
+        const router = renderApplicationDetail("/applications/3/generate");
+
+        const dialog = await screen.findByRole("dialog", { name: "Backend Engineer" });
+        fireEvent.keyDown(dialog, { key: "Escape", code: "Escape" });
+
+        await waitFor(() => {
+            expect(router.state.location.pathname).toBe("/");
+            expect(screen.getByText("Kanban route")).toBeTruthy();
+        });
+    });
+
+    it("leaves the dialog on Back instead of flipping between panes", async () => {
+        const router = renderApplicationDetail("/applications/3");
+
+        await screen.findByRole("dialog", { name: "Backend Engineer" });
+        fireEvent.click(screen.getByRole("tab", { name: /Generate/i }));
+
+        await waitFor(() => {
+            expect(router.state.location.pathname).toBe("/applications/3/generate");
+            expect(router.state.historyAction).toBe("REPLACE");
+        });
+
+        await act(async () => {
+            await router.navigate(-1);
+        });
+
+        await waitFor(() => {
+            expect(router.state.location.pathname).toBe("/");
+            expect(screen.getByText("Kanban route")).toBeTruthy();
+        });
+    });
+
+    it("swipes between panes on mobile viewports", async () => {
+        stubMatchMedia(true);
+
+        const router = renderApplicationDetail("/applications/3");
+        const dialog = await screen.findByRole("dialog", { name: "Backend Engineer" });
+        const pager = dialog.querySelector("[data-application-pager]");
+        expect(pager).toBeTruthy();
+
+        // jsdom + remove-scroll: build touch-like events that include clientX on touches.
+        const startEvent = new Event("touchstart", { bubbles: true, cancelable: true });
+        Object.defineProperty(startEvent, "touches", {
+            value: [{ clientX: 200, clientY: 100 }],
+        });
+        const endEvent = new Event("touchend", { bubbles: true, cancelable: true });
+        Object.defineProperty(endEvent, "touches", {
+            value: [{ clientX: 40, clientY: 100 }],
+        });
+        Object.defineProperty(endEvent, "changedTouches", {
+            value: [{ clientX: 40, clientY: 100 }],
+        });
+        pager!.dispatchEvent(startEvent);
+        pager!.dispatchEvent(endEvent);
+
+        await waitFor(() => {
+            expect(router.state.location.pathname).toBe("/applications/3/generate");
+            expect(router.state.historyAction).toBe("REPLACE");
+        });
+    });
+
+    it("does not swipe between panes on desktop viewports", async () => {
+        stubMatchMedia(false);
+
+        const router = renderApplicationDetail("/applications/3");
+        const dialog = await screen.findByRole("dialog", { name: "Backend Engineer" });
+        const pager = dialog.querySelector("[data-application-pager]");
+        expect(pager).toBeTruthy();
+
+        const startEvent = new Event("touchstart", { bubbles: true, cancelable: true });
+        Object.defineProperty(startEvent, "touches", {
+            value: [{ clientX: 200, clientY: 100 }],
+        });
+        const endEvent = new Event("touchend", { bubbles: true, cancelable: true });
+        Object.defineProperty(endEvent, "touches", {
+            value: [{ clientX: 40, clientY: 100 }],
+        });
+        Object.defineProperty(endEvent, "changedTouches", {
+            value: [{ clientX: 40, clientY: 100 }],
+        });
+        pager!.dispatchEvent(startEvent);
+        pager!.dispatchEvent(endEvent);
+
+        expect(router.state.location.pathname).toBe("/applications/3");
+        expect(screen.getByRole("tab", { name: /Details/i }).getAttribute("aria-selected")).toBe(
+            "true",
+        );
     });
 });

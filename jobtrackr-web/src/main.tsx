@@ -72,6 +72,10 @@ const router = createBrowserRouter([
 						action: applicationDetailAction,
 						shouldRevalidate: applicationDetailShouldRevalidate,
 						ErrorBoundary: ApplicationDetailErrorBoundary,
+						children: [
+							{ index: true },
+							{ path: "generate" },
+						],
 					},
 				],
 			},

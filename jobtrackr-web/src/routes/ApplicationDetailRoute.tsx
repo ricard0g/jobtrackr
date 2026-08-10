@@ -1,4 +1,4 @@
-import { Loader2, Pencil, Plus, Trash2 } from "lucide-react";
+import { FileText, Loader2, Pencil, Plus, Sparkles, Trash2 } from "lucide-react";
 import {
     type ReactNode,
     useEffect,
@@ -10,9 +10,16 @@ import {
     Link,
     useFetcher,
     useLoaderData,
+    useLocation,
     useNavigate,
+    useParams,
     useRouteError,
 } from "react-router";
+
+import {
+    ApplicationDialogPager,
+    type ApplicationDialogPane,
+} from "@/components/applications/ApplicationDialogPager";
 
 import { useBoard } from "@/components/kanban/useBoard";
 import { TagMultiSelectCombobox } from "@/components/postulations/TagMultiSelectCombobox";
@@ -196,7 +203,11 @@ function DetailBox({ label, children }: { label: string; children: ReactNode }) 
     );
 }
 
-export function ApplicationDetailRoute() {
+export function ApplicationDetailsPane({
+    collisionBoundary,
+}: {
+    collisionBoundary: HTMLElement | null;
+}) {
     const { application, interviews } =
         useLoaderData() as ApplicationDetailLoaderData;
     const {
@@ -206,6 +217,10 @@ export function ApplicationDetailRoute() {
         upsertApplication,
     } = useBoard();
     const navigate = useNavigate();
+    const params = useParams();
+    const applicationActionPath = params.applicationId
+        ? `/applications/${params.applicationId}`
+        : ".";
     const applicationFetcher = useFetcher();
     const tagFetcher = useFetcher();
     const createTagFetcher = useFetcher();
@@ -228,8 +243,6 @@ export function ApplicationDetailRoute() {
     const [tagSubmissionError, setTagSubmissionError] = useState<string>();
     const [createTagSubmissionError, setCreateTagSubmissionError] =
         useState<string>();
-    const [dialogContentElement, setDialogContentElement] =
-        useState<HTMLDivElement | null>(null);
     const [deletingInterviewId, setDeletingInterviewId] = useState<number | null>(
         null,
     );
@@ -453,7 +466,7 @@ export function ApplicationDetailRoute() {
             formData.append("tagIds", String(tagId));
         });
         setTagSubmissionError(undefined);
-        void tagFetcher.submit(formData, { method: "post" });
+        void tagFetcher.submit(formData, { method: "post", action: applicationActionPath });
     };
 
     const handleCreateTag = (request: TagWriteRequest) => {
@@ -463,7 +476,7 @@ export function ApplicationDetailRoute() {
         formData.set("tagName", request.tagName);
         formData.set("tagColor", request.tagColor ?? "");
         setCreateTagSubmissionError(undefined);
-        void createTagFetcher.submit(formData, { method: "post" });
+        void createTagFetcher.submit(formData, { method: "post", action: applicationActionPath });
     };
 
     const handleDeleteApplication = () => {
@@ -474,7 +487,7 @@ export function ApplicationDetailRoute() {
 
         const formData = new FormData();
         formData.set("intent", "deleteApplication");
-        void deleteApplicationFetcher.submit(formData, { method: "post" });
+        void deleteApplicationFetcher.submit(formData, { method: "post", action: applicationActionPath });
     };
 
     const handleDeleteInterview = (interviewId: number) => {
@@ -487,7 +500,7 @@ export function ApplicationDetailRoute() {
         formData.set("intent", "deleteInterview");
         formData.set("interviewId", String(interviewId));
         setDeletingInterviewId(interviewId);
-        void deleteInterviewFetcher.submit(formData, { method: "post" });
+        void deleteInterviewFetcher.submit(formData, { method: "post", action: applicationActionPath });
     };
 
     const handlePatchInterviewOutcome = (
@@ -502,35 +515,11 @@ export function ApplicationDetailRoute() {
         formData.set("interviewId", String(interviewId));
         formData.set("interviewOutcome", nextOutcome);
         setPatchingInterviewId(interviewId);
-        void patchInterviewFetcher.submit(formData, { method: "post" });
+        void patchInterviewFetcher.submit(formData, { method: "post", action: applicationActionPath });
     };
 
     return (
-        <Dialog
-            open
-            onOpenChange={(open) => {
-                if (!open) navigate("/", { replace: true });
-            }}
-        >
-            <DialogContent
-                ref={setDialogContentElement}
-                className="flex h-fit max-h-[95dvh] min-h-0 min-w-0 max-w-3xl flex-col items-center justify-start"
-            >
-                <div className="flex w-full max-w-[90%] flex-col gap-y-4">
-                        <div className="flex shrink-0 items-start justify-start w-full gap-4">
-                            <div className="w-20 max-w-20 h-auto">
-                                <img className="h-full w-full max-w-full " src={currentApplication.company.companyLogo as string} alt={`${currentApplication.company.companyName} Logo`} />
-                            </div>
-                            <div className="min-w-0">
-                                <DialogTitle className="font-display text-2xl">
-                                    {currentApplication.applicationTitle}
-                                </DialogTitle>
-                                <p className="mt-1 text-sm text-medium-gray">
-                                    {currentApplication.company.companyName}
-                                </p>
-                            </div>
-                        </div>
-
+        <div className="flex w-full flex-col gap-y-4 pb-2">
                         {mode === "view" && (
                             <div className="grid gap-5">
                                 <div className="flex flex-wrap gap-2">
@@ -580,7 +569,7 @@ export function ApplicationDetailRoute() {
                                                 ? createTagData.tag
                                                 : undefined
                                         }
-                                        collisionBoundary={dialogContentElement}
+                                        collisionBoundary={collisionBoundary}
                                         trigger={(
                                             <Button
                                                 type="button"
@@ -668,7 +657,7 @@ export function ApplicationDetailRoute() {
                                     </div>
 
                                     {isAddFormOpen && (
-                                        <interviewFetcher.Form
+                                        <interviewFetcher.Form action={applicationActionPath}
                                             method="post"
                                             className="grid gap-3 rounded-md border border-light-gray bg-off-white p-3"
                                         >
@@ -868,7 +857,7 @@ export function ApplicationDetailRoute() {
                         )}
 
                         {mode === "edit" && (
-                            <applicationFetcher.Form method="post" className="grid min-w-0 gap-4">
+                            <applicationFetcher.Form method="post" action={applicationActionPath} className="grid min-w-0 gap-4">
                                 <input type="hidden" name="intent" value="updateApplication" />
                                 <input
                                     type="hidden"
@@ -1150,7 +1139,137 @@ export function ApplicationDetailRoute() {
                                 </div>
                             </applicationFetcher.Form>
                         )}
+        </div>
+    );
+}
 
+export function ApplicationGeneratePane() {
+    return (
+        <div className="flex h-full flex-col gap-3 p-1">
+            <p className="text-sm text-medium-gray">Generate pane placeholder</p>
+        </div>
+    );
+}
+
+function applicationPaneFromPathname(pathname: string): ApplicationDialogPane {
+    return pathname.endsWith("/generate") ? "generate" : "details";
+}
+
+export function ApplicationDetailRoute() {
+    const { application } = useLoaderData() as ApplicationDetailLoaderData;
+    const navigate = useNavigate();
+    const location = useLocation();
+    const params = useParams();
+    const applicationId = params.applicationId;
+    const activePane = applicationPaneFromPathname(location.pathname);
+    const [dialogContentElement, setDialogContentElement] =
+        useState<HTMLDivElement | null>(null);
+    const [generateVisited, setGenerateVisited] = useState(
+        activePane === "generate",
+    );
+
+    useEffect(() => {
+        if (activePane === "generate") {
+            setGenerateVisited(true);
+        }
+    }, [activePane]);
+
+    const goToPane = (pane: ApplicationDialogPane) => {
+        if (!applicationId) return;
+        const path =
+            pane === "generate"
+                ? `/applications/${applicationId}/generate`
+                : `/applications/${applicationId}`;
+        if (location.pathname === path) return;
+        void navigate(path, { replace: true });
+    };
+
+    return (
+        <Dialog
+            open
+            onOpenChange={(open) => {
+                if (!open) navigate("/", { replace: true });
+            }}
+        >
+            <DialogContent
+                ref={setDialogContentElement}
+                className="flex max-h-[95dvh] min-h-0 min-w-0 max-w-3xl flex-col gap-0 overflow-hidden p-0"
+            >
+                <div className="flex min-h-0 flex-1 flex-col">
+                    <div className="flex shrink-0 items-start gap-4 px-6 pt-6 pr-14">
+                        <div className="h-auto w-20 max-w-20">
+                            {application.company.companyLogo ? (
+                                <img
+                                    className="h-full w-full max-w-full"
+                                    src={application.company.companyLogo}
+                                    alt={`${application.company.companyName} Logo`}
+                                />
+                            ) : null}
+                        </div>
+                        <div className="min-w-0">
+                            <DialogTitle className="font-display text-2xl">
+                                {application.applicationTitle}
+                            </DialogTitle>
+                            <p className="mt-1 text-sm text-medium-gray">
+                                {application.company.companyName}
+                            </p>
+                        </div>
+                    </div>
+
+                    <ApplicationDialogPager
+                        activePane={activePane}
+                        onPaneChange={goToPane}
+                        className="mt-4 px-6"
+                        details={
+                            <ApplicationDetailsPane
+                                collisionBoundary={dialogContentElement}
+                            />
+                        }
+                        generate={
+                            generateVisited ? <ApplicationGeneratePane /> : null
+                        }
+                    />
+
+                    <nav
+                        aria-label="Application panes"
+                        className="shrink-0 border-t border-light-gray bg-background px-2 pb-[max(0.5rem,env(safe-area-inset-bottom))] pt-2"
+                    >
+                        <div role="tablist" className="grid grid-cols-2 gap-1">
+                            {(
+                                [
+                                    {
+                                        pane: "details" as const,
+                                        label: "Details",
+                                        icon: FileText,
+                                    },
+                                    {
+                                        pane: "generate" as const,
+                                        label: "Generate",
+                                        icon: Sparkles,
+                                    },
+                                ] as const
+                            ).map(({ pane, label, icon: Icon }) => {
+                                const selected = activePane === pane;
+                                return (
+                                    <button
+                                        key={pane}
+                                        type="button"
+                                        role="tab"
+                                        aria-selected={selected}
+                                        className={
+                                            selected
+                                                ? "flex flex-col items-center gap-1 rounded-md px-3 py-2 text-sm font-medium text-foreground"
+                                                : "flex flex-col items-center gap-1 rounded-md px-3 py-2 text-sm font-medium text-medium-gray"
+                                        }
+                                        onClick={() => goToPane(pane)}
+                                    >
+                                        <Icon className="size-4" aria-hidden />
+                                        {label}
+                                    </button>
+                                );
+                            })}
+                        </div>
+                    </nav>
                 </div>
             </DialogContent>
         </Dialog>
