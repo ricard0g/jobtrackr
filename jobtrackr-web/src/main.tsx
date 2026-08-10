@@ -34,8 +34,7 @@ import {
 	recentGeneratedCvsResourceLoader,
 	recentGeneratedCvsShouldRevalidate,
 } from "@/routes/documents-data";
-import { GenerateRoute } from "@/routes/GenerateRoute";
-import { generateAction, generateLoader } from "@/routes/generate-data";
+import { generateHubRedirectLoader } from "@/routes/generate-hub-redirect";
 
 const router = createBrowserRouter([
 	{
@@ -113,10 +112,7 @@ const router = createBrowserRouter([
 			},
 			{
 				path: "generate",
-				Component: GenerateRoute,
-				loader: generateLoader,
-				action: generateAction,
-				ErrorBoundary: RootErrorBoundary,
+				loader: generateHubRedirectLoader,
 			},
 		],
 	},
