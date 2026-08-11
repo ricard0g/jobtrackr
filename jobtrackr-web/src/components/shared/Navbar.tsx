@@ -1,4 +1,4 @@
-import { FileText, LayoutDashboard, LogOut, Sparkles, User as UserIcon, X } from "lucide-react";
+import { FileText, LayoutDashboard, LogOut, User as UserIcon, X } from "lucide-react";
 import { useState } from "react";
 import { Form as RouterForm, Link, useLocation } from "react-router";
 
@@ -11,7 +11,6 @@ type NavbarProps = { user: User };
 const tabs = [
 	{ to: "/", label: "Kanban", Icon: LayoutDashboard },
 	{ to: "/documents", label: "Documents", Icon: FileText },
-	{ to: "/generate", label: "Generate", Icon: Sparkles },
 ] as const;
 
 export function Navbar({ user }: NavbarProps) {

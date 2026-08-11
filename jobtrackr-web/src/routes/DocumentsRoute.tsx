@@ -804,8 +804,9 @@ function RecentFilesSection({
                     <p>
                         <span className="font-medium text-dark-gray">No Generated CVs yet</span>
                         {" · "}
-                        <Link to="/generate" className="underline underline-offset-2">
-                            Generate
+                        Use an Application’s Generate tab from{" "}
+                        <Link to="/" className="underline underline-offset-2">
+                            Kanban
                         </Link>
                     </p>
                 </div>
@@ -1356,9 +1357,10 @@ function GeneratedCvSection({
                             <File className="mb-2.5 opacity-70" size={32} />
                             <h3 className="text-sm font-semibold text-dark-gray">No Generated CVs yet</h3>
                             <p className="mt-1 max-w-md text-sm">
-                                Create tailored documents from{" "}
-                                <Link to="/generate" className="underline underline-offset-2">
-                                    Generate
+                                CV Generation lives on an Application’s Generate tab — open an Application
+                                from{" "}
+                                <Link to="/" className="underline underline-offset-2">
+                                    Kanban
                                 </Link>
                                 .
                             </p>

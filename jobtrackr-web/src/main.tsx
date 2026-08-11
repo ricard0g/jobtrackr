@@ -16,6 +16,11 @@ import {
 	applicationDetailLoader,
 	applicationDetailShouldRevalidate,
 } from "@/routes/application-detail-data";
+import {
+	APPLICATION_GENERATE_ROUTE_ID,
+	applicationGenerateAction,
+	applicationGenerateLoader,
+} from "@/routes/application-generate-data";
 import { loginAction, publicAuthLoader, registerAction } from "@/routes/auth-data";
 import { LoginPage, RegisterPage } from "@/routes/auth";
 import { KanbanRoute } from "@/routes/KanbanRoute";
@@ -29,8 +34,7 @@ import {
 	recentGeneratedCvsResourceLoader,
 	recentGeneratedCvsShouldRevalidate,
 } from "@/routes/documents-data";
-import { GenerateRoute } from "@/routes/GenerateRoute";
-import { generateAction, generateLoader } from "@/routes/generate-data";
+import { generateHubRedirectLoader } from "@/routes/generate-hub-redirect";
 
 const router = createBrowserRouter([
 	{
@@ -72,6 +76,15 @@ const router = createBrowserRouter([
 						action: applicationDetailAction,
 						shouldRevalidate: applicationDetailShouldRevalidate,
 						ErrorBoundary: ApplicationDetailErrorBoundary,
+						children: [
+							{ index: true },
+							{
+								id: APPLICATION_GENERATE_ROUTE_ID,
+								path: "generate",
+								loader: applicationGenerateLoader,
+								action: applicationGenerateAction,
+							},
+						],
 					},
 				],
 			},
@@ -99,10 +112,7 @@ const router = createBrowserRouter([
 			},
 			{
 				path: "generate",
-				Component: GenerateRoute,
-				loader: generateLoader,
-				action: generateAction,
-				ErrorBoundary: RootErrorBoundary,
+				loader: generateHubRedirectLoader,
 			},
 		],
 	},

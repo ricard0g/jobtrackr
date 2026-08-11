@@ -4,6 +4,10 @@ JobTrackr helps candidates manage job applications and produce truthful, role-ta
 
 ## Language
 
+**Application**:
+A tracked job pursuit for a specific role at a company, including status, interviews, and related Generated CVs.
+_Avoid_: Postulation, job entry, listing
+
 **Base CV**:
 A user-supplied source document containing the candidate facts that may support tailored CV content.
 _Avoid_: Original CV, master resume

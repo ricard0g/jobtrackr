@@ -190,7 +190,7 @@ const renderDocuments = (
 				}),
 				action,
 			}),
-			{ path: "/generate", element: <div>Generate route</div> },
+			{ index: true, element: <div>Kanban root</div> },
 			{
 				path: "/applications/:applicationId",
 				element: <div>Application detail route</div>,
@@ -333,7 +333,9 @@ describe("DocumentsRoute", () => {
 		expect(screen.getByRole("heading", { name: "Generated CVs" })).toBeTruthy();
 		const table = screen.getByRole("table", { name: "Generated CVs" });
 		expect(within(table).getByText("No Generated CVs yet")).toBeTruthy();
-		expect(within(table).getByRole("link", { name: "Generate" })).toBeTruthy();
+		const generateLink = within(table).getByRole("link", { name: "Kanban" });
+		expect(generateLink.getAttribute("href")).toBe("/");
+		expect(within(table).getByText(/Application’s Generate tab/)).toBeTruthy();
 
 		fireEvent.mouseDown(screen.getByRole("tab", { name: "Base CVs" }), {
 			button: 0,
@@ -904,12 +906,14 @@ describe("DocumentsRoute", () => {
 		expect(await screen.findByRole("dialog", { name: "acme-backend-v2.pdf" })).toBeTruthy();
 	});
 
-	it("keeps a visible Recent files empty state linked to Generate", async () => {
+	it("keeps a visible Recent files empty state pointing candidates to Kanban", async () => {
 		renderDocuments();
 
 		const recent = await screen.findByRole("region", { name: "Recent files" });
 		expect(await within(recent).findByText("No Generated CVs yet")).toBeTruthy();
-		expect(within(recent).getByRole("link", { name: "Generate" })).toBeTruthy();
+		const kanbanLink = within(recent).getByRole("link", { name: "Kanban" });
+		expect(kanbanLink.getAttribute("href")).toBe("/");
+		expect(within(recent).getByText(/Application’s Generate tab/)).toBeTruthy();
 	});
 
 	it("keeps Recent files usable when the Generated CV table fails", async () => {

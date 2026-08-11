@@ -1,4 +1,4 @@
-import { Loader2, Pencil, Plus, Trash2 } from "lucide-react";
+import { FileText, Loader2, LoaderCircle, Pencil, Plus, Sparkles, Trash2 } from "lucide-react";
 import {
     type ReactNode,
     useEffect,
@@ -10,9 +10,19 @@ import {
     Link,
     useFetcher,
     useLoaderData,
+    useLocation,
     useNavigate,
+    useNavigation,
+    useParams,
+    useRevalidator,
     useRouteError,
 } from "react-router";
+
+import {
+    ApplicationDialogPager,
+    type ApplicationDialogPane,
+} from "@/components/applications/ApplicationDialogPager";
+import { ApplicationGeneratePane } from "@/components/applications/ApplicationGeneratePane";
 
 import { useBoard } from "@/components/kanban/useBoard";
 import { TagMultiSelectCombobox } from "@/components/postulations/TagMultiSelectCombobox";
@@ -44,6 +54,10 @@ import {
     type ApplicationStatus,
     type RemoteType,
 } from "@/types/application";
+import { useOptionalBoardGenerationReminders } from "@/components/kanban/BoardGenerationRemindersProvider";
+import { buildBoardGenerationReminders } from "@/lib/board-generation-reminders";
+import { acknowledgeLatestTerminalOutcome } from "@/lib/generation-terminal-ack";
+import { isActiveCvGenerationStatus } from "@/types/cv-generation";
 import type {
     InterviewOutcome,
     InterviewType,
@@ -53,6 +67,9 @@ import type {
     ApplicationDetailActionData,
     ApplicationDetailLoaderData,
 } from "./application-detail-data";
+
+const GENERATE_POLL_INTERVAL_MS = 3_000;
+
 type DrawerMode = "view" | "edit";
 
 type InterviewFormValues = {
@@ -196,7 +213,11 @@ function DetailBox({ label, children }: { label: string; children: ReactNode }) 
     );
 }
 
-export function ApplicationDetailRoute() {
+export function ApplicationDetailsPane({
+    collisionBoundary,
+}: {
+    collisionBoundary: HTMLElement | null;
+}) {
     const { application, interviews } =
         useLoaderData() as ApplicationDetailLoaderData;
     const {
@@ -206,6 +227,10 @@ export function ApplicationDetailRoute() {
         upsertApplication,
     } = useBoard();
     const navigate = useNavigate();
+    const params = useParams();
+    const applicationActionPath = params.applicationId
+        ? `/applications/${params.applicationId}`
+        : ".";
     const applicationFetcher = useFetcher();
     const tagFetcher = useFetcher();
     const createTagFetcher = useFetcher();
@@ -228,8 +253,6 @@ export function ApplicationDetailRoute() {
     const [tagSubmissionError, setTagSubmissionError] = useState<string>();
     const [createTagSubmissionError, setCreateTagSubmissionError] =
         useState<string>();
-    const [dialogContentElement, setDialogContentElement] =
-        useState<HTMLDivElement | null>(null);
     const [deletingInterviewId, setDeletingInterviewId] = useState<number | null>(
         null,
     );
@@ -453,7 +476,7 @@ export function ApplicationDetailRoute() {
             formData.append("tagIds", String(tagId));
         });
         setTagSubmissionError(undefined);
-        void tagFetcher.submit(formData, { method: "post" });
+        void tagFetcher.submit(formData, { method: "post", action: applicationActionPath });
     };
 
     const handleCreateTag = (request: TagWriteRequest) => {
@@ -463,7 +486,7 @@ export function ApplicationDetailRoute() {
         formData.set("tagName", request.tagName);
         formData.set("tagColor", request.tagColor ?? "");
         setCreateTagSubmissionError(undefined);
-        void createTagFetcher.submit(formData, { method: "post" });
+        void createTagFetcher.submit(formData, { method: "post", action: applicationActionPath });
     };
 
     const handleDeleteApplication = () => {
@@ -474,7 +497,7 @@ export function ApplicationDetailRoute() {
 
         const formData = new FormData();
         formData.set("intent", "deleteApplication");
-        void deleteApplicationFetcher.submit(formData, { method: "post" });
+        void deleteApplicationFetcher.submit(formData, { method: "post", action: applicationActionPath });
     };
 
     const handleDeleteInterview = (interviewId: number) => {
@@ -487,7 +510,7 @@ export function ApplicationDetailRoute() {
         formData.set("intent", "deleteInterview");
         formData.set("interviewId", String(interviewId));
         setDeletingInterviewId(interviewId);
-        void deleteInterviewFetcher.submit(formData, { method: "post" });
+        void deleteInterviewFetcher.submit(formData, { method: "post", action: applicationActionPath });
     };
 
     const handlePatchInterviewOutcome = (
@@ -502,7 +525,719 @@ export function ApplicationDetailRoute() {
         formData.set("interviewId", String(interviewId));
         formData.set("interviewOutcome", nextOutcome);
         setPatchingInterviewId(interviewId);
-        void patchInterviewFetcher.submit(formData, { method: "post" });
+        void patchInterviewFetcher.submit(formData, { method: "post", action: applicationActionPath });
+    };
+
+    return (
+        <div className="flex w-full flex-col gap-y-4 pb-2 transition-all duration-300">
+            {mode === "view" && (
+                <div className="grid gap-5">
+                    <div className="flex flex-wrap gap-2">
+                        <span
+                            className="rounded-full border px-3 py-1 text-sm font-medium"
+                            style={{
+                                borderColor: statusDisplay.color,
+                                color: statusDisplay.color,
+                                backgroundColor: `${statusDisplay.color}1A`,
+                            }}
+                        >
+                            {statusDisplay.label}
+                        </span>
+                        {currentApplication.tags.map((tag) => {
+                            const tagColor = tag.tagColor ?? "#666666";
+
+                            return (
+                                <span
+                                    key={tag.tagId}
+                                    className="rounded-full border px-3 py-1 text-sm"
+                                    style={{
+                                        borderColor: tagColor,
+                                        color: tagColor,
+                                        backgroundColor: `${tagColor}1A`,
+                                    }}
+                                >
+                                    {tag.tagName}
+                                </span>
+                            );
+                        })}
+                        <TagMultiSelectCombobox
+                            tags={allTags}
+                            selectedTagIds={selectedTagIds}
+                            open={isTagPopoverOpen}
+                            onOpenChange={handleTagPopoverOpenChange}
+                            onSelectedTagIdsChange={setSelectedTagIds}
+                            onApply={handleApplyTags}
+                            onCancel={handleCancelTags}
+                            onCreateTag={handleCreateTag}
+                            isSubmitting={isSubmittingTags}
+                            isCreatingTag={isCreatingTag}
+                            error={tagSubmissionError}
+                            createTagError={createTagSubmissionError}
+                            createdTag={
+                                createTagData?.ok &&
+                                    createTagData.intent === "createTag"
+                                    ? createTagData.tag
+                                    : undefined
+                            }
+                            collisionBoundary={collisionBoundary}
+                            trigger={(
+                                <Button
+                                    type="button"
+                                    variant="outline"
+                                    size="icon-sm"
+                                    aria-label={`Edit tags. ${selectedTagIds.size} selected.`}
+                                    disabled={isSubmittingTags}
+                                    className="rounded-full"
+                                >
+                                    <Plus />
+                                </Button>
+                            )}
+                        />
+                    </div>
+
+                    <div className="grid gap-3 sm:grid-cols-2">
+                        <DetailBox label="Salary">
+                            {formatSalaryRange(currentApplication)}
+                        </DetailBox>
+                        <DetailBox label="Location">
+                            {currentApplication.applicationLocation ?? "Not specified"}
+                        </DetailBox>
+                        <DetailBox label="Work mode">
+                            {currentApplication.applicationRemoteType
+                                ? getRemoteTypeLabel(currentApplication.applicationRemoteType)
+                                : "Not specified"}
+                        </DetailBox>
+                        <DetailBox label="Source">
+                            {currentApplication.applicationSource ?? "Not specified"}
+                        </DetailBox>
+                        <DetailBox label="Applied date">
+                            {formatDate(currentApplication.applicationAppliedAt)}
+                        </DetailBox>
+                        <DetailBox label="URL">
+                            {currentApplication.applicationJobUrl ? (
+                                <a
+                                    href={currentApplication.applicationJobUrl}
+                                    target="_blank"
+                                    rel="noreferrer"
+                                    className="block max-w-full truncate text-darkest-accent underline"
+                                >
+                                    {currentApplication.applicationJobUrl}
+                                </a>
+                            ) : (
+                                "Not specified"
+                            )}
+                        </DetailBox>
+                    </div>
+
+                    <div className="flex flex-wrap gap-2">
+                        <Button type="button" onClick={() => setMode("edit")}>
+                            <Pencil /> Edit
+                        </Button>
+                        <Button
+                            type="button"
+                            variant="destructive"
+                            onClick={handleDeleteApplication}
+                            disabled={isDeletingApplication}
+                        >
+                            {isDeletingApplication ? (
+                                <Loader2 className="animate-spin" />
+                            ) : (
+                                <Trash2 />
+                            )}
+                            Delete
+                        </Button>
+                    </div>
+
+                    {applicationServerError && (
+                        <p className="rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive">
+                            {applicationServerError}
+                        </p>
+                    )}
+
+                    <section className="grid gap-3">
+                        <div className="flex items-center justify-between">
+                            <h3 className="font-display text-lg font-bold">Interviews</h3>
+                            <Button
+                                type="button"
+                                variant="secondary"
+                                onClick={() => setIsAddFormOpen((current) => !current)}
+                            >
+                                <Plus /> Add
+                            </Button>
+                        </div>
+
+                        {isAddFormOpen && (
+                            <interviewFetcher.Form action={applicationActionPath}
+                                method="post"
+                                className="grid gap-3 rounded-md border border-light-gray bg-off-white p-3"
+                            >
+                                <input type="hidden" name="intent" value="createInterview" />
+                                <input
+                                    type="hidden"
+                                    name="interviewType"
+                                    value={formValues.interviewType}
+                                />
+                                <div className="grid gap-3 sm:grid-cols-2">
+                                    <FormField name="interviewType">
+                                        <FormLabel>Type</FormLabel>
+                                        <Select
+                                            value={formValues.interviewType}
+                                            onValueChange={(value) =>
+                                                updateFormValue(
+                                                    "interviewType",
+                                                    value as InterviewType,
+                                                )
+                                            }
+                                            disabled={isSubmittingInterview}
+                                        >
+                                            <SelectTrigger>
+                                                <SelectValue />
+                                            </SelectTrigger>
+                                            <SelectContent>
+                                                {interviewTypeOptions.map((option) => (
+                                                    <SelectItem
+                                                        key={option.value}
+                                                        value={option.value}
+                                                    >
+                                                        {option.label}
+                                                    </SelectItem>
+                                                ))}
+                                            </SelectContent>
+                                        </Select>
+                                    </FormField>
+                                    <FormField name="interviewScheduledAt">
+                                        <FormLabel>Date</FormLabel>
+                                        <FormControl asChild>
+                                            <Input
+                                                name="interviewScheduledAt"
+                                                type="datetime-local"
+                                                value={formValues.interviewScheduledAt}
+                                                onChange={(event) =>
+                                                    updateFormValue(
+                                                        "interviewScheduledAt",
+                                                        event.target.value,
+                                                    )
+                                                }
+                                                disabled={isSubmittingInterview}
+                                            />
+                                        </FormControl>
+                                    </FormField>
+                                </div>
+                                <FormField name="interviewLocation">
+                                    <FormLabel>Location</FormLabel>
+                                    <FormControl asChild>
+                                        <Input
+                                            name="interviewLocation"
+                                            value={formValues.interviewLocation}
+                                            onChange={(event) =>
+                                                updateFormValue(
+                                                    "interviewLocation",
+                                                    event.target.value,
+                                                )
+                                            }
+                                            disabled={isSubmittingInterview}
+                                            maxLength={255}
+                                        />
+                                    </FormControl>
+                                </FormField>
+                                <FormField name="interviewNotes">
+                                    <FormLabel>Notes</FormLabel>
+                                    <FormControl asChild>
+                                        <Textarea
+                                            name="interviewNotes"
+                                            value={formValues.interviewNotes}
+                                            onChange={(event) =>
+                                                updateFormValue("interviewNotes", event.target.value)
+                                            }
+                                            disabled={isSubmittingInterview}
+                                        />
+                                    </FormControl>
+                                </FormField>
+                                {formError && <FormMessage>{formError}</FormMessage>}
+                                <div className="flex justify-end gap-2">
+                                    <Button
+                                        type="button"
+                                        variant="ghost"
+                                        onClick={() => setIsAddFormOpen(false)}
+                                        disabled={isSubmittingInterview}
+                                    >
+                                        Cancel
+                                    </Button>
+                                    <Button type="submit" disabled={isSubmittingInterview}>
+                                        {isSubmittingInterview && (
+                                            <Loader2 className="animate-spin" />
+                                        )}
+                                        Create
+                                    </Button>
+                                </div>
+                            </interviewFetcher.Form>
+                        )}
+
+                        {interviewError && (
+                            <p className="rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive">
+                                {interviewError}
+                            </p>
+                        )}
+                        {interviews.length === 0 && (
+                            <p className="text-sm text-medium-gray">No interviews recorded.</p>
+                        )}
+                        <div className="grid gap-2">
+                            {interviews.map((interview) => {
+                                const outcome = outcomeStyles[interview.interviewOutcome];
+
+                                return (
+                                    <div
+                                        key={interview.interviewId}
+                                        className="flex items-start justify-between gap-3 rounded-md border border-light-gray p-3"
+                                    >
+                                        <div className="min-w-0">
+                                            <p className="font-medium">
+                                                {getInterviewTypeLabel(interview.interviewType)}
+                                            </p>
+                                            <p className="text-sm text-medium-gray">
+                                                {formatDate(interview.interviewScheduledAt)}
+                                            </p>
+                                            {interview.interviewLocation && (
+                                                <p className="text-sm text-medium-gray">
+                                                    {interview.interviewLocation}
+                                                </p>
+                                            )}
+                                            {interview.interviewNotes && (
+                                                <p className="mt-1 text-sm">
+                                                    {interview.interviewNotes}
+                                                </p>
+                                            )}
+                                        </div>
+                                        <div className="flex shrink-0 items-center gap-2">
+                                            <Select
+                                                value={interview.interviewOutcome}
+                                                onValueChange={(value) =>
+                                                    handlePatchInterviewOutcome(
+                                                        interview.interviewId,
+                                                        interview.interviewOutcome,
+                                                        value as InterviewOutcome,
+                                                    )
+                                                }
+                                                disabled={
+                                                    isPatchingInterview &&
+                                                    patchingInterviewId === interview.interviewId
+                                                }
+                                            >
+                                                <SelectTrigger
+                                                    className={`h-auto w-auto gap-1 rounded-full border px-2 py-1 text-xs shadow-none focus-visible:ring-2 ${outcome.className} [&_svg]:size-3 [&_svg]:opacity-60`}
+                                                >
+                                                    <SelectValue />
+                                                </SelectTrigger>
+                                                <SelectContent>
+                                                    {interviewOutcomeOptions.map((option) => (
+                                                        <SelectItem
+                                                            key={option.value}
+                                                            value={option.value}
+                                                        >
+                                                            {option.label}
+                                                        </SelectItem>
+                                                    ))}
+                                                </SelectContent>
+                                            </Select>
+                                            <Button
+                                                type="button"
+                                                variant="ghost"
+                                                size="icon"
+                                                onClick={() => handleDeleteInterview(interview.interviewId)}
+                                                disabled={
+                                                    isDeletingInterview &&
+                                                    deletingInterviewId === interview.interviewId
+                                                }
+                                                aria-label="Delete interview"
+                                            >
+                                                {isDeletingInterview &&
+                                                    deletingInterviewId === interview.interviewId ? (
+                                                    <Loader2 className="animate-spin" />
+                                                ) : (
+                                                    <Trash2 />
+                                                )}
+                                            </Button>
+                                        </div>
+                                    </div>
+                                );
+                            })}
+                        </div>
+                    </section>
+                </div>
+            )}
+
+            {mode === "edit" && (
+                <applicationFetcher.Form method="post" action={applicationActionPath} className="grid min-w-0 gap-4">
+                    <input type="hidden" name="intent" value="updateApplication" />
+                    <input
+                        type="hidden"
+                        name="applicationStatus"
+                        value={applicationValues.applicationStatus}
+                    />
+                    <input
+                        type="hidden"
+                        name="applicationRemoteType"
+                        value={applicationValues.applicationRemoteType}
+                    />
+                    <input
+                        type="hidden"
+                        name="previousStatus"
+                        value={currentApplication.applicationStatus}
+                    />
+                    <input
+                        type="hidden"
+                        name="applicationKanbanOrder"
+                        value={nextApplicationKanbanOrder}
+                    />
+                    <div className="grid gap-4 sm:grid-cols-2">
+                        <FormField name="applicationStatus">
+                            <FormLabel>Status</FormLabel>
+                            <Select
+                                value={applicationValues.applicationStatus}
+                                onValueChange={(value) =>
+                                    updateApplicationValue(
+                                        "applicationStatus",
+                                        value as ApplicationStatus,
+                                    )
+                                }
+                                disabled={isSubmittingApplication}
+                            >
+                                <SelectTrigger>
+                                    <SelectValue />
+                                </SelectTrigger>
+                                <SelectContent>
+                                    {applicationStatusOptions.map((status) => (
+                                        <SelectItem key={status.value} value={status.value}>
+                                            {status.label}
+                                        </SelectItem>
+                                    ))}
+                                </SelectContent>
+                            </Select>
+                            {applicationFieldErrors?.applicationStatus && (
+                                <FormMessage>
+                                    {applicationFieldErrors.applicationStatus}
+                                </FormMessage>
+                            )}
+                        </FormField>
+                        <FormField name="applicationAppliedAt">
+                            <FormLabel>Applied date</FormLabel>
+                            <FormControl asChild>
+                                <Input
+                                    name="applicationAppliedAt"
+                                    type="date"
+                                    value={applicationValues.applicationAppliedAt}
+                                    onChange={(event) =>
+                                        updateApplicationValue(
+                                            "applicationAppliedAt",
+                                            event.target.value,
+                                        )
+                                    }
+                                    disabled={isSubmittingApplication}
+                                />
+                            </FormControl>
+                            {applicationFieldErrors?.applicationAppliedAt && (
+                                <FormMessage>
+                                    {applicationFieldErrors.applicationAppliedAt}
+                                </FormMessage>
+                            )}
+                        </FormField>
+                    </div>
+
+                    <FormField name="applicationTitle">
+                        <FormLabel>Job title</FormLabel>
+                        <FormControl asChild>
+                            <Input
+                                name="applicationTitle"
+                                value={applicationValues.applicationTitle}
+                                onChange={(event) =>
+                                    updateApplicationValue(
+                                        "applicationTitle",
+                                        event.target.value,
+                                    )
+                                }
+                                aria-invalid={Boolean(
+                                    applicationFieldErrors?.applicationTitle,
+                                )}
+                                disabled={isSubmittingApplication}
+                                maxLength={255}
+                            />
+                        </FormControl>
+                        {applicationFieldErrors?.applicationTitle && (
+                            <FormMessage>
+                                {applicationFieldErrors.applicationTitle}
+                            </FormMessage>
+                        )}
+                    </FormField>
+
+                    <div className="grid gap-4 sm:grid-cols-3">
+                        <FormField name="applicationSalaryMin">
+                            <FormLabel>Minimum salary</FormLabel>
+                            <FormControl asChild>
+                                <Input
+                                    name="applicationSalaryMin"
+                                    type="number"
+                                    value={applicationValues.applicationSalaryMin}
+                                    onChange={(event) =>
+                                        updateApplicationValue(
+                                            "applicationSalaryMin",
+                                            event.target.value,
+                                        )
+                                    }
+                                    disabled={isSubmittingApplication}
+                                    min="0"
+                                    step="0.01"
+                                />
+                            </FormControl>
+                            {applicationFieldErrors?.applicationSalaryMin && (
+                                <FormMessage>
+                                    {applicationFieldErrors.applicationSalaryMin}
+                                </FormMessage>
+                            )}
+                        </FormField>
+                        <FormField name="applicationSalaryMax">
+                            <FormLabel>Maximum salary</FormLabel>
+                            <FormControl asChild>
+                                <Input
+                                    name="applicationSalaryMax"
+                                    type="number"
+                                    value={applicationValues.applicationSalaryMax}
+                                    onChange={(event) =>
+                                        updateApplicationValue(
+                                            "applicationSalaryMax",
+                                            event.target.value,
+                                        )
+                                    }
+                                    disabled={isSubmittingApplication}
+                                    min="0"
+                                    step="0.01"
+                                />
+                            </FormControl>
+                            {applicationFieldErrors?.applicationSalaryMax && (
+                                <FormMessage>
+                                    {applicationFieldErrors.applicationSalaryMax}
+                                </FormMessage>
+                            )}
+                        </FormField>
+                        <FormField name="applicationCurrency">
+                            <FormLabel>Currency</FormLabel>
+                            <FormControl asChild>
+                                <Input
+                                    name="applicationCurrency"
+                                    value={applicationValues.applicationCurrency}
+                                    onChange={(event) =>
+                                        updateApplicationValue(
+                                            "applicationCurrency",
+                                            event.target.value.toUpperCase(),
+                                        )
+                                    }
+                                    disabled={isSubmittingApplication}
+                                    maxLength={3}
+                                />
+                            </FormControl>
+                            {applicationFieldErrors?.applicationCurrency && (
+                                <FormMessage>
+                                    {applicationFieldErrors.applicationCurrency}
+                                </FormMessage>
+                            )}
+                        </FormField>
+                    </div>
+
+                    <div className="grid gap-4 sm:grid-cols-2">
+                        <FormField name="applicationLocation">
+                            <FormLabel>Location</FormLabel>
+                            <FormControl asChild>
+                                <Input
+                                    name="applicationLocation"
+                                    value={applicationValues.applicationLocation}
+                                    onChange={(event) =>
+                                        updateApplicationValue(
+                                            "applicationLocation",
+                                            event.target.value,
+                                        )
+                                    }
+                                    disabled={isSubmittingApplication}
+                                    maxLength={255}
+                                />
+                            </FormControl>
+                        </FormField>
+                        <FormField name="applicationRemoteType">
+                            <FormLabel>Work mode</FormLabel>
+                            <Select
+                                value={applicationValues.applicationRemoteType}
+                                onValueChange={(value) =>
+                                    updateApplicationValue(
+                                        "applicationRemoteType",
+                                        value as RemoteType | "NONE",
+                                    )
+                                }
+                                disabled={isSubmittingApplication}
+                            >
+                                <SelectTrigger>
+                                    <SelectValue />
+                                </SelectTrigger>
+                                <SelectContent>
+                                    <SelectItem value="NONE">Not specified</SelectItem>
+                                    {remoteTypeOptions.map((option) => (
+                                        <SelectItem key={option.value} value={option.value}>
+                                            {option.label}
+                                        </SelectItem>
+                                    ))}
+                                </SelectContent>
+                            </Select>
+                        </FormField>
+                    </div>
+
+                    <FormField className="min-w-0" name="applicationJobUrl">
+                        <FormLabel>Job URL</FormLabel>
+                        <FormControl asChild>
+                            <Input
+                                name="applicationJobUrl"
+                                type="url"
+                                className="max-w-full"
+                                value={applicationValues.applicationJobUrl}
+                                onChange={(event) =>
+                                    updateApplicationValue(
+                                        "applicationJobUrl",
+                                        event.target.value,
+                                    )
+                                }
+                                disabled={isSubmittingApplication}
+                                maxLength={1024}
+                            />
+                        </FormControl>
+                    </FormField>
+
+                    <FormField name="applicationSource">
+                        <FormLabel>Source</FormLabel>
+                        <FormControl asChild>
+                            <Input
+                                name="applicationSource"
+                                value={applicationValues.applicationSource}
+                                onChange={(event) =>
+                                    updateApplicationValue(
+                                        "applicationSource",
+                                        event.target.value,
+                                    )
+                                }
+                                disabled={isSubmittingApplication}
+                                maxLength={255}
+                            />
+                        </FormControl>
+                    </FormField>
+
+                    {applicationServerError && (
+                        <p className="rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive">
+                            {applicationServerError}
+                        </p>
+                    )}
+
+                    <div className="flex justify-end gap-2">
+                        <Button
+                            type="button"
+                            variant="ghost"
+                            onClick={() => setMode("view")}
+                            disabled={isSubmittingApplication}
+                        >
+                            Cancel
+                        </Button>
+                        <Button type="submit" disabled={isSubmittingApplication}>
+                            {isSubmittingApplication && (
+                                <Loader2 className="animate-spin" />
+                            )}
+                            Save
+                        </Button>
+                    </div>
+                </applicationFetcher.Form>
+            )}
+        </div>
+    );
+}
+
+function applicationPaneFromPathname(pathname: string): ApplicationDialogPane {
+    return pathname.endsWith("/generate") ? "generate" : "details";
+}
+
+export function ApplicationDetailRoute() {
+    const { application: loaderApplication, generations } =
+        useLoaderData() as ApplicationDetailLoaderData;
+    const { allApplications } = useBoard();
+    const application =
+        allApplications.find(
+            (item) => item.applicationId === loaderApplication.applicationId,
+        ) ?? loaderApplication;
+    const navigate = useNavigate();
+    const navigation = useNavigation();
+    const location = useLocation();
+    const params = useParams();
+    const revalidator = useRevalidator();
+    const applicationId = params.applicationId;
+    const displayPathname =
+        navigation.state !== "idle" && navigation.location
+            ? navigation.location.pathname
+            : location.pathname;
+    const activePane = applicationPaneFromPathname(displayPathname);
+    const generateLoading =
+        navigation.state === "loading" &&
+        Boolean(navigation.location?.pathname.endsWith("/generate"));
+    const [dialogContentElement, setDialogContentElement] =
+        useState<HTMLDivElement | null>(null);
+    const hasActiveGeneration = generations.some((generation) =>
+        isActiveCvGenerationStatus(generation.status),
+    );
+    const boardGenerationReminders = useOptionalBoardGenerationReminders();
+    const acknowledgeBoardTerminal = boardGenerationReminders?.acknowledgeTerminal;
+    const [generateVisited, setGenerateVisited] = useState(
+        activePane === "generate" || hasActiveGeneration,
+    );
+    const showGeneratePane = generateVisited || activePane === "generate";
+
+    useEffect(() => {
+        if (activePane === "generate" || hasActiveGeneration) {
+            setGenerateVisited(true);
+        }
+    }, [activePane, hasActiveGeneration]);
+
+    useEffect(() => {
+        // Opening Generate (or watching completion there) acknowledges the latest
+        // COMPLETED/FAILED reminder for Kanban card signifiers.
+        if (activePane !== "generate") return;
+        const reminder = buildBoardGenerationReminders(generations).find(
+            (item) => item.applicationId === application.applicationId,
+        );
+        const terminalOutcome = reminder?.terminalOutcome ?? null;
+        if (acknowledgeBoardTerminal) {
+            acknowledgeBoardTerminal(application.applicationId, terminalOutcome);
+            return;
+        }
+        acknowledgeLatestTerminalOutcome(application.applicationId, terminalOutcome);
+    }, [
+        activePane,
+        generations,
+        application.applicationId,
+        acknowledgeBoardTerminal,
+    ]);
+
+    useEffect(() => {
+        // On /generate the Generate pane revalidator already refreshes parent + child.
+        if (!hasActiveGeneration || activePane === "generate") return;
+        const intervalId = window.setInterval(() => {
+            if (revalidator.state === "idle") {
+                void revalidator.revalidate();
+            }
+        }, GENERATE_POLL_INTERVAL_MS);
+        return () => window.clearInterval(intervalId);
+    }, [hasActiveGeneration, activePane, revalidator]);
+
+    const goToPane = (pane: ApplicationDialogPane) => {
+        if (!applicationId) return;
+        const path =
+            pane === "generate"
+                ? `/applications/${applicationId}/generate`
+                : `/applications/${applicationId}`;
+        // Compare against the displayed (possibly in-flight) path so the opposite
+        // tab can cancel a pending pane transition.
+        if (displayPathname === path) return;
+        void navigate(path, { replace: true });
     };
 
     return (
@@ -514,643 +1249,100 @@ export function ApplicationDetailRoute() {
         >
             <DialogContent
                 ref={setDialogContentElement}
-                className="flex h-fit max-h-[95dvh] min-h-0 min-w-0 max-w-3xl flex-col items-center justify-start"
+                className="flex max-h-[95dvh] min-h-0 min-w-0 max-w-3xl flex-col gap-0 overflow-hidden p-0"
             >
-                <div className="flex w-full max-w-[90%] flex-col gap-y-4">
-                        <div className="flex shrink-0 items-start justify-start w-full gap-4">
-                            <div className="w-20 max-w-20 h-auto">
-                                <img className="h-full w-full max-w-full " src={currentApplication.company.companyLogo as string} alt={`${currentApplication.company.companyName} Logo`} />
-                            </div>
-                            <div className="min-w-0">
-                                <DialogTitle className="font-display text-2xl">
-                                    {currentApplication.applicationTitle}
-                                </DialogTitle>
-                                <p className="mt-1 text-sm text-medium-gray">
-                                    {currentApplication.company.companyName}
-                                </p>
-                            </div>
+                <div className="flex min-h-0 flex-1 flex-col">
+                    <div className="flex shrink-0 items-start gap-4 px-6 pt-6 pr-14">
+                        <div className="h-auto w-20 max-w-20">
+                            {application.company.companyLogo ? (
+                                <img
+                                    className="h-full w-full max-w-full"
+                                    src={application.company.companyLogo}
+                                    alt={`${application.company.companyName} Logo`}
+                                />
+                            ) : null}
                         </div>
+                        <div className="min-w-0">
+                            <DialogTitle className="font-display text-2xl">
+                                {application.applicationTitle}
+                            </DialogTitle>
+                            <p className="mt-1 text-sm text-medium-gray">
+                                {application.company.companyName}
+                            </p>
+                        </div>
+                    </div>
 
-                        {mode === "view" && (
-                            <div className="grid gap-5">
-                                <div className="flex flex-wrap gap-2">
-                                    <span
-                                        className="rounded-full border px-3 py-1 text-sm font-medium"
-                                        style={{
-                                            borderColor: statusDisplay.color,
-                                            color: statusDisplay.color,
-                                            backgroundColor: `${statusDisplay.color}1A`,
-                                        }}
-                                    >
-                                        {statusDisplay.label}
-                                    </span>
-                                    {currentApplication.tags.map((tag) => {
-                                        const tagColor = tag.tagColor ?? "#666666";
+                    <ApplicationDialogPager
+                        activePane={activePane}
+                        onPaneChange={goToPane}
+                        className="mt-4 px-6"
+                        details={
+                            <ApplicationDetailsPane
+                                collisionBoundary={dialogContentElement}
+                            />
+                        }
+                        generate={
+                            showGeneratePane ? (
+                                <ApplicationGeneratePane loading={generateLoading} />
+                            ) : null
+                        }
+                    />
 
-                                        return (
-                                            <span
-                                                key={tag.tagId}
-                                                className="rounded-full border px-3 py-1 text-sm"
-                                                style={{
-                                                    borderColor: tagColor,
-                                                    color: tagColor,
-                                                    backgroundColor: `${tagColor}1A`,
-                                                }}
-                                            >
-                                                {tag.tagName}
-                                            </span>
-                                        );
-                                    })}
-                                    <TagMultiSelectCombobox
-                                        tags={allTags}
-                                        selectedTagIds={selectedTagIds}
-                                        open={isTagPopoverOpen}
-                                        onOpenChange={handleTagPopoverOpenChange}
-                                        onSelectedTagIdsChange={setSelectedTagIds}
-                                        onApply={handleApplyTags}
-                                        onCancel={handleCancelTags}
-                                        onCreateTag={handleCreateTag}
-                                        isSubmitting={isSubmittingTags}
-                                        isCreatingTag={isCreatingTag}
-                                        error={tagSubmissionError}
-                                        createTagError={createTagSubmissionError}
-                                        createdTag={
-                                            createTagData?.ok &&
-                                            createTagData.intent === "createTag"
-                                                ? createTagData.tag
-                                                : undefined
+                    <nav
+                        aria-label="Application panes"
+                        className="shrink-0 border-t border-light-gray bg-background px-2 pb-[max(0.5rem,env(safe-area-inset-bottom))] pt-2"
+                    >
+                        <div role="tablist" className="grid grid-cols-2 gap-1">
+                            {(
+                                [
+                                    {
+                                        pane: "details" as const,
+                                        label: "Details",
+                                        icon: FileText,
+                                    },
+                                    {
+                                        pane: "generate" as const,
+                                        label: "Generate",
+                                        icon: Sparkles,
+                                    },
+                                ] as const
+                            ).map(({ pane, label, icon: Icon }) => {
+                                const selected = activePane === pane;
+                                const showGenerating =
+                                    pane === "generate" && hasActiveGeneration;
+                                return (
+                                    <button
+                                        key={pane}
+                                        type="button"
+                                        role="tab"
+                                        aria-selected={selected}
+                                        aria-busy={showGenerating || undefined}
+                                        className={
+                                            selected
+                                                ? "flex flex-col items-center gap-1 rounded-md px-3 py-2 text-sm font-medium text-foreground"
+                                                : "flex flex-col items-center gap-1 rounded-md px-3 py-2 text-sm font-medium text-medium-gray"
                                         }
-                                        collisionBoundary={dialogContentElement}
-                                        trigger={(
-                                            <Button
-                                                type="button"
-                                                variant="outline"
-                                                size="icon-sm"
-                                                aria-label={`Edit tags. ${selectedTagIds.size} selected.`}
-                                                disabled={isSubmittingTags}
-                                                className="rounded-full"
-                                            >
-                                                <Plus />
-                                            </Button>
-                                        )}
-                                    />
-                                </div>
-
-                                <div className="grid gap-3 sm:grid-cols-2">
-                                    <DetailBox label="Salary">
-                                        {formatSalaryRange(currentApplication)}
-                                    </DetailBox>
-                                    <DetailBox label="Location">
-                                        {currentApplication.applicationLocation ?? "Not specified"}
-                                    </DetailBox>
-                                    <DetailBox label="Work mode">
-                                        {currentApplication.applicationRemoteType
-                                            ? getRemoteTypeLabel(currentApplication.applicationRemoteType)
-                                            : "Not specified"}
-                                    </DetailBox>
-                                    <DetailBox label="Source">
-                                        {currentApplication.applicationSource ?? "Not specified"}
-                                    </DetailBox>
-                                    <DetailBox label="Applied date">
-                                        {formatDate(currentApplication.applicationAppliedAt)}
-                                    </DetailBox>
-                                    <DetailBox label="URL">
-                                        {currentApplication.applicationJobUrl ? (
-                                            <a
-                                                href={currentApplication.applicationJobUrl}
-                                                target="_blank"
-                                                rel="noreferrer"
-                                                className="block max-w-full truncate text-darkest-accent underline"
-                                            >
-                                                {currentApplication.applicationJobUrl}
-                                            </a>
-                                        ) : (
-                                            "Not specified"
-                                        )}
-                                    </DetailBox>
-                                </div>
-
-                                <div className="flex flex-wrap gap-2">
-                                    <Button type="button" onClick={() => setMode("edit")}>
-                                        <Pencil /> Edit
-                                    </Button>
-                                    <Button
-                                        type="button"
-                                        variant="destructive"
-                                        onClick={handleDeleteApplication}
-                                        disabled={isDeletingApplication}
+                                        onClick={() => goToPane(pane)}
                                     >
-                                        {isDeletingApplication ? (
-                                            <Loader2 className="animate-spin" />
+                                        {showGenerating ? (
+                                            <LoaderCircle
+                                                className="size-4 animate-spin"
+                                                aria-hidden
+                                            />
                                         ) : (
-                                            <Trash2 />
+                                            <Icon className="size-4" aria-hidden />
                                         )}
-                                        Delete
-                                    </Button>
-                                </div>
-
-                                {applicationServerError && (
-                                    <p className="rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive">
-                                        {applicationServerError}
-                                    </p>
-                                )}
-
-                                <section className="grid gap-3">
-                                    <div className="flex items-center justify-between">
-                                        <h3 className="font-display text-lg font-bold">Interviews</h3>
-                                        <Button
-                                            type="button"
-                                            variant="secondary"
-                                            onClick={() => setIsAddFormOpen((current) => !current)}
-                                        >
-                                            <Plus /> Add
-                                        </Button>
-                                    </div>
-
-                                    {isAddFormOpen && (
-                                        <interviewFetcher.Form
-                                            method="post"
-                                            className="grid gap-3 rounded-md border border-light-gray bg-off-white p-3"
-                                        >
-                                            <input type="hidden" name="intent" value="createInterview" />
-                                            <input
-                                                type="hidden"
-                                                name="interviewType"
-                                                value={formValues.interviewType}
-                                            />
-                                            <div className="grid gap-3 sm:grid-cols-2">
-                                                <FormField name="interviewType">
-                                                    <FormLabel>Type</FormLabel>
-                                                    <Select
-                                                        value={formValues.interviewType}
-                                                        onValueChange={(value) =>
-                                                            updateFormValue(
-                                                                "interviewType",
-                                                                value as InterviewType,
-                                                            )
-                                                        }
-                                                        disabled={isSubmittingInterview}
-                                                    >
-                                                        <SelectTrigger>
-                                                            <SelectValue />
-                                                        </SelectTrigger>
-                                                        <SelectContent>
-                                                            {interviewTypeOptions.map((option) => (
-                                                                <SelectItem
-                                                                    key={option.value}
-                                                                    value={option.value}
-                                                                >
-                                                                    {option.label}
-                                                                </SelectItem>
-                                                            ))}
-                                                        </SelectContent>
-                                                    </Select>
-                                                </FormField>
-                                                <FormField name="interviewScheduledAt">
-                                                    <FormLabel>Date</FormLabel>
-                                                    <FormControl asChild>
-                                                        <Input
-                                                            name="interviewScheduledAt"
-                                                            type="datetime-local"
-                                                            value={formValues.interviewScheduledAt}
-                                                            onChange={(event) =>
-                                                                updateFormValue(
-                                                                    "interviewScheduledAt",
-                                                                    event.target.value,
-                                                                )
-                                                            }
-                                                            disabled={isSubmittingInterview}
-                                                        />
-                                                    </FormControl>
-                                                </FormField>
-                                            </div>
-                                            <FormField name="interviewLocation">
-                                                <FormLabel>Location</FormLabel>
-                                                <FormControl asChild>
-                                                    <Input
-                                                        name="interviewLocation"
-                                                        value={formValues.interviewLocation}
-                                                        onChange={(event) =>
-                                                            updateFormValue(
-                                                                "interviewLocation",
-                                                                event.target.value,
-                                                            )
-                                                        }
-                                                        disabled={isSubmittingInterview}
-                                                        maxLength={255}
-                                                    />
-                                                </FormControl>
-                                            </FormField>
-                                            <FormField name="interviewNotes">
-                                                <FormLabel>Notes</FormLabel>
-                                                <FormControl asChild>
-                                                    <Textarea
-                                                        name="interviewNotes"
-                                                        value={formValues.interviewNotes}
-                                                        onChange={(event) =>
-                                                            updateFormValue("interviewNotes", event.target.value)
-                                                        }
-                                                        disabled={isSubmittingInterview}
-                                                    />
-                                                </FormControl>
-                                            </FormField>
-                                            {formError && <FormMessage>{formError}</FormMessage>}
-                                            <div className="flex justify-end gap-2">
-                                                <Button
-                                                    type="button"
-                                                    variant="ghost"
-                                                    onClick={() => setIsAddFormOpen(false)}
-                                                    disabled={isSubmittingInterview}
-                                                >
-                                                    Cancel
-                                                </Button>
-                                                <Button type="submit" disabled={isSubmittingInterview}>
-                                                    {isSubmittingInterview && (
-                                                        <Loader2 className="animate-spin" />
-                                                    )}
-                                                    Create
-                                                </Button>
-                                            </div>
-                                        </interviewFetcher.Form>
-                                    )}
-
-                                    {interviewError && (
-                                        <p className="rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive">
-                                            {interviewError}
-                                        </p>
-                                    )}
-                                    {interviews.length === 0 && (
-                                        <p className="text-sm text-medium-gray">No interviews recorded.</p>
-                                    )}
-                                    <div className="grid gap-2">
-                                        {interviews.map((interview) => {
-                                            const outcome = outcomeStyles[interview.interviewOutcome];
-
-                                            return (
-                                                <div
-                                                    key={interview.interviewId}
-                                                    className="flex items-start justify-between gap-3 rounded-md border border-light-gray p-3"
-                                                >
-                                                    <div className="min-w-0">
-                                                        <p className="font-medium">
-                                                            {getInterviewTypeLabel(interview.interviewType)}
-                                                        </p>
-                                                        <p className="text-sm text-medium-gray">
-                                                            {formatDate(interview.interviewScheduledAt)}
-                                                        </p>
-                                                        {interview.interviewLocation && (
-                                                            <p className="text-sm text-medium-gray">
-                                                                {interview.interviewLocation}
-                                                            </p>
-                                                        )}
-                                                        {interview.interviewNotes && (
-                                                            <p className="mt-1 text-sm">
-                                                                {interview.interviewNotes}
-                                                            </p>
-                                                        )}
-                                                    </div>
-                                                    <div className="flex shrink-0 items-center gap-2">
-                                                        <Select
-                                                            value={interview.interviewOutcome}
-                                                            onValueChange={(value) =>
-                                                                handlePatchInterviewOutcome(
-                                                                    interview.interviewId,
-                                                                    interview.interviewOutcome,
-                                                                    value as InterviewOutcome,
-                                                                )
-                                                            }
-                                                            disabled={
-                                                                isPatchingInterview &&
-                                                                patchingInterviewId === interview.interviewId
-                                                            }
-                                                        >
-                                                            <SelectTrigger
-                                                                className={`h-auto w-auto gap-1 rounded-full border px-2 py-1 text-xs shadow-none focus-visible:ring-2 ${outcome.className} [&_svg]:size-3 [&_svg]:opacity-60`}
-                                                            >
-                                                                <SelectValue />
-                                                            </SelectTrigger>
-                                                            <SelectContent>
-                                                                {interviewOutcomeOptions.map((option) => (
-                                                                    <SelectItem
-                                                                        key={option.value}
-                                                                        value={option.value}
-                                                                    >
-                                                                        {option.label}
-                                                                    </SelectItem>
-                                                                ))}
-                                                            </SelectContent>
-                                                        </Select>
-                                                        <Button
-                                                            type="button"
-                                                            variant="ghost"
-                                                            size="icon"
-                                                            onClick={() => handleDeleteInterview(interview.interviewId)}
-                                                            disabled={
-                                                                isDeletingInterview &&
-                                                                deletingInterviewId === interview.interviewId
-                                                            }
-                                                            aria-label="Delete interview"
-                                                        >
-                                                            {isDeletingInterview &&
-                                                                deletingInterviewId === interview.interviewId ? (
-                                                                <Loader2 className="animate-spin" />
-                                                            ) : (
-                                                                <Trash2 />
-                                                            )}
-                                                        </Button>
-                                                    </div>
-                                                </div>
-                                            );
-                                        })}
-                                    </div>
-                                </section>
-                            </div>
-                        )}
-
-                        {mode === "edit" && (
-                            <applicationFetcher.Form method="post" className="grid min-w-0 gap-4">
-                                <input type="hidden" name="intent" value="updateApplication" />
-                                <input
-                                    type="hidden"
-                                    name="applicationStatus"
-                                    value={applicationValues.applicationStatus}
-                                />
-                                <input
-                                    type="hidden"
-                                    name="applicationRemoteType"
-                                    value={applicationValues.applicationRemoteType}
-                                />
-                                <input
-                                    type="hidden"
-                                    name="previousStatus"
-                                    value={currentApplication.applicationStatus}
-                                />
-                                <input
-                                    type="hidden"
-                                    name="applicationKanbanOrder"
-                                    value={nextApplicationKanbanOrder}
-                                />
-                                <div className="grid gap-4 sm:grid-cols-2">
-                                    <FormField name="applicationStatus">
-                                        <FormLabel>Status</FormLabel>
-                                        <Select
-                                            value={applicationValues.applicationStatus}
-                                            onValueChange={(value) =>
-                                                updateApplicationValue(
-                                                    "applicationStatus",
-                                                    value as ApplicationStatus,
-                                                )
-                                            }
-                                            disabled={isSubmittingApplication}
-                                        >
-                                            <SelectTrigger>
-                                                <SelectValue />
-                                            </SelectTrigger>
-                                            <SelectContent>
-                                                {applicationStatusOptions.map((status) => (
-                                                    <SelectItem key={status.value} value={status.value}>
-                                                        {status.label}
-                                                    </SelectItem>
-                                                ))}
-                                            </SelectContent>
-                                        </Select>
-                                        {applicationFieldErrors?.applicationStatus && (
-                                            <FormMessage>
-                                                {applicationFieldErrors.applicationStatus}
-                                            </FormMessage>
-                                        )}
-                                    </FormField>
-                                    <FormField name="applicationAppliedAt">
-                                        <FormLabel>Applied date</FormLabel>
-                                        <FormControl asChild>
-                                            <Input
-                                                name="applicationAppliedAt"
-                                                type="date"
-                                                value={applicationValues.applicationAppliedAt}
-                                                onChange={(event) =>
-                                                    updateApplicationValue(
-                                                        "applicationAppliedAt",
-                                                        event.target.value,
-                                                    )
-                                                }
-                                                disabled={isSubmittingApplication}
-                                            />
-                                        </FormControl>
-                                        {applicationFieldErrors?.applicationAppliedAt && (
-                                            <FormMessage>
-                                                {applicationFieldErrors.applicationAppliedAt}
-                                            </FormMessage>
-                                        )}
-                                    </FormField>
-                                </div>
-
-                                <FormField name="applicationTitle">
-                                    <FormLabel>Job title</FormLabel>
-                                    <FormControl asChild>
-                                        <Input
-                                            name="applicationTitle"
-                                            value={applicationValues.applicationTitle}
-                                            onChange={(event) =>
-                                                updateApplicationValue(
-                                                    "applicationTitle",
-                                                    event.target.value,
-                                                )
-                                            }
-                                            aria-invalid={Boolean(
-                                                applicationFieldErrors?.applicationTitle,
-                                            )}
-                                            disabled={isSubmittingApplication}
-                                            maxLength={255}
-                                        />
-                                    </FormControl>
-                                    {applicationFieldErrors?.applicationTitle && (
-                                        <FormMessage>
-                                            {applicationFieldErrors.applicationTitle}
-                                        </FormMessage>
-                                    )}
-                                </FormField>
-
-                                <div className="grid gap-4 sm:grid-cols-3">
-                                    <FormField name="applicationSalaryMin">
-                                        <FormLabel>Minimum salary</FormLabel>
-                                        <FormControl asChild>
-                                            <Input
-                                                name="applicationSalaryMin"
-                                                type="number"
-                                                value={applicationValues.applicationSalaryMin}
-                                                onChange={(event) =>
-                                                    updateApplicationValue(
-                                                        "applicationSalaryMin",
-                                                        event.target.value,
-                                                    )
-                                                }
-                                                disabled={isSubmittingApplication}
-                                                min="0"
-                                                step="0.01"
-                                            />
-                                        </FormControl>
-                                        {applicationFieldErrors?.applicationSalaryMin && (
-                                            <FormMessage>
-                                                {applicationFieldErrors.applicationSalaryMin}
-                                            </FormMessage>
-                                        )}
-                                    </FormField>
-                                    <FormField name="applicationSalaryMax">
-                                        <FormLabel>Maximum salary</FormLabel>
-                                        <FormControl asChild>
-                                            <Input
-                                                name="applicationSalaryMax"
-                                                type="number"
-                                                value={applicationValues.applicationSalaryMax}
-                                                onChange={(event) =>
-                                                    updateApplicationValue(
-                                                        "applicationSalaryMax",
-                                                        event.target.value,
-                                                    )
-                                                }
-                                                disabled={isSubmittingApplication}
-                                                min="0"
-                                                step="0.01"
-                                            />
-                                        </FormControl>
-                                        {applicationFieldErrors?.applicationSalaryMax && (
-                                            <FormMessage>
-                                                {applicationFieldErrors.applicationSalaryMax}
-                                            </FormMessage>
-                                        )}
-                                    </FormField>
-                                    <FormField name="applicationCurrency">
-                                        <FormLabel>Currency</FormLabel>
-                                        <FormControl asChild>
-                                            <Input
-                                                name="applicationCurrency"
-                                                value={applicationValues.applicationCurrency}
-                                                onChange={(event) =>
-                                                    updateApplicationValue(
-                                                        "applicationCurrency",
-                                                        event.target.value.toUpperCase(),
-                                                    )
-                                                }
-                                                disabled={isSubmittingApplication}
-                                                maxLength={3}
-                                            />
-                                        </FormControl>
-                                        {applicationFieldErrors?.applicationCurrency && (
-                                            <FormMessage>
-                                                {applicationFieldErrors.applicationCurrency}
-                                            </FormMessage>
-                                        )}
-                                    </FormField>
-                                </div>
-
-                                <div className="grid gap-4 sm:grid-cols-2">
-                                    <FormField name="applicationLocation">
-                                        <FormLabel>Location</FormLabel>
-                                        <FormControl asChild>
-                                            <Input
-                                                name="applicationLocation"
-                                                value={applicationValues.applicationLocation}
-                                                onChange={(event) =>
-                                                    updateApplicationValue(
-                                                        "applicationLocation",
-                                                        event.target.value,
-                                                    )
-                                                }
-                                                disabled={isSubmittingApplication}
-                                                maxLength={255}
-                                            />
-                                        </FormControl>
-                                    </FormField>
-                                    <FormField name="applicationRemoteType">
-                                        <FormLabel>Work mode</FormLabel>
-                                        <Select
-                                            value={applicationValues.applicationRemoteType}
-                                            onValueChange={(value) =>
-                                                updateApplicationValue(
-                                                    "applicationRemoteType",
-                                                    value as RemoteType | "NONE",
-                                                )
-                                            }
-                                            disabled={isSubmittingApplication}
-                                        >
-                                            <SelectTrigger>
-                                                <SelectValue />
-                                            </SelectTrigger>
-                                            <SelectContent>
-                                                <SelectItem value="NONE">Not specified</SelectItem>
-                                                {remoteTypeOptions.map((option) => (
-                                                    <SelectItem key={option.value} value={option.value}>
-                                                        {option.label}
-                                                    </SelectItem>
-                                                ))}
-                                            </SelectContent>
-                                        </Select>
-                                    </FormField>
-                                </div>
-
-                                <FormField className="min-w-0" name="applicationJobUrl">
-                                    <FormLabel>Job URL</FormLabel>
-                                    <FormControl asChild>
-                                        <Input
-                                            name="applicationJobUrl"
-                                            type="url"
-                                            className="max-w-full"
-                                            value={applicationValues.applicationJobUrl}
-                                            onChange={(event) =>
-                                                updateApplicationValue(
-                                                    "applicationJobUrl",
-                                                    event.target.value,
-                                                )
-                                            }
-                                            disabled={isSubmittingApplication}
-                                            maxLength={1024}
-                                        />
-                                    </FormControl>
-                                </FormField>
-
-                                <FormField name="applicationSource">
-                                    <FormLabel>Source</FormLabel>
-                                    <FormControl asChild>
-                                        <Input
-                                            name="applicationSource"
-                                            value={applicationValues.applicationSource}
-                                            onChange={(event) =>
-                                                updateApplicationValue(
-                                                    "applicationSource",
-                                                    event.target.value,
-                                                )
-                                            }
-                                            disabled={isSubmittingApplication}
-                                            maxLength={255}
-                                        />
-                                    </FormControl>
-                                </FormField>
-
-                                {applicationServerError && (
-                                    <p className="rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive">
-                                        {applicationServerError}
-                                    </p>
-                                )}
-
-                                <div className="flex justify-end gap-2">
-                                    <Button
-                                        type="button"
-                                        variant="ghost"
-                                        onClick={() => setMode("view")}
-                                        disabled={isSubmittingApplication}
-                                    >
-                                        Cancel
-                                    </Button>
-                                    <Button type="submit" disabled={isSubmittingApplication}>
-                                        {isSubmittingApplication && (
-                                            <Loader2 className="animate-spin" />
-                                        )}
-                                        Save
-                                    </Button>
-                                </div>
-                            </applicationFetcher.Form>
-                        )}
-
+                                        <span className="inline-flex items-center gap-1">
+                                            {label}
+                                            {showGenerating ? (
+                                                <span className="sr-only">in progress</span>
+                                            ) : null}
+                                        </span>
+                                    </button>
+                                );
+                            })}
+                        </div>
+                    </nav>
                 </div>
             </DialogContent>
         </Dialog>
