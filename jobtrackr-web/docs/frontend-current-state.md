@@ -66,6 +66,7 @@ Implemented API methods:
 - `getCurrentUser`
 - `getApplications`
 - `searchCompanies` (paginated company search for the create dialog combobox)
+- `createCompany` (inline create from the company combobox)
 - `getTags`
 - `createApplication`
 - `patchApplication`
@@ -82,7 +83,7 @@ Missing client methods:
 - `putApplication`
 - `getApplicationStatusHistory`
 - `createAndAttachTag`
-- company `get/create/put/delete`
+- company `get/put/delete`
 - tag `get/create/put/delete`
 - interview `get/put`
 
@@ -104,7 +105,7 @@ Kanban:
 Application create:
 
 - Company picker uses lazy paginated search via `GET /companies?search=&page=&size=` (global pre-seeded companies plus user-owned companies).
-- It does not allow creating a company inline.
+- When search returns no matches, the combobox offers `Create "{name}"`, which `POST`s a user-owned company and selects it.
 - It computes `applicationKanbanOrder` as the count of applications in the selected status.
 - It supports title, status, company, salary range, currency, location, remote type, URL, source, and applied date.
 - It does not support selecting tags on create even though `ApplicationCreateRequestDto` supports `tagIds`.
