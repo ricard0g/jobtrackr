@@ -1,4 +1,4 @@
-import { CheckIcon, ChevronDownIcon, Loader2 } from "lucide-react";
+import { CheckIcon, ChevronDownIcon, Loader2, Plus } from "lucide-react";
 import { useState, type UIEvent } from "react";
 
 import { Button } from "@/components/ui/button";
@@ -16,6 +16,7 @@ import {
 	PopoverTrigger,
 } from "@/components/ui/popover";
 import { useCompanySearch } from "@/hooks/use-company-search";
+import { ApiError, api } from "@/lib/api";
 import { cn } from "@/lib/utils";
 import type { Company } from "@/types/company";
 
@@ -29,6 +30,19 @@ type CompanyComboboxProps = {
 };
 
 const SCROLL_LOAD_THRESHOLD = 0.8;
+const COMPANY_NAME_MAX_LENGTH = 255;
+
+const createCompanyErrorMessage = (error: unknown) => {
+    if (error instanceof ApiError && error.code === "DUPLICATE_COMPANY_NAME") {
+        return "A company with this name already exists.";
+    }
+
+    if (error instanceof ApiError) {
+        return error.message;
+    }
+
+    return "Could not create the company.";
+};
 
 export function CompanyCombobox({
     value,
@@ -39,6 +53,8 @@ export function CompanyCombobox({
     placeholder = "Select company",
 }: CompanyComboboxProps) {
     const [open, setOpen] = useState(false);
+    const [isCreating, setIsCreating] = useState(false);
+    const [createError, setCreateError] = useState<string | null>(null);
     const {
         search,
         setSearch,
@@ -55,12 +71,25 @@ export function CompanyCombobox({
     const isSearchPending = isLoading || isDebouncing;
     const showInitialLoading = isSearchPending && companies.length === 0;
     const showRefetchLoading = isLoading && companies.length > 0;
+    const trimmedSearch = search.trim();
+    const showCreateCompany =
+        !isSearchPending &&
+        companies.length === 0 &&
+        trimmedSearch.length > 0 &&
+        !error;
 
     const handleOpenChange = (nextOpen: boolean) => {
         setOpen(nextOpen);
+        setCreateError(null);
         if (!nextOpen) {
+            setIsCreating(false);
             reset();
         }
+    };
+
+    const handleSearchChange = (nextSearch: string) => {
+        setCreateError(null);
+        setSearch(nextSearch);
     };
 
     const handleScroll = (event: UIEvent<HTMLDivElement>) => {
@@ -75,6 +104,28 @@ export function CompanyCombobox({
 
         if (scrollProgress >= SCROLL_LOAD_THRESHOLD) {
             loadMore();
+        }
+    };
+
+    const handleCreateCompany = async () => {
+        if (!showCreateCompany || isCreating) return;
+
+        if (trimmedSearch.length > COMPANY_NAME_MAX_LENGTH) {
+            setCreateError("Company name must be 255 characters or fewer.");
+            return;
+        }
+
+        setIsCreating(true);
+        setCreateError(null);
+
+        try {
+            const company = await api.createCompany({ companyName: trimmedSearch });
+            onChange(String(company.companyId), company);
+            handleOpenChange(false);
+        } catch (createCompanyError) {
+            setCreateError(createCompanyErrorMessage(createCompanyError));
+        } finally {
+            setIsCreating(false);
         }
     };
 
@@ -105,7 +156,8 @@ export function CompanyCombobox({
                     <CommandInput
                         placeholder="Search companies..."
                         value={search}
-                        onValueChange={setSearch}
+                        onValueChange={handleSearchChange}
+                        disabled={isCreating}
                     />
                     <CommandList className="max-h-60 overscroll-contain overflow-y-auto" onScroll={handleScroll}>
                         {showInitialLoading ? (
@@ -157,7 +209,7 @@ export function CompanyCombobox({
                                     type="button"
                                     variant="ghost"
                                     className="h-8 w-full justify-center text-sm"
-                                    disabled={isLoadingMore || isSearchPending}
+                                    disabled={isLoadingMore || isSearchPending || isCreating}
                                     onClick={loadMore}
                                 >
                                     {isLoadingMore ? (
@@ -168,6 +220,32 @@ export function CompanyCombobox({
                                     ) : (
                                         "Load more"
                                     )}
+                                </Button>
+                            </div>
+                        ) : null}
+
+                        {showCreateCompany ? (
+                            <div className="border-t border-input p-1">
+                                {createError ? (
+                                    <p className="px-2 py-1 text-xs text-destructive" role="alert">
+                                        {createError}
+                                    </p>
+                                ) : null}
+                                <Button
+                                    type="button"
+                                    variant="ghost"
+                                    className="h-8 w-full justify-start gap-2 text-sm"
+                                    disabled={isCreating || disabled}
+                                    onClick={() => {
+                                        void handleCreateCompany();
+                                    }}
+                                >
+                                    {isCreating ? (
+                                        <Loader2 className="size-4 animate-spin" />
+                                    ) : (
+                                        <Plus className="size-4" />
+                                    )}
+                                    <span className="truncate">Create "{trimmedSearch}"</span>
                                 </Button>
                             </div>
                         ) : null}
