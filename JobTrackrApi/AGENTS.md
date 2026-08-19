@@ -155,6 +155,7 @@ export $(grep -v '^#' .env | xargs) && ./mvnw test -Dspring.profiles.active=test
 ```bash
 curl -s http://localhost:8080/actuator/health
 # Expected: {"status":"UP"}
+curl -s http://localhost:8080/actuator/health/readiness
 ```
 
 ### Stop
@@ -168,12 +169,28 @@ kill -9 <PID>
 
 ### Infrastructure (Docker Compose)
 
-Start DB and other dependencies before the app. Never run the Spring Boot app itself in Docker during local dev.
+Start PostgreSQL, CV Generation, and Gotenberg on the host-development workflow. Spring Boot still runs on the host with `./scripts/dev-api.sh` or `./mvnw spring-boot:run`.
 
 ```bash
-docker-compose up -d    # start infra
-docker-compose down     # stop infra
+docker compose up -d postgres cv-generation gotenberg
+docker compose down
 ```
+
+Host-development `.env` values use localhost. Do not point `DB_HOST`, `CV_GENERATION_SERVICE_BASE_URL`, or `GOTENBERG_BASE_URL` at Compose DNS names while the API runs on the host.
+
+### Backend container
+
+The production-shaped backend image is optional and separate from host-run development. It runs Flyway, the HTTP API, generation polling, storage-cleanup polling, and terminal-generation purging in one process.
+
+```bash
+# From the repository root
+docker compose --profile full up --build backend
+./scripts/acceptance/backend-container-smoke.sh
+```
+
+Container execution uses the `production` Spring profile. That profile rejects missing `DB_PASSWORD`, `JWT_SIGNING_KEY`, `CV_GENERATION_SERVICE_TOKEN` (including the local `dev-service-token` default), and R2 settings. Compose injects `postgres`, `cv-generation`, and `gotenberg` as service DNS names. The backend port stays on the private Compose network.
+
+Do not put real credentials in docs, fixtures, or committed templates.
 
 ### Troubleshooting
 
@@ -183,4 +200,5 @@ docker-compose down     # stop infra
 | `Port 8080 already in use` | `lsof -i :8080` → `kill -9 <PID>` |
 | `./mvnw: Permission denied` | `chmod +x mvnw` |
 | `Could not find main class` | `./mvnw clean` then retry |
-| DB connection refused | Start Docker Compose; verify `DB_URL` in `.env` |
+| DB connection refused | Start Docker Compose; verify `DB_HOST` in `.env` |
+| Backend container exits on startup | Set non-default production credentials; host `.env` localhost URLs are not used inside Compose |

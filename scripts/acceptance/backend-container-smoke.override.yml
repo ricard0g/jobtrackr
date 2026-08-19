@@ -1,0 +1,10 @@
+services:
+  postgres:
+    container_name: jobtrackr-backend-smoke-postgres
+    ports: !override []
+  cv-generation:
+    container_name: jobtrackr-backend-smoke-cv-generation
+    ports: !override []
+  gotenberg:
+    container_name: jobtrackr-backend-smoke-gotenberg
+    ports: !override []

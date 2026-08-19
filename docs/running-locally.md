@@ -72,11 +72,32 @@ Health check:
 
 ```bash
 curl http://localhost:8080/actuator/health
+curl http://localhost:8080/actuator/health/readiness
 curl http://localhost:8081/health/live
 curl http://localhost:3000/health
 ```
 
 Flyway runs automatically when the API starts against a fresh database.
+
+Host-development `.env` values (`DB_HOST=localhost:5432`, `CV_GENERATION_SERVICE_BASE_URL=http://localhost:8081`, `GOTENBERG_BASE_URL=http://localhost:3000`) are for this workflow. They are not valid inside the Compose network.
+
+## Run The Backend Container
+
+This is optional and separate from host-run Spring Boot. The image runs the API, Flyway, and the embedded generation, storage-cleanup, and purge workers as one process against Compose DNS names.
+
+```bash
+docker compose --profile full up --build backend
+```
+
+The backend listens on container port 8080 and is not published to the host. Readiness is `/actuator/health/readiness`. The `production` profile rejects missing PostgreSQL password, JWT signing key, CV Generation service token, and R2 configuration.
+
+Prove the image through the container network:
+
+```bash
+./scripts/acceptance/backend-container-smoke.sh
+```
+
+Keep using `./scripts/dev-api.sh` for everyday code iteration.
 
 ## Run Backend With Seed Data
 
