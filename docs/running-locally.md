@@ -89,7 +89,7 @@ This is optional and separate from host-run Spring Boot. The image runs the API,
 docker compose --profile full up --build backend
 ```
 
-The backend listens on container port 8080 and is not published to the host. Readiness is `/actuator/health/readiness`. The `production` profile rejects missing PostgreSQL password, JWT signing key, CV Generation service token, and R2 configuration.
+The backend listens on container port 8080 and is not published to the host. Readiness is `/actuator/health/readiness`. The `production` profile rejects missing PostgreSQL password, JWT signing key, CV Generation service token, and R2 configuration, and it rejects the documented example JWT signing key.
 
 Prove the image through the container network:
 

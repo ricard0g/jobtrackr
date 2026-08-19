@@ -188,7 +188,7 @@ docker compose --profile full up --build backend
 ./scripts/acceptance/backend-container-smoke.sh
 ```
 
-Container execution uses the `production` Spring profile. That profile rejects missing `DB_PASSWORD`, `JWT_SIGNING_KEY`, `CV_GENERATION_SERVICE_TOKEN` (including the local `dev-service-token` default), and R2 settings. Compose injects `postgres`, `cv-generation`, and `gotenberg` as service DNS names. The backend port stays on the private Compose network.
+Container execution uses the `production` Spring profile. That profile rejects missing `DB_PASSWORD`, `JWT_SIGNING_KEY`, `CV_GENERATION_SERVICE_TOKEN` (including the local `dev-service-token` default), and R2 settings. It also rejects the documented example `JWT_SIGNING_KEY` from `.env.example`. Compose injects `postgres`, `cv-generation`, and `gotenberg` as service DNS names. The backend port stays on the private Compose network.
 
 Do not put real credentials in docs, fixtures, or committed templates.
 

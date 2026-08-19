@@ -19,7 +19,7 @@ Added a Java 25 multi-stage backend image that runs tests before packaging, exec
 ### What Changed
 
 - Added `JobTrackrApi/Dockerfile` and a `full`-profile `backend` Compose service with actuator readiness checks
-- Rejected missing production PostgreSQL, JWT, CV Generation token, and R2 settings
+- Rejected missing production PostgreSQL, JWT, CV Generation token, and R2 settings, including the documented example JWT signing key
 - Added a container-network smoke test for readiness and `/api/v1/auth/csrf`
 - Documented host-run versus container execution without real credentials
 

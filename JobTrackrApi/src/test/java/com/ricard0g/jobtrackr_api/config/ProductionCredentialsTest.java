@@ -49,6 +49,18 @@ class ProductionCredentialsTest {
     }
 
     @Test
+    void rejectsDocumentedExampleJwtSigningKey() {
+        // given / when / then
+        assertThatThrownBy(() -> ProductionCredentials.validate(
+                POSTGRES_PASSWORD,
+                "change-me-to-a-long-random-local-secret-at-least-32-bytes",
+                CV_GENERATION_SERVICE_TOKEN,
+                validR2Properties()))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("JWT_SIGNING_KEY");
+    }
+
+    @Test
     void rejectsDefaultCvGenerationServiceToken() {
         // given / when / then
         assertThatThrownBy(() -> ProductionCredentials.validate(
