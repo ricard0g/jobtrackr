@@ -37,6 +37,18 @@ class ProductionCredentialsTest {
     }
 
     @Test
+    void rejectsDocumentedDefaultPostgresPassword() {
+        // given / when / then
+        assertThatThrownBy(() -> ProductionCredentials.validate(
+                "jobtrackr_app",
+                JWT_SIGNING_KEY,
+                CV_GENERATION_SERVICE_TOKEN,
+                validR2Properties()))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("DB_PASSWORD");
+    }
+
+    @Test
     void rejectsMissingJwtSigningKey() {
         // given / when / then
         assertThatThrownBy(() -> ProductionCredentials.validate(

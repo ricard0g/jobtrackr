@@ -9,6 +9,7 @@ public final class ProductionCredentials {
 
     private static final String DEV_DEFAULT_CV_GENERATION_TOKEN = "dev-service-token";
     private static final int MIN_JWT_SIGNING_KEY_BYTES = 32;
+    private static final Set<String> DISALLOWED_POSTGRES_PASSWORDS = Set.of("jobtrackr_app");
     private static final Set<String> DISALLOWED_JWT_SIGNING_KEYS = Set.of(
             "change-me-to-a-long-random-local-secret-at-least-32-bytes");
 
@@ -23,6 +24,10 @@ public final class ProductionCredentials {
             final R2Properties r2Properties) {
         if (isBlank(postgresPassword)) {
             throw new IllegalStateException("DB_PASSWORD is required");
+        }
+        if (DISALLOWED_POSTGRES_PASSWORDS.contains(postgresPassword)) {
+            throw new IllegalStateException(
+                    "DB_PASSWORD must be set to a non-default value outside local/test profiles");
         }
         if (isBlank(jwtSigningKey)) {
             throw new IllegalStateException("JWT_SIGNING_KEY is required");
