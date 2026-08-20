@@ -1,10 +1,11 @@
 import json
+import os
 import re
 import sys
 import urllib.error
 import urllib.request
 
-ORIGIN = "http://frontend"
+ORIGIN = os.environ.get("JOBTRACKR_APP_ORIGIN", "http://frontend").rstrip("/")
 
 
 def get(url):

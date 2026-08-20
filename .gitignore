@@ -2,9 +2,11 @@
 .env
 .env.*
 !.env.example
+!.env.compose.example
 **/.env
 **/.env.*
 !**/.env.example
+!**/.env.compose.example
 
 # Java
 target/
@@ -40,6 +42,7 @@ db/dumps/*
 # Generated Documents acceptance artifacts (PDF copies)
 scripts/acceptance/fixtures/*.pdf
 scripts/acceptance/fixtures/*.md
+scripts/acceptance/fixtures/*.dump
 scripts/acceptance/fixtures/acceptance-generated.docx
 scripts/acceptance/__pycache__/
 scripts/acceptance/**/__pycache__/

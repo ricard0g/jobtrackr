@@ -19,7 +19,16 @@ from r2_put import head_object, put_object
 
 ROOT = Path(__file__).resolve().parents[2]
 FIXTURES = Path(__file__).resolve().parent / "fixtures"
-API_ORIGIN = os.environ.get("VITE_API_ORIGIN", "http://localhost:8080").rstrip("/")
+
+
+def resolve_app_origin() -> str:
+    dedicated = os.environ.get("JOBTRACKR_APP_ORIGIN")
+    if dedicated:
+        return dedicated.rstrip("/")
+    return os.environ.get("VITE_API_ORIGIN", "http://localhost:8080").rstrip("/")
+
+
+API_ORIGIN = resolve_app_origin()
 AUTH_BASE = f"{API_ORIGIN}/api/v1/auth"
 API_BASE = f"{API_ORIGIN}/api/v1"
 GOTENBERG_HEALTH = os.environ.get("GOTENBERG_BASE_URL", "http://localhost:3000").rstrip("/") + "/health"
@@ -143,13 +152,18 @@ def require_env(*names: str) -> None:
 def health_checks() -> None:
     client = ApiClient()
     status, _, body = client.request(
-        "GET", f"{API_ORIGIN}/actuator/health", auth=False, expect=200
+        "GET", f"{AUTH_BASE}/csrf", auth=False, expect=200
     )
     payload = json.loads(body.decode("utf-8"))
-    if payload.get("status") != "UP":
-        raise AcceptanceError(f"API health not UP: {payload}")
+    if not payload.get("token") or not payload.get("headerName"):
+        raise AcceptanceError(f"Application origin CSRF was not usable: {payload}")
+    status, _, health_body = client.request("GET", f"{API_ORIGIN}/health", auth=False)
+    if status == 200 and health_body.strip() in {b"ok", b"ok\n"}:
+        step("Application origin serves frontend health and /api/v1/auth/csrf")
+    else:
+        step("Application origin serves /api/v1/auth/csrf")
     status, _, _ = client.request("GET", GOTENBERG_HEALTH, auth=False, expect=200)
-    step("API and pinned Gotenberg are healthy")
+    step("Pinned Gotenberg is healthy")
 
 
 def write_fixtures(directory: Path) -> dict[str, Path]:
@@ -595,7 +609,7 @@ def run() -> None:
     # Keep fixtures on disk for the UI checklist in the runbook.
     step("Real-stack Documents HTTP acceptance path passed")
     print()
-    print("Manual UI checklist (web app at http://localhost:5173):")
+    print(f"Manual UI checklist (web app at {API_ORIGIN}):")
     print("  1. Sign in with the acceptance user printed above (or seed user).")
     print("  2. Open Documents; confirm Base CVs and Generated CVs sections.")
     print("  3. Open PDF/Markdown/DOCX previews; verify keyboard Escape, focus trap,")

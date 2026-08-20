@@ -16,7 +16,15 @@ Create your local environment file:
 cp .env.example .env
 ```
 
-Start Postgres:
+That file is for host-run Spring Boot and Vite. Full Compose uses a separate sanitized file:
+
+```bash
+cp .env.compose.example .env.compose
+```
+
+Replace the Compose placeholders before starting the five-service stack. Do not copy host-run `localhost` URLs or the documented default PostgreSQL password into `.env.compose`.
+
+Start Postgres, CV Generation, and Gotenberg for host-run development:
 
 ```bash
 ./scripts/dev-up.sh
@@ -86,7 +94,7 @@ Host-development `.env` values (`DB_HOST=localhost:5432`, `CV_GENERATION_SERVICE
 This is optional and separate from host-run Spring Boot. The image runs the API, Flyway, and the embedded generation, storage-cleanup, and purge workers as one process against Compose DNS names.
 
 ```bash
-docker compose --profile full up --build backend
+docker compose --profile full --env-file .env.compose up --build backend
 ```
 
 The backend listens on container port 8080 and is not published to the host. Readiness is `/actuator/health/readiness`. The `production` profile rejects missing PostgreSQL password, JWT signing key, CV Generation service token, and R2 configuration, and it rejects the documented example JWT signing key and PostgreSQL password.
@@ -97,7 +105,7 @@ Prove the image through the container network:
 ./scripts/acceptance/backend-container-smoke.sh
 ```
 
-Keep using `./scripts/dev-api.sh` for everyday code iteration.
+To exercise the backend together with the published frontend, use [Run The Full Compose Stack](#run-the-full-compose-stack). Keep using `./scripts/dev-api.sh` for everyday code iteration.
 
 ## Run The CV Generation Container
 
@@ -127,7 +135,7 @@ This is optional and separate from host-run Vite. The image type-checks, builds 
 docker compose --profile full up --build frontend
 ```
 
-Nginx listens on container port 80 and is not published to the host. Health is `/health`. Nested React Router paths return the application shell. `/api/v1` is proxied to the `backend` service. Hashed `/assets/` files are cached as immutable. The image does not embed a deployment hostname or secret.
+Nginx listens on container port 80. The full Compose profile publishes it on loopback `127.0.0.1:18080` by default. Health is `/health`. Nested React Router paths return the application shell. `/api/v1` is proxied to the `backend` service. Hashed `/assets/` files are cached as immutable. The image does not embed a deployment hostname or secret.
 
 Prove health, static delivery, SPA fallback, and an API request through Nginx:
 
@@ -136,6 +144,49 @@ Prove health, static delivery, SPA fallback, and an API request through Nginx:
 ```
 
 Keep using `./scripts/dev-web.sh` for everyday UI iteration.
+
+## Run The Full Compose Stack
+
+This starts frontend, backend, PostgreSQL, CV Generation, and Gotenberg as one application. It is the local production-shaped path, not the later VPS/GHCR workflow.
+
+```bash
+cp .env.compose.example .env.compose
+docker compose --profile full --env-file .env.compose up --build
+```
+
+Or:
+
+```bash
+./scripts/dev-full.sh
+```
+
+The stack uses sanitized `.env.compose` values. Compose injects service DNS names (`postgres`, `cv-generation`, `gotenberg`, `backend`); containers do not call each other through localhost. Health checks order PostgreSQL, CV Generation, Gotenberg, backend, then frontend. Runtime retry in the application still applies after startup.
+
+Open:
+
+```text
+http://127.0.0.1:18080
+```
+
+The application entrypoint is the frontend on loopback. Change `JOBTRACKR_PORT` in `.env.compose` if 18080 is taken. Backend stays unpublished. PostgreSQL, CV Generation, and Gotenberg still publish host ports so `./scripts/dev-up.sh` can serve the host-run workflow from the same Compose file. Containers reach each other by service DNS, not those host ports.
+
+Host-run Spring Boot and Vite stay available. `./scripts/dev-up.sh` still starts only PostgreSQL, CV Generation, and Gotenberg for that workflow.
+
+Prove the rendered Compose file, the published origin, authentication through frontend Nginx, and PostgreSQL volume persistence:
+
+```bash
+./scripts/acceptance/compose-config-validate.sh
+./scripts/acceptance/postgres-volume-smoke.sh
+./scripts/acceptance/full-stack-smoke.sh
+```
+
+Those checks use committed placeholder credentials and do not call the real Gemini API. After the stack is up with real R2 values, run Documents through the same origin:
+
+```bash
+JOBTRACKR_APP_ORIGIN=http://127.0.0.1:18080 ./scripts/acceptance/documents-real-stack.sh
+```
+
+`JOBTRACKR_APP_ORIGIN` is the acceptance entrypoint. It is not a Vite build variable.
 
 ## Run Backend With Seed Data
 
@@ -167,9 +218,13 @@ This seed is not a Flyway migration. It only runs when you call the script, and 
 
 ## Run The Full App
 
+Use **either** host-run terminals **or** the full Compose stack. Do not treat the cloud-agent quick tunnel or a future VPS deployment as this local workflow.
+
+### Host-run (fast iteration)
+
 Use three terminals.
 
-Terminal 1: start Postgres.
+Terminal 1: start Postgres, CV Generation, and Gotenberg.
 
 ```bash
 ./scripts/dev-up.sh
@@ -199,6 +254,18 @@ If you want deterministic demo data, run this once after the API has started and
 ./scripts/db-seed-dev.sh
 ```
 
+### Full Compose (production-shaped)
+
+```bash
+./scripts/dev-full.sh
+```
+
+Open:
+
+```text
+http://127.0.0.1:18080
+```
+
 ## Reset The Local Database
 
 This destroys the local Compose Postgres volume:
@@ -223,6 +290,8 @@ Then optionally seed the database:
 
 The repository can store ignored local snapshots under `db/dumps/`.
 
+Dump and restore address the Compose `postgres` service, not a fixed container name. Start Postgres first with `./scripts/dev-up.sh` if it is not already running.
+
 To restore the existing local snapshot:
 
 ```bash
@@ -234,25 +303,31 @@ Do not commit raw files in `db/dumps/`; they may contain personal data.
 
 ## Documents Real-Stack Acceptance
 
-To prove Documents against the live API, Postgres, R2, and pinned Gotenberg:
+To prove Documents against the live application origin, Postgres, R2, and pinned Gotenberg:
 
 ```bash
 ./scripts/acceptance/documents-real-stack.sh
 ```
 
-See `docs/acceptance/documents-real-stack.md` for prerequisites, the automated HTTP path, and the manual UI checklist.
+Host-run defaults to `http://localhost:8080`. After starting the full Compose stack, point acceptance at the published frontend:
+
+```bash
+JOBTRACKR_APP_ORIGIN=http://127.0.0.1:18080 ./scripts/acceptance/documents-real-stack.sh
+```
+
+See `docs/acceptance/documents-real-stack.md` for prerequisites, the automated HTTP path, and the manual UI checklist. Deterministic Compose smoke does not call Gemini.
 
 ## Stopping Services
 
-Stop the API and frontend with `Ctrl+C` in their terminals.
+Stop host-run API and frontend with `Ctrl+C` in their terminals.
 
-Stop Postgres:
+Stop infrastructure Compose services, or the full stack:
 
 ```bash
 docker compose down
 ```
 
-Stop Postgres and delete its local data volume:
+Stop Compose and delete the local PostgreSQL volume:
 
 ```bash
 docker compose down -v

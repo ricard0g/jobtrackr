@@ -45,10 +45,10 @@ Nginx listens on container port 80:
 Start it with the backend on the private Compose network:
 
 ```bash
-docker compose --profile full up --build frontend
+docker compose --profile full --env-file .env.compose up --build
 ```
 
-The frontend port stays unpublished in this Compose file. Prove routing through the container network:
+The frontend is published on loopback `127.0.0.1:18080` by default. Isolated image smoke still proves routing through the container network:
 
 ```bash
 ./scripts/acceptance/frontend-container-smoke.sh
@@ -56,4 +56,4 @@ The frontend port stays unpublished in this Compose file. Prove routing through 
 
 The smoke run checks `/health`, the application shell, immutable hashed assets, a nested React route, and `/api/v1/auth/csrf` through Nginx to the real backend.
 
-Keep using `./scripts/dev-web.sh` for everyday UI iteration.
+Keep using `./scripts/dev-web.sh` for everyday UI iteration. Full local Compose is documented in [`docs/running-locally.md`](../docs/running-locally.md). It is not the VPS deployment path.

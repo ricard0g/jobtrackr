@@ -8,3 +8,5 @@ services:
   gotenberg:
     container_name: jobtrackr-frontend-smoke-gotenberg
     ports: !override []
+  frontend:
+    ports: !override []

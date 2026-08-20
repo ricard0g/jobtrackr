@@ -23,7 +23,7 @@ cp .env.example .env
 
 `dev-up.sh` starts Compose services for PostgreSQL and `cv-generation` (FastAPI on port `8081` by default). Spring and Vite continue to run on the host.
 
-The optional Compose `full` profile builds the backend and frontend runtime images and starts them on the private network using service DNS names (`postgres`, `cv-generation`, `gotenberg`, `backend`) instead of localhost. The frontend image serves the SPA and proxies `/api/v1` to `backend`. Use that path to verify the production-shaped containers; keep `./scripts/dev-api.sh` and `./scripts/dev-web.sh` for fast host iteration. See [Running Locally](running-locally.md) for both modes.
+The Compose `full` profile builds the backend and frontend runtime images and starts all five services. Inter-service traffic uses Compose DNS names (`postgres`, `cv-generation`, `gotenberg`, `backend`). The frontend publishes only on loopback (`127.0.0.1:18080` by default) and proxies `/api/v1` to `backend`. Use `./scripts/dev-full.sh` or `docker compose --profile full --env-file .env.compose up --build` for that path. Keep `./scripts/dev-api.sh` and `./scripts/dev-web.sh` for fast host iteration. This is not the VPS deployment workflow. See [Running Locally](running-locally.md) for both modes.
 
 Start the API:
 
@@ -61,7 +61,7 @@ The database schema is recreated from those migrations whenever the API starts a
 
 ## Database Portability
 
-Use `./scripts/db-dump-local-pg.sh` to export a full PostgreSQL snapshot from the existing `local-pg` Docker container into `db/dumps/local-snapshot.dump`.
+Use `./scripts/db-dump-local-pg.sh` to export a full PostgreSQL snapshot from the Compose `postgres` service into `db/dumps/local-snapshot.dump`.
 
 `db/dumps/` is intentionally ignored by Git because local database dumps may contain personal data, password hashes, or other sensitive state. Commit a sanitized seed file under `db/seed/` only when it is safe for cloud agents and GitHub.
 

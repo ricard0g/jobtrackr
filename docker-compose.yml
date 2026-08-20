@@ -1,7 +1,6 @@
 services:
   postgres:
     image: postgres:16
-    container_name: jobtrackr-postgres
     ports:
       - "${POSTGRES_PORT:-5432}:5432"
     environment:
@@ -24,7 +23,6 @@ services:
     build:
       context: ./cv-generation-service
     image: jobtrackr-cv-generation:local
-    container_name: jobtrackr-cv-generation
     ports:
       - "${CV_GENERATION_PORT:-8081}:8081"
     environment:
@@ -52,7 +50,6 @@ services:
 
   gotenberg:
     image: gotenberg/gotenberg:8.34.0-libreoffice
-    container_name: jobtrackr-gotenberg
     ports:
       - "${GOTENBERG_PORT:-3000}:3000"
     environment:
@@ -128,8 +125,8 @@ services:
     depends_on:
       backend:
         condition: service_healthy
-    expose:
-      - "80"
+    ports:
+      - "${JOBTRACKR_PUBLISH_HOST:-127.0.0.1}:${JOBTRACKR_PORT:-18080}:80"
     healthcheck:
       test:
         [
