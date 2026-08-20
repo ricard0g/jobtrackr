@@ -23,7 +23,7 @@ cp .env.example .env
 
 `dev-up.sh` starts Compose services for PostgreSQL and `cv-generation` (FastAPI on port `8081` by default). Spring and Vite continue to run on the host.
 
-The optional Compose `full` profile builds the backend runtime image and starts it on the private network using service DNS names (`postgres`, `cv-generation`, `gotenberg`) instead of localhost. Use that path to verify the production-shaped container; keep `./scripts/dev-api.sh` for fast host iteration. See [Running Locally](running-locally.md) for both modes.
+The optional Compose `full` profile builds the backend and frontend runtime images and starts them on the private network using service DNS names (`postgres`, `cv-generation`, `gotenberg`, `backend`) instead of localhost. The frontend image serves the SPA and proxies `/api/v1` to `backend`. Use that path to verify the production-shaped containers; keep `./scripts/dev-api.sh` and `./scripts/dev-web.sh` for fast host iteration. See [Running Locally](running-locally.md) for both modes.
 
 Start the API:
 

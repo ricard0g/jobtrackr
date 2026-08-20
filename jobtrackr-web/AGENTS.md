@@ -195,3 +195,5 @@ Summary:
 * Mock shortcut: `./scripts/cloud-tunnel-up.sh --mock`
 * Requires `server.allowedHosts: [".trycloudflare.com"]` in `vite.config.ts` and same-origin API paths
 * No Cloudflare account or authtoken needed for quick tunnels; no interstitial warning page on the phone
+
+The production frontend image (`Dockerfile`) is a different Nginx: it serves the Vite production bundle and proxies `/api/v1` to the Compose `backend` service. Do not reuse `config/nginx/cloud-dev.conf` for that image. See [`README.md`](./README.md).

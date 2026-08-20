@@ -1,73 +1,59 @@
-# React + TypeScript + Vite
+# JobTrackr Web
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+React SPA for JobTrackr. Host development uses Vite. The production image compiles a same-origin bundle and serves it with Nginx, which also proxies `/api/v1` to the backend.
 
-Currently, two official plugins are available:
+## Host development
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
+From the repository root:
 
-## React Compiler
-
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
-
-## Expanding the ESLint configuration
-
-If you are developing a production application, we recommend updating the configuration to enable type-aware lint rules:
-
-```js
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-
-      // Remove tseslint.configs.recommended and replace with this
-      tseslint.configs.recommendedTypeChecked,
-      // Alternatively, use this for stricter rules
-      tseslint.configs.strictTypeChecked,
-      // Optionally, add this for stylistic rules
-      tseslint.configs.stylisticTypeChecked,
-
-      // Other configs...
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
+```bash
+VITE_API_MOCKING=true ./scripts/dev-web.sh
 ```
 
-You can also install [eslint-plugin-react-x](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-x) and [eslint-plugin-react-dom](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-dom) for React-specific lint rules:
+The app listens on `http://localhost:5173`. With mocking on, the browser uses relative `/api/v1` paths and MSW. Against the real API:
 
-```js
-// eslint.config.js
-import reactX from 'eslint-plugin-react-x'
-import reactDom from 'eslint-plugin-react-dom'
-
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-      // Enable lint rules for React
-      reactX.configs['recommended-typescript'],
-      // Enable lint rules for React DOM
-      reactDom.configs.recommended,
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
+```bash
+VITE_API_MOCKING=false VITE_API_ORIGIN=http://localhost:8080 ./scripts/dev-web.sh
 ```
+
+| Variable | Host default | Production image |
+|----------|----------------|------------------|
+| `VITE_API_MOCKING` | `true` in `.env.example` | `false` (baked at image build) |
+| `VITE_API_ORIGIN` | `http://localhost:8080` | empty, so requests stay same-origin `/api/v1` |
+
+Do not bake a deployment hostname or secret into the frontend image. Same-origin relative URLs work behind local Compose, a tunnel, and later HTTPS.
+
+See [`docs/running-locally.md`](../docs/running-locally.md) for Postgres, API, and full-app commands.
+
+## Production container
+
+A clean `docker build` type-checks the app, runs the Vite production build, copies the bundle into a minimal Nginx image, and syntax-checks Nginx configuration.
+
+```bash
+docker build -t jobtrackr-frontend:local ./jobtrackr-web
+```
+
+Nginx listens on container port 80:
+
+- `/` and React Router paths return the application shell (`index.html`)
+- hashed `/assets/` files are cached as immutable
+- `/health` is a lightweight liveness response
+- `/api/v1` is proxied to the Compose service `backend:8080`
+- uploads are accepted up to 12MB (Spring’s multipart limit is 11MB)
+- `X-Forwarded-Proto`, `X-Forwarded-Host`, and `X-Forwarded-For` preserve an outer HTTPS hop when present
+
+Start it with the backend on the private Compose network:
+
+```bash
+docker compose --profile full up --build frontend
+```
+
+The frontend port stays unpublished in this Compose file. Prove routing through the container network:
+
+```bash
+./scripts/acceptance/frontend-container-smoke.sh
+```
+
+The smoke run checks `/health`, the application shell, immutable hashed assets, a nested React route, and `/api/v1/auth/csrf` through Nginx to the real backend.
+
+Keep using `./scripts/dev-web.sh` for everyday UI iteration.

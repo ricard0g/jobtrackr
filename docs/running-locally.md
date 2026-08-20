@@ -119,6 +119,24 @@ Prove the image:
 
 Keep using `./scripts/dev-cv-gen.sh` or the Compose service from `./scripts/dev-up.sh` for everyday iteration.
 
+## Run The Frontend Container
+
+This is optional and separate from host-run Vite. The image type-checks, builds the production bundle with mocking disabled and an empty API origin, and serves it with Nginx as a same-origin entrypoint for the SPA and `/api/v1`.
+
+```bash
+docker compose --profile full up --build frontend
+```
+
+Nginx listens on container port 80 and is not published to the host. Health is `/health`. Nested React Router paths return the application shell. `/api/v1` is proxied to the `backend` service. Hashed `/assets/` files are cached as immutable. The image does not embed a deployment hostname or secret.
+
+Prove health, static delivery, SPA fallback, and an API request through Nginx:
+
+```bash
+./scripts/acceptance/frontend-container-smoke.sh
+```
+
+Keep using `./scripts/dev-web.sh` for everyday UI iteration.
+
 ## Run Backend With Seed Data
 
 Start Postgres:

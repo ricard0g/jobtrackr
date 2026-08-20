@@ -120,5 +120,26 @@ services:
       retries: 12
       start_period: 60s
 
+  frontend:
+    profiles: ["full"]
+    build:
+      context: ./jobtrackr-web
+    image: jobtrackr-frontend:local
+    depends_on:
+      backend:
+        condition: service_healthy
+    expose:
+      - "80"
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "wget -qO- http://127.0.0.1/health >/dev/null || exit 1",
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+      start_period: 5s
+
 volumes:
   jobtrackr_pgdata:
