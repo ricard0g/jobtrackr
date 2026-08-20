@@ -161,3 +161,29 @@ def test_generate_rejects_fake_provider_without_test_override(
     assert response.status_code == 503
     assert response.json()["code"] == "PROVIDER_UNAVAILABLE"
     assert "test-only" in response.json()["message"]
+
+
+def test_generate_rejects_default_token_outside_local_and_test(
+    client,
+    sample_cv_md,
+    monkeypatch,
+):
+    from cv_generation.config import clear_settings_cache
+
+    monkeypatch.setenv("CV_GENERATION_PROVIDER", "gemini")
+    monkeypatch.setenv("CV_GENERATION_ALLOW_FAKE_PROVIDER", "false")
+    monkeypatch.setenv("CV_GENERATION_PROFILE", "production")
+    monkeypatch.setenv("CV_GENERATION_SERVICE_TOKEN", "dev-service-token")
+    monkeypatch.setenv("GOOGLE_AI_API_KEY", "placeholder-gemini-key")
+    clear_settings_cache()
+
+    response = client.post(
+        "/v1/generate",
+        headers={"Authorization": "Bearer dev-service-token"},
+        files={"file": ("cv.md", sample_cv_md, "text/markdown")},
+        data={"specification": _spec()},
+    )
+
+    assert response.status_code == 503
+    assert response.json()["code"] == "PROVIDER_UNAVAILABLE"
+    assert "non-default" in response.json()["message"]

@@ -44,9 +44,10 @@ The CV generation service runs on `http://localhost:8081`.
 ### CV generation service
 
 - User-facing generation defaults to Gemini and requires `GOOGLE_AI_API_KEY` (or `GEMINI_API_KEY`).
-- The deterministic fake provider is explicitly enabled by the automated test suite only.
+- The deterministic fake provider is enabled only by an explicit local or test setting (`CV_GENERATION_ALLOW_FAKE_PROVIDER=true`); it is never the image default.
 - Spring authenticates to FastAPI with `CV_GENERATION_SERVICE_TOKEN` (Bearer). The browser never talks to FastAPI.
-- Health: `GET http://localhost:8081/health/live` and `GET http://localhost:8081/health/ready`
+- Health: `GET http://localhost:8081/health/live` (process up) and `GET http://localhost:8081/health/ready` (provider configuration usable).
+- The release image runs pytest during `docker build`, then runs as a non-root user with a five-minute (`300` second) generation timeout default.
 - WeasyPrint system libraries are installed in the service Dockerfile for PDF rendering.
 
 Required Spring env vars (see `.env.example`):

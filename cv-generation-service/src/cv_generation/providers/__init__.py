@@ -10,7 +10,7 @@ from cv_generation.providers.fake import FakeProvider
 
 def build_provider(settings: Settings) -> DraftingProvider:
     if settings.is_fake:
-        if not settings.cv_generation_allow_fake_provider:
+        if not settings.cv_generation_allow_fake_provider or not settings.is_local_or_test:
             raise ServiceError(
                 ErrorCode.PROVIDER_UNAVAILABLE,
                 "Fake CV generation is test-only; configure a real drafting provider",

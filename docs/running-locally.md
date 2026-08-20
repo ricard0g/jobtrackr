@@ -99,6 +99,26 @@ Prove the image through the container network:
 
 Keep using `./scripts/dev-api.sh` for everyday code iteration.
 
+## Run The CV Generation Container
+
+This is the production-shaped FastAPI image. A clean build runs the service pytest suite, then starts as a non-root process that reads only environment variables.
+
+```bash
+docker compose up --build cv-generation
+```
+
+Liveness is `/health/live`. Readiness is `/health/ready` and fails when Gemini configuration is missing or when the documented default service token is used outside local/test. Local Compose sets `CV_GENERATION_PROFILE=local`. The release image itself defaults to `production`.
+
+The fake provider is off unless you set `CV_GENERATION_ALLOW_FAKE_PROVIDER=true`. Do not use that setting for user-facing generation.
+
+Prove the image:
+
+```bash
+./scripts/acceptance/cv-generation-container-smoke.sh
+```
+
+Keep using `./scripts/dev-cv-gen.sh` or the Compose service from `./scripts/dev-up.sh` for everyday iteration.
+
 ## Run Backend With Seed Data
 
 Start Postgres:

@@ -108,6 +108,10 @@ async def generate(
     if not raw:
         raise ServiceError(ErrorCode.MALFORMED_BASE_CV, "Base CV file is empty")
 
+    ready, reason = settings.readiness_ok()
+    if not ready:
+        raise ServiceError(ErrorCode.PROVIDER_UNAVAILABLE, reason, status_code=503)
+
     provider = build_provider(settings)
     cancel_event = threading.Event()
 
