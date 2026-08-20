@@ -97,7 +97,7 @@ This is optional and separate from host-run Spring Boot. The image runs the API,
 docker compose --profile full --env-file .env.compose up --build backend
 ```
 
-The backend listens on container port 8080 and is not published to the host. Readiness is `/actuator/health/readiness`. The `production` profile rejects missing PostgreSQL password, JWT signing key, CV Generation service token, and R2 configuration, and it rejects the documented example JWT signing key and PostgreSQL password.
+The backend listens on container port 8080 and is not published to the host. Readiness is `/actuator/health/readiness`. The `production` profile rejects missing PostgreSQL password, JWT signing key, CV Generation service token, and R2 configuration, and it rejects documented `.env.example` and `.env.compose.example` placeholders. Insecure refresh cookies need `JWT_REFRESH_COOKIE_ALLOW_INSECURE=true`.
 
 Prove the image through the container network:
 
@@ -168,7 +168,7 @@ Open:
 http://127.0.0.1:18080
 ```
 
-The application entrypoint is the frontend on loopback. Change `JOBTRACKR_PORT` in `.env.compose` if 18080 is taken. Backend stays unpublished. PostgreSQL, CV Generation, and Gotenberg still publish host ports so `./scripts/dev-up.sh` can serve the host-run workflow from the same Compose file. Containers reach each other by service DNS, not those host ports.
+The application entrypoint is the frontend on loopback. Change `JOBTRACKR_PORT` in `.env.compose` if 18080 is taken. Backend stays unpublished. PostgreSQL, CV Generation, and Gotenberg publish loopback host ports so `./scripts/dev-up.sh` can serve the host-run workflow from the same Compose file. Containers reach each other by service DNS, not those host ports. Local HTTP Compose must set `JWT_REFRESH_COOKIE_ALLOW_INSECURE=true`; do not copy `.env.compose.example` placeholders into a running stack.
 
 Host-run Spring Boot and Vite stay available. `./scripts/dev-up.sh` still starts only PostgreSQL, CV Generation, and Gotenberg for that workflow.
 

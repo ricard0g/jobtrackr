@@ -15,6 +15,18 @@ set -a
 . "$COMPOSE_ENV_FILE"
 set +a
 
+for key in POSTGRES_PASSWORD JWT_SIGNING_KEY CV_GENERATION_SERVICE_TOKEN; do
+  value="${!key:-}"
+  if [ -z "$value" ] || [[ "$value" == replace-with-* ]]; then
+    echo "Replace placeholder $key in $COMPOSE_ENV_FILE before starting the full stack."
+    exit 1
+  fi
+done
+if [ "${JWT_REFRESH_COOKIE_SECURE:-true}" != "true" ] && [ "${JWT_REFRESH_COOKIE_ALLOW_INSECURE:-false}" != "true" ]; then
+  echo "Set JWT_REFRESH_COOKIE_SECURE=true, or JWT_REFRESH_COOKIE_ALLOW_INSECURE=true for local HTTP."
+  exit 1
+fi
+
 cd "$ROOT_DIR"
 docker compose --profile full --env-file "$COMPOSE_ENV_FILE" up --build -d --wait
 

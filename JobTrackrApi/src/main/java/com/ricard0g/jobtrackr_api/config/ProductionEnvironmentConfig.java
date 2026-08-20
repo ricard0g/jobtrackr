@@ -21,6 +21,8 @@ public class ProductionEnvironmentConfig {
                 postgresPassword,
                 jwtProperties.getSigningKey(),
                 cvGenerationProperties.serviceToken(),
-                r2Properties);
+                r2Properties,
+                jwtProperties.isRefreshCookieSecure(),
+                jwtProperties.isRefreshCookieAllowInsecure());
     }
 }

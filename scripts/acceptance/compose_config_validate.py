@@ -94,6 +94,12 @@ def validate_host_run(config: dict[str, Any]) -> list[str]:
     ]
     if not named:
         errors.append("postgres does not mount named volume jobtrackr_pgdata at /var/lib/postgresql/data")
+
+    for name in HOST_RUN_SERVICES:
+        for port in _ports(services[name]):
+            host_ip = _published_host(port)
+            if host_ip not in {"127.0.0.1", "::1"}:
+                errors.append("%s publishes on %s; it must bind 127.0.0.1" % (name, host_ip))
     return errors
 
 
@@ -169,10 +175,23 @@ def _healthy_dep(*names: str) -> dict[str, Any]:
     return {name: {"condition": "service_healthy", "required": True} for name in names}
 
 
+def _loopback_port(target: int, published: str) -> list[dict[str, Any]]:
+    return [
+        {
+            "mode": "ingress",
+            "host_ip": "127.0.0.1",
+            "target": target,
+            "published": published,
+            "protocol": "tcp",
+        }
+    ]
+
+
 def _sample_full_stack() -> dict[str, Any]:
     return {
         "services": {
             "postgres": {
+                "ports": _loopback_port(5432, "5432"),
                 "volumes": [
                     {
                         "type": "volume",
@@ -181,8 +200,8 @@ def _sample_full_stack() -> dict[str, Any]:
                     }
                 ]
             },
-            "cv-generation": {},
-            "gotenberg": {},
+            "cv-generation": {"ports": _loopback_port(8081, "8081")},
+            "gotenberg": {"ports": _loopback_port(3000, "3000")},
             "backend": {
                 "environment": {
                     "DB_HOST": "postgres:5432",
@@ -255,6 +274,12 @@ def self_test() -> None:
     errors = validate_full_stack(public_frontend)
     if not any("127.0.0.1" in error for error in errors):
         raise SystemExit("self-test expected all-interface frontend mapping to fail: %s" % errors)
+
+    public_postgres = copy.deepcopy(good)
+    public_postgres["services"]["postgres"]["ports"][0]["host_ip"] = "0.0.0.0"
+    errors = validate_full_stack(public_postgres)
+    if not any("postgres publishes on" in error for error in errors):
+        raise SystemExit("self-test expected all-interface postgres mapping to fail: %s" % errors)
 
     missing_port = copy.deepcopy(good)
     missing_port["services"]["frontend"]["ports"] = []

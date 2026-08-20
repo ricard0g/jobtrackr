@@ -49,6 +49,18 @@ class ProductionCredentialsTest {
     }
 
     @Test
+    void rejectsComposeExamplePostgresPassword() {
+        // given / when / then
+        assertThatThrownBy(() -> ProductionCredentials.validate(
+                "replace-with-local-compose-db-password",
+                JWT_SIGNING_KEY,
+                CV_GENERATION_SERVICE_TOKEN,
+                validR2Properties()))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("DB_PASSWORD");
+    }
+
+    @Test
     void rejectsMissingJwtSigningKey() {
         // given / when / then
         assertThatThrownBy(() -> ProductionCredentials.validate(
@@ -73,6 +85,18 @@ class ProductionCredentialsTest {
     }
 
     @Test
+    void rejectsComposeExampleJwtSigningKey() {
+        // given / when / then
+        assertThatThrownBy(() -> ProductionCredentials.validate(
+                POSTGRES_PASSWORD,
+                "replace-with-a-long-random-local-secret-at-least-32-bytes",
+                CV_GENERATION_SERVICE_TOKEN,
+                validR2Properties()))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("JWT_SIGNING_KEY");
+    }
+
+    @Test
     void rejectsDefaultCvGenerationServiceToken() {
         // given / when / then
         assertThatThrownBy(() -> ProductionCredentials.validate(
@@ -82,6 +106,45 @@ class ProductionCredentialsTest {
                 validR2Properties()))
                 .isInstanceOf(IllegalStateException.class)
                 .hasMessageContaining("CV_GENERATION_SERVICE_TOKEN");
+    }
+
+    @Test
+    void rejectsComposeExampleCvGenerationServiceToken() {
+        // given / when / then
+        assertThatThrownBy(() -> ProductionCredentials.validate(
+                POSTGRES_PASSWORD,
+                JWT_SIGNING_KEY,
+                "replace-with-local-compose-service-token",
+                validR2Properties()))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("CV_GENERATION_SERVICE_TOKEN");
+    }
+
+    @Test
+    void rejectsInsecureRefreshCookieWithoutOverride() {
+        // given / when / then
+        assertThatThrownBy(() -> ProductionCredentials.validate(
+                POSTGRES_PASSWORD,
+                JWT_SIGNING_KEY,
+                CV_GENERATION_SERVICE_TOKEN,
+                validR2Properties(),
+                false,
+                false))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("JWT_REFRESH_COOKIE_SECURE");
+    }
+
+    @Test
+    void acceptsInsecureRefreshCookieWithExplicitOverride() {
+        // given / when / then
+        assertThatCode(() -> ProductionCredentials.validate(
+                POSTGRES_PASSWORD,
+                JWT_SIGNING_KEY,
+                CV_GENERATION_SERVICE_TOKEN,
+                validR2Properties(),
+                false,
+                true))
+                .doesNotThrowAnyException();
     }
 
     @Test
