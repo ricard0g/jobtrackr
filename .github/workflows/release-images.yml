@@ -1,0 +1,205 @@
+name: Release images
+
+on:
+  push:
+    branches:
+      - main
+      - feature/full-containerization-services
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  compose-config:
+    name: Validate Compose and release policy
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate rendered Compose and release contract
+        run: |
+          ./scripts/acceptance/compose-config-validate.sh
+          ./scripts/acceptance/release-images.sh
+
+  backend-tests:
+    name: Backend tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "25"
+          cache: maven
+      - name: Run the established Maven suite
+        working-directory: JobTrackrApi
+        run: |
+          chmod +x mvnw
+          ./mvnw -B test
+
+  backend-image:
+    name: Build backend image
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - id: coords
+        name: Resolve image coordinates
+        run: python3 scripts/acceptance/release_images.py coords --github-output "$GITHUB_OUTPUT" --owner "${{ github.repository_owner }}" --sha "${{ github.sha }}" --branch "${{ github.ref_name }}"
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/build-push-action@v6
+        with:
+          context: ./JobTrackrApi
+          file: ./JobTrackrApi/Dockerfile
+          tags: ${{ steps.coords.outputs.backend_image }}
+          push: false
+          provenance: false
+          sbom: false
+          cache-from: type=gha,scope=backend-image
+          cache-to: type=gha,mode=max,scope=backend-image
+          outputs: type=docker,dest=${{ runner.temp }}/jobtrackr-backend.tar
+      - uses: actions/upload-artifact@v4
+        with:
+          name: image-backend
+          path: ${{ runner.temp }}/jobtrackr-backend.tar
+          if-no-files-found: error
+          retention-days: 1
+
+  frontend-image:
+    name: Build frontend image
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - id: coords
+        name: Resolve image coordinates
+        run: python3 scripts/acceptance/release_images.py coords --github-output "$GITHUB_OUTPUT" --owner "${{ github.repository_owner }}" --sha "${{ github.sha }}" --branch "${{ github.ref_name }}"
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/build-push-action@v6
+        with:
+          context: ./jobtrackr-web
+          file: ./jobtrackr-web/Dockerfile
+          tags: ${{ steps.coords.outputs.frontend_image }}
+          push: false
+          provenance: false
+          sbom: false
+          cache-from: type=gha,scope=frontend-image
+          cache-to: type=gha,mode=max,scope=frontend-image
+          outputs: type=docker,dest=${{ runner.temp }}/jobtrackr-frontend.tar
+      - uses: actions/upload-artifact@v4
+        with:
+          name: image-frontend
+          path: ${{ runner.temp }}/jobtrackr-frontend.tar
+          if-no-files-found: error
+          retention-days: 1
+
+  cv-generation-image:
+    name: Build CV Generation image
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - id: coords
+        name: Resolve image coordinates
+        run: python3 scripts/acceptance/release_images.py coords --github-output "$GITHUB_OUTPUT" --owner "${{ github.repository_owner }}" --sha "${{ github.sha }}" --branch "${{ github.ref_name }}"
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/build-push-action@v6
+        with:
+          context: ./cv-generation-service
+          file: ./cv-generation-service/Dockerfile
+          tags: ${{ steps.coords.outputs.cv_generation_image }}
+          push: false
+          provenance: false
+          sbom: false
+          cache-from: type=gha,scope=cv-generation-image
+          cache-to: type=gha,mode=max,scope=cv-generation-image
+          outputs: type=docker,dest=${{ runner.temp }}/jobtrackr-cv-generation.tar
+      - uses: actions/upload-artifact@v4
+        with:
+          name: image-cv-generation
+          path: ${{ runner.temp }}/jobtrackr-cv-generation.tar
+          if-no-files-found: error
+          retention-days: 1
+
+  release-smoke:
+    name: Smoke prebuilt images
+    needs: [compose-config, backend-tests, backend-image, frontend-image, cv-generation-image]
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - id: coords
+        name: Resolve image coordinates
+        run: python3 scripts/acceptance/release_images.py coords --github-output "$GITHUB_OUTPUT" --owner "${{ github.repository_owner }}" --sha "${{ github.sha }}" --branch "${{ github.ref_name }}"
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: image-*
+          path: ${{ runner.temp }}/jobtrackr-images
+          merge-multiple: true
+      - name: Load the exact images that would be published
+        run: |
+          docker load -i "${{ runner.temp }}/jobtrackr-images/jobtrackr-frontend.tar"
+          docker load -i "${{ runner.temp }}/jobtrackr-images/jobtrackr-backend.tar"
+          docker load -i "${{ runner.temp }}/jobtrackr-images/jobtrackr-cv-generation.tar"
+          docker image inspect "${{ steps.coords.outputs.frontend_image }}" \
+            "${{ steps.coords.outputs.backend_image }}" \
+            "${{ steps.coords.outputs.cv_generation_image }}" >/dev/null
+      - name: Run release smoke against prebuilt images
+        env:
+          JOBTRACKR_FRONTEND_IMAGE: ${{ steps.coords.outputs.frontend_image }}
+          JOBTRACKR_BACKEND_IMAGE: ${{ steps.coords.outputs.backend_image }}
+          JOBTRACKR_CV_GENERATION_IMAGE: ${{ steps.coords.outputs.cv_generation_image }}
+        run: ./scripts/acceptance/release-smoke.sh
+
+  publish:
+    name: Publish images to GHCR
+    needs: [release-smoke]
+    if: github.event_name == 'workflow_dispatch' || (github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/feature/full-containerization-services'))
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v4
+      - id: coords
+        name: Resolve image coordinates
+        run: python3 scripts/acceptance/release_images.py coords --github-output "$GITHUB_OUTPUT" --owner "${{ github.repository_owner }}" --sha "${{ github.sha }}" --branch "${{ github.ref_name }}"
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: image-*
+          path: ${{ runner.temp }}/jobtrackr-images
+          merge-multiple: true
+      - name: Load the verified images
+        run: |
+          docker load -i "${{ runner.temp }}/jobtrackr-images/jobtrackr-frontend.tar"
+          docker load -i "${{ runner.temp }}/jobtrackr-images/jobtrackr-backend.tar"
+          docker load -i "${{ runner.temp }}/jobtrackr-images/jobtrackr-cv-generation.tar"
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Push immutable SHA tags and optional moving branch tag
+        env:
+          FRONTEND_IMAGE: ${{ steps.coords.outputs.frontend_image }}
+          BACKEND_IMAGE: ${{ steps.coords.outputs.backend_image }}
+          CV_GENERATION_IMAGE: ${{ steps.coords.outputs.cv_generation_image }}
+          BRANCH_TAG: ${{ steps.coords.outputs.branch_tag }}
+        run: |
+          set -euo pipefail
+          for image in "$FRONTEND_IMAGE" "$BACKEND_IMAGE" "$CV_GENERATION_IMAGE"; do
+            docker push "$image"
+            if [ -n "${BRANCH_TAG:-}" ]; then
+              moving="${image%:*}:${BRANCH_TAG}"
+              docker tag "$image" "$moving"
+              docker push "$moving"
+            fi
+          done

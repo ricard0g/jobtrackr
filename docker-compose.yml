@@ -22,7 +22,7 @@ services:
   cv-generation:
     build:
       context: ./cv-generation-service
-    image: jobtrackr-cv-generation:local
+    image: ${JOBTRACKR_CV_GENERATION_IMAGE:-jobtrackr-cv-generation:local}
     ports:
       - "127.0.0.1:${CV_GENERATION_PORT:-8081}:8081"
     environment:
@@ -68,7 +68,7 @@ services:
     profiles: ["full"]
     build:
       context: ./JobTrackrApi
-    image: jobtrackr-backend:local
+    image: ${JOBTRACKR_BACKEND_IMAGE:-jobtrackr-backend:local}
     depends_on:
       postgres:
         condition: service_healthy
@@ -122,7 +122,7 @@ services:
     profiles: ["full"]
     build:
       context: ./jobtrackr-web
-    image: jobtrackr-frontend:local
+    image: ${JOBTRACKR_FRONTEND_IMAGE:-jobtrackr-frontend:local}
     depends_on:
       backend:
         condition: service_healthy

@@ -28,6 +28,7 @@ scripts/                   Local development and database helper scripts
 
 - [Development Setup](docs/development.md): run the full stack, reset the DB, restore local snapshots, and seed cloud-agent-safe data.
 - [Running Locally](docs/running-locally.md): host-run Spring Boot and Vite, plus the local five-service Compose stack.
+- [Publishing Images](docs/releasing-images.md): GHCR frontend, backend, and CV Generation coordinates, tag policy, and verification.
 - [Docs Index](docs/README.md): root documentation entry point.
 - [Project Changelog](docs/changelog/): commit-based records for project changes not covered by the API changelog.
 

@@ -147,7 +147,7 @@ Keep using `./scripts/dev-web.sh` for everyday UI iteration.
 
 ## Run The Full Compose Stack
 
-This starts frontend, backend, PostgreSQL, CV Generation, and Gotenberg as one application. It is the local production-shaped path, not the later VPS/GHCR workflow.
+This starts frontend, backend, PostgreSQL, CV Generation, and Gotenberg as one application. It is the local production-shaped path, not GHCR publication or VPS deployment. See [Publishing Images](releasing-images.md) for verified GHCR tags.
 
 ```bash
 cp .env.compose.example .env.compose
@@ -187,6 +187,8 @@ JOBTRACKR_APP_ORIGIN=http://127.0.0.1:18080 ./scripts/acceptance/documents-real-
 ```
 
 `JOBTRACKR_APP_ORIGIN` is the acceptance entrypoint. It is not a Vite build variable.
+
+To prove a GHCR-shaped revision without rebuilding, set the three `JOBTRACKR_*_IMAGE` coordinates and run `./scripts/acceptance/release-smoke.sh`. The publication workflow, tag policy, and manual pull steps are in [Publishing Images](releasing-images.md).
 
 ## Run Backend With Seed Data
 

@@ -56,4 +56,4 @@ The frontend is published on loopback `127.0.0.1:18080` by default. Isolated ima
 
 The smoke run checks `/health`, the application shell, immutable hashed assets, a nested React route, and `/api/v1/auth/csrf` through Nginx to the real backend.
 
-Keep using `./scripts/dev-web.sh` for everyday UI iteration. Full local Compose is documented in [`docs/running-locally.md`](../docs/running-locally.md). It is not the VPS deployment path.
+Keep using `./scripts/dev-web.sh` for everyday UI iteration. Full local Compose is documented in [`docs/running-locally.md`](../docs/running-locally.md). Verified GHCR tags are documented in [`docs/releasing-images.md`](../docs/releasing-images.md). Neither is the VPS deployment path.
