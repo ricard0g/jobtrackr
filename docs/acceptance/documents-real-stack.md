@@ -26,7 +26,7 @@ cp .env.compose.example .env.compose
 export JOBTRACKR_APP_ORIGIN=http://127.0.0.1:18080
 ```
 
-Full Compose is a local development mode. It is not the VPS deployment workflow.
+Full Compose is a local development mode. It is not the VPS deployment workflow. See `docs/deploying-vps.md` for the GHCR loopback stack.
 
 3. Confirm the origin:
 

@@ -116,7 +116,7 @@ Prove the built image without Gemini:
 
 The smoke run checks production liveness vs readiness, then starts one explicit fake-provider container and performs one authenticated Markdown generation.
 
-Verified GHCR tags use `ghcr.io/ricard0g/jobtrackr/cv-generation` and are documented in [`docs/releasing-images.md`](../docs/releasing-images.md).
+Verified GHCR tags use `ghcr.io/ricard0g/jobtrackr/cv-generation` and are documented in [`docs/releasing-images.md`](../docs/releasing-images.md). VPS deployment is documented in [`docs/deploying-vps.md`](../docs/deploying-vps.md).
 
 ## Workflow stages
 

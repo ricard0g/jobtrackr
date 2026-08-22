@@ -188,7 +188,7 @@ JOBTRACKR_APP_ORIGIN=http://127.0.0.1:18080 ./scripts/acceptance/documents-real-
 
 `JOBTRACKR_APP_ORIGIN` is the acceptance entrypoint. It is not a Vite build variable.
 
-To prove a GHCR-shaped revision without rebuilding, set the three `JOBTRACKR_*_IMAGE` coordinates and run `./scripts/acceptance/release-smoke.sh`. The publication workflow, tag policy, and manual pull steps are in [Publishing Images](releasing-images.md).
+To prove a GHCR-shaped revision without rebuilding, set the three `JOBTRACKR_*_IMAGE` coordinates and run `./scripts/acceptance/release-smoke.sh`. The publication workflow, tag policy, and manual pull steps are in [Publishing Images](releasing-images.md). First VPS deployment from those tags is in [Deploying on a VPS](deploying-vps.md).
 
 ## Run Backend With Seed Data
 
@@ -220,7 +220,7 @@ This seed is not a Flyway migration. It only runs when you call the script, and 
 
 ## Run The Full App
 
-Use **either** host-run terminals **or** the full Compose stack. Do not treat the cloud-agent quick tunnel or a future VPS deployment as this local workflow.
+Use **either** host-run terminals **or** the full Compose stack. Do not treat the cloud-agent quick tunnel or VPS deployment as this local workflow. The VPS path is [Deploying on a VPS](deploying-vps.md).
 
 ### Host-run (fast iteration)
 

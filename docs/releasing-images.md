@@ -1,6 +1,6 @@
 # Publishing JobTrackr Images
 
-This is the GHCR release path. It is not host-run development, local full Compose, or VPS deployment.
+This is the GHCR release path. It is not host-run development or local full Compose. After a tag is published, first VPS deployment is documented in [Deploying on a VPS](deploying-vps.md).
 
 GitHub Actions turns a verified commit into three application images. Those images are published only after their build-time tests, Compose validation, and release smoke all pass. Rollback identity is always the immutable commit-SHA tag.
 
@@ -44,7 +44,7 @@ Images are built independently. Each Dockerfile runs that service's established 
 - Frontend: TypeScript `tsc -b` and the Vite production build, then `nginx -t`.
 - CV Generation: `pytest` with the fake provider. The image build does not call Gemini.
 
-CI also renders `docker-compose.yml` with the sanitized full-stack fixture and rejects missing interpolation, weak health dependencies, and unintended public port mappings.
+CI also renders `docker-compose.yml` and `docker-compose.vps.yml` with sanitized fixtures and rejects missing interpolation, weak health dependencies, and unintended public port mappings. The VPS file must pull GHCR `sha-` tags, keep PostgreSQL on an external volume, and publish only the frontend loopback mapping.
 
 ## Release smoke
 

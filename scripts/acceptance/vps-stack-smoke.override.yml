@@ -1,0 +1,9 @@
+volumes:
+  jobtrackr_pgdata:
+    name: jobtrackr_vps_smoke_pgdata
+    external: true
+
+networks:
+  jobtrackr:
+    name: jobtrackr_vps_smoke
+    driver: bridge

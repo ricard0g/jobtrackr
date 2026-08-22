@@ -23,7 +23,7 @@ cp .env.example .env
 
 `dev-up.sh` starts Compose services for PostgreSQL and `cv-generation` (FastAPI on port `8081` by default). Spring and Vite continue to run on the host.
 
-The Compose `full` profile builds the backend and frontend runtime images and starts all five services. Inter-service traffic uses Compose DNS names (`postgres`, `cv-generation`, `gotenberg`, `backend`). The frontend publishes only on loopback (`127.0.0.1:18080` by default) and proxies `/api/v1` to `backend`. Use `./scripts/dev-full.sh` or `docker compose --profile full --env-file .env.compose up --build` for that path. Keep `./scripts/dev-api.sh` and `./scripts/dev-web.sh` for fast host iteration. This is not the VPS deployment workflow. Verified GHCR images are documented in [Publishing Images](releasing-images.md). See [Running Locally](running-locally.md) for both local modes.
+The Compose `full` profile builds the backend and frontend runtime images and starts all five services. Inter-service traffic uses Compose DNS names (`postgres`, `cv-generation`, `gotenberg`, `backend`). The frontend publishes only on loopback (`127.0.0.1:18080` by default) and proxies `/api/v1` to `backend`. Use `./scripts/dev-full.sh` or `docker compose --profile full --env-file .env.compose up --build` for that path. Keep `./scripts/dev-api.sh` and `./scripts/dev-web.sh` for fast host iteration. This is not the VPS deployment workflow. Verified GHCR images are documented in [Publishing Images](releasing-images.md). First VPS deployment is documented in [Deploying on a VPS](deploying-vps.md). See [Running Locally](running-locally.md) for both local modes.
 
 Start the API:
 

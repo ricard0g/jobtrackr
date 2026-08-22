@@ -3,10 +3,12 @@
 .env.*
 !.env.example
 !.env.compose.example
+!.env.vps.example
 **/.env
 **/.env.*
 !**/.env.example
 !**/.env.compose.example
+!**/.env.vps.example
 
 # Java
 target/

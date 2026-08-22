@@ -191,7 +191,7 @@ docker compose --profile full --env-file .env.compose up --build
 
 Container execution uses the `production` Spring profile. That profile rejects missing `DB_PASSWORD`, `JWT_SIGNING_KEY`, `CV_GENERATION_SERVICE_TOKEN` (including the local `dev-service-token` default), and R2 settings. It also rejects documented `.env.example` and `.env.compose.example` placeholders (`jobtrackr_app`, `replace-with-...`). Insecure refresh cookies require `JWT_REFRESH_COOKIE_ALLOW_INSECURE=true`. Compose injects `postgres`, `cv-generation`, and `gotenberg` as service DNS names. The backend port stays on the private Compose network. The full profile publishes the frontend on loopback (`127.0.0.1:18080` by default). Host-run infrastructure ports bind `127.0.0.1` so `./scripts/dev-up.sh` still works locally.
 
-Do not put real credentials in docs, fixtures, or committed templates. Host-run uses `.env`; full Compose uses `.env.compose`. Verified GHCR tags use `JOBTRACKR_BACKEND_IMAGE` and are documented in `docs/releasing-images.md`.
+Do not put real credentials in docs, fixtures, or committed templates. Host-run uses `.env`; full Compose uses `.env.compose`; VPS uses `.env.vps`. Verified GHCR tags use `JOBTRACKR_BACKEND_IMAGE` and are documented in `docs/releasing-images.md`. First VPS deployment is documented in `docs/deploying-vps.md`.
 
 ### Troubleshooting
 

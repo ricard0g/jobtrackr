@@ -132,7 +132,7 @@ jobs:
     name: Smoke prebuilt images
     needs: [compose-config, backend-tests, backend-image, frontend-image, cv-generation-image]
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 45
     steps:
       - uses: actions/checkout@v4
       - id: coords
@@ -157,6 +157,12 @@ jobs:
           JOBTRACKR_BACKEND_IMAGE: ${{ steps.coords.outputs.backend_image }}
           JOBTRACKR_CV_GENERATION_IMAGE: ${{ steps.coords.outputs.cv_generation_image }}
         run: ./scripts/acceptance/release-smoke.sh
+      - name: Run VPS stack smoke against prebuilt images
+        env:
+          JOBTRACKR_FRONTEND_IMAGE: ${{ steps.coords.outputs.frontend_image }}
+          JOBTRACKR_BACKEND_IMAGE: ${{ steps.coords.outputs.backend_image }}
+          JOBTRACKR_CV_GENERATION_IMAGE: ${{ steps.coords.outputs.cv_generation_image }}
+        run: ./scripts/acceptance/vps-stack-smoke.sh
 
   publish:
     name: Publish images to GHCR
