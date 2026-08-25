@@ -220,7 +220,7 @@ This seed is not a Flyway migration. It only runs when you call the script, and 
 
 ## Run The Full App
 
-Use **either** host-run terminals **or** the full Compose stack. Do not treat the cloud-agent quick tunnel or VPS deployment as this local workflow. The VPS path is [Deploying on a VPS](deploying-vps.md).
+Use **either** host-run terminals **or** the full Compose stack. Do not treat the cloud-agent quick tunnel or VPS deployment as this local workflow. The VPS path, including host Nginx and Cloudflare Access, is [Deploying on a VPS](deploying-vps.md).
 
 ### Host-run (fast iteration)
 

@@ -1,0 +1,14 @@
+# Named Cloudflare Tunnel origin for the JobTrackr VPS test hostname.
+# Copy onto the host cloudflared config yourself. Compose does not start
+# cloudflared, and this repository does not log into a Cloudflare account.
+#
+# Target system Nginx on its own loopback origin, not the Docker frontend
+# mapping (127.0.0.1:18080) and not a Compose service name.
+
+tunnel: REPLACE_WITH_TUNNEL_UUID
+credentials-file: /home/YOUR_DEPLOY_USER/.cloudflared/REPLACE_WITH_TUNNEL_UUID.json
+
+ingress:
+  - hostname: jobtrackr.example.test
+    service: http://127.0.0.1:18081
+  - service: http_status:404

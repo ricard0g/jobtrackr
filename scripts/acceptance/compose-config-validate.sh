@@ -7,6 +7,9 @@ VPS_FIXTURE_ENV="$ROOT_DIR/scripts/acceptance/vps.fixture.env"
 VPS_COMPOSE="$ROOT_DIR/docker-compose.vps.yml"
 VALIDATOR="$ROOT_DIR/scripts/acceptance/compose_config_validate.py"
 VPS_ENV_VALIDATOR="$ROOT_DIR/scripts/acceptance/vps_env_validate.py"
+EDGE_VALIDATOR="$ROOT_DIR/scripts/acceptance/vps_edge_validate.py"
+SYSTEM_NGINX_EXAMPLE="$ROOT_DIR/config/nginx/vps-system.conf"
+CLOUDFLARED_EXAMPLE="$ROOT_DIR/config/cloudflared/config.example.yml"
 
 cd "$ROOT_DIR"
 
@@ -18,6 +21,14 @@ if [ ! -f "$VPS_FIXTURE_ENV" ]; then
   echo "Missing sanitized VPS Compose fixture: $VPS_FIXTURE_ENV"
   exit 1
 fi
+if [ ! -f "$SYSTEM_NGINX_EXAMPLE" ]; then
+  echo "Missing sanitized system Nginx example: $SYSTEM_NGINX_EXAMPLE"
+  exit 1
+fi
+if [ ! -f "$CLOUDFLARED_EXAMPLE" ]; then
+  echo "Missing sanitized cloudflared example: $CLOUDFLARED_EXAMPLE"
+  exit 1
+fi
 
 echo "Compose config validation"
 echo "  fixture: $FIXTURE_ENV"
@@ -27,7 +38,9 @@ echo
 python3 "$VALIDATOR" --self-test
 python3 "$VPS_ENV_VALIDATOR" --self-test
 python3 "$ROOT_DIR/scripts/acceptance/vps_host_ports.py" --self-test
+python3 "$EDGE_VALIDATOR" --self-test
 python3 "$VPS_ENV_VALIDATOR" "$VPS_FIXTURE_ENV"
+python3 "$EDGE_VALIDATOR" "$SYSTEM_NGINX_EXAMPLE" "$CLOUDFLARED_EXAMPLE"
 if python3 "$VPS_ENV_VALIDATOR" "$ROOT_DIR/.env.vps.example" >/dev/null 2>&1; then
   echo "sanitized VPS template unexpectedly passed environment validation"
   exit 1
