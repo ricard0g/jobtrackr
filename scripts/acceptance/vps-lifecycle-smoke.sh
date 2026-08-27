@@ -22,6 +22,9 @@ RELEASE_A_CV="$JOBTRACKR_CV_GENERATION_IMAGE"
 RELEASE_B_FRONTEND="${RELEASE_A_FRONTEND%:*}:${NEXT_TAG}"
 RELEASE_B_BACKEND="${RELEASE_A_BACKEND%:*}:${NEXT_TAG}"
 RELEASE_B_CV="${RELEASE_A_CV%:*}:${NEXT_TAG}"
+# Compose interpolates the process environment over --env-file. Drop the CI
+# coordinates so release A/B env files can switch immutable tags.
+unset JOBTRACKR_FRONTEND_IMAGE JOBTRACKR_BACKEND_IMAGE JOBTRACKR_CV_GENERATION_IMAGE JOBTRACKR_RELEASE_TAG
 
 cd "$ROOT_DIR"
 
@@ -52,7 +55,12 @@ write_env() {
 }
 
 compose() {
-  docker compose \
+  env \
+    -u JOBTRACKR_FRONTEND_IMAGE \
+    -u JOBTRACKR_BACKEND_IMAGE \
+    -u JOBTRACKR_CV_GENERATION_IMAGE \
+    -u JOBTRACKR_RELEASE_TAG \
+    docker compose \
     --env-file "$CURRENT_ENV" \
     -f "$VPS_COMPOSE" \
     -f "$OVERRIDE_FILE" \
@@ -63,6 +71,21 @@ assert_local_image() {
   local image="$1"
   if ! docker image inspect "$image" >/dev/null 2>&1; then
     echo "prebuilt image is not loaded locally: $image"
+    exit 1
+  fi
+}
+
+assert_rendered_tag() {
+  local service="$1"
+  local expected="$2"
+  local rendered
+  rendered="$(
+    compose config --format json | python3 -c \
+      'import json, sys; print(json.load(sys.stdin)["services"][sys.argv[1]]["image"])' \
+      "$service"
+  )"
+  if [ "$rendered" != "$expected" ]; then
+    echo "rendered $service image was $rendered, expected $expected"
     exit 1
   fi
 }
@@ -141,7 +164,10 @@ docker tag "$RELEASE_A_CV" "$RELEASE_B_CV"
 docker volume create "$VOLUME_NAME" >/dev/null
 
 CURRENT_ENV="$ENV_A"
-compose up --no-build -d --wait --wait-timeout 420 \
+assert_rendered_tag frontend "$RELEASE_A_FRONTEND"
+assert_rendered_tag backend "$RELEASE_A_BACKEND"
+assert_rendered_tag cv-generation "$RELEASE_A_CV"
+compose up --no-build --pull never -d --wait --wait-timeout 420 \
   postgres cv-generation gotenberg backend frontend
 
 assert_running_tag frontend "$RELEASE_A_FRONTEND"
@@ -169,7 +195,10 @@ backend_before="$(compose ps -q backend)"
 assert_volume
 
 CURRENT_ENV="$ENV_B"
-compose up --no-build -d --wait --wait-timeout 300 \
+assert_rendered_tag frontend "$RELEASE_B_FRONTEND"
+assert_rendered_tag backend "$RELEASE_B_BACKEND"
+assert_rendered_tag cv-generation "$RELEASE_B_CV"
+compose up --no-build --pull never -d --wait --wait-timeout 300 \
   postgres cv-generation gotenberg backend frontend
 
 assert_running_tag frontend "$RELEASE_B_FRONTEND"
@@ -190,7 +219,10 @@ assert_marker "survives update rollback backup and restore"
 origin_smoke
 
 CURRENT_ENV="$ENV_A"
-compose up --no-build -d --wait --wait-timeout 300 \
+assert_rendered_tag frontend "$RELEASE_A_FRONTEND"
+assert_rendered_tag backend "$RELEASE_A_BACKEND"
+assert_rendered_tag cv-generation "$RELEASE_A_CV"
+compose up --no-build --pull never -d --wait --wait-timeout 300 \
   postgres cv-generation gotenberg backend frontend
 
 assert_running_tag frontend "$RELEASE_A_FRONTEND"
@@ -214,11 +246,11 @@ COMPOSE_FILE="$VPS_COMPOSE:$OVERRIDE_FILE" COMPOSE_ENV_FILE="$ENV_A" \
 
 assert_marker "survives update rollback backup and restore"
 
-compose up --no-build -d --force-recreate --wait --wait-timeout 300 postgres
+compose up --no-build --pull never -d --force-recreate --wait --wait-timeout 300 postgres
 assert_volume
 assert_marker "survives update rollback backup and restore"
 
-compose up --no-build -d --wait --wait-timeout 300 \
+compose up --no-build --pull never -d --wait --wait-timeout 300 \
   postgres cv-generation gotenberg backend frontend
 origin_smoke
 
