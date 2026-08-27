@@ -188,7 +188,7 @@ JOBTRACKR_APP_ORIGIN=http://127.0.0.1:18080 ./scripts/acceptance/documents-real-
 
 `JOBTRACKR_APP_ORIGIN` is the acceptance entrypoint. It is not a Vite build variable.
 
-To prove a GHCR-shaped revision without rebuilding, set the three `JOBTRACKR_*_IMAGE` coordinates and run `./scripts/acceptance/release-smoke.sh`. The publication workflow, tag policy, and manual pull steps are in [Publishing Images](releasing-images.md). First VPS deployment from those tags is in [Deploying on a VPS](deploying-vps.md).
+To prove a GHCR-shaped revision without rebuilding, set the three `JOBTRACKR_*_IMAGE` coordinates and run `./scripts/acceptance/release-smoke.sh`. The publication workflow, tag policy, and manual pull steps are in [Publishing Images](releasing-images.md). VPS first deploy, Cloudflare routing, persistence, backup, restore, updates, and rollback are in [Deploying on a VPS](deploying-vps.md).
 
 ## Run Backend With Seed Data
 
@@ -292,7 +292,7 @@ Then optionally seed the database:
 
 The repository can store ignored local snapshots under `db/dumps/`.
 
-Dump and restore address the Compose `postgres` service, not a fixed container name. Start Postgres first with `./scripts/dev-up.sh` if it is not already running.
+Dump and restore address the Compose `postgres` service, not a fixed container name. They honor native `COMPOSE_FILE` and `COMPOSE_ENV_FILE`. Start Postgres first with `./scripts/dev-up.sh` if it is not already running. VPS backup and restore use the same scripts through `./scripts/vps-backup.sh` and `./scripts/vps-restore.sh`; see [Deploying on a VPS](deploying-vps.md#backup).
 
 To restore the existing local snapshot:
 

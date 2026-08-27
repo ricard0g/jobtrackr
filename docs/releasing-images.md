@@ -1,6 +1,6 @@
 # Publishing JobTrackr Images
 
-This is the GHCR release path. It is not host-run development or local full Compose. After a tag is published, first VPS deployment is documented in [Deploying on a VPS](deploying-vps.md).
+This is the GHCR release path. It is not host-run development or local full Compose. After a tag is published, first VPS deployment, updates, and rollback are documented in [Deploying on a VPS](deploying-vps.md).
 
 GitHub Actions turns a verified commit into three application images. Those images are published only after their build-time tests, Compose validation, and release smoke all pass. Rollback identity is always the immutable commit-SHA tag.
 
@@ -81,4 +81,4 @@ export JOBTRACKR_CV_GENERATION_IMAGE=ghcr.io/ricard0g/jobtrackr/cv-generation:sh
 
 Replace `<commit>` with the full 40-character SHA. The moving `main` tag is only a pointer to whatever last published successfully; it is not a rollback target.
 
-Creating a Generated CV with the real Gemini provider is an operator check after R2 and Gemini credentials are configured. Deterministic CI and release smoke do not call Gemini.
+Creating a Generated CV with the real Gemini provider is an operator check after R2 and Gemini credentials are configured. Deterministic CI and release smoke do not call Gemini. The VPS steps are in [Deploying on a VPS](deploying-vps.md#operator-acceptance-generated-cv).

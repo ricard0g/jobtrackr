@@ -1,0 +1,9 @@
+volumes:
+  jobtrackr_pgdata:
+    name: jobtrackr_vps_lifecycle_pgdata
+    external: true
+
+networks:
+  jobtrackr:
+    name: jobtrackr_vps_lifecycle
+    driver: bridge

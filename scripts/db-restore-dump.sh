@@ -1,6 +1,11 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+# Restore into the Compose postgres service. Do not target a fixed container name.
+# Native COMPOSE_FILE selects the Compose definition (VPS: docker-compose.vps.yml).
+# COMPOSE_ENV_FILE is this repository's --env-file helper (VPS: .env.vps).
+# Stop the application containers before restoring so Flyway is not connected.
+
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 DUMP_FILE="${1:-$ROOT_DIR/db/dumps/local-snapshot.dump}"
 CONTAINER_FILE="/tmp/jobtrackr-restore.dump"
@@ -21,7 +26,11 @@ wait_for_postgres() {
     fi
     sleep 1
   done
-  echo "Postgres did not become ready. Start it with ./scripts/dev-up.sh or docker compose up -d postgres."
+  if [ -n "${COMPOSE_FILE:-}" ]; then
+    echo "Postgres did not become ready. Start it with ./scripts/vps-up.sh or docker compose -f \"$COMPOSE_FILE\" up -d postgres."
+  else
+    echo "Postgres did not become ready. Start it with ./scripts/dev-up.sh or docker compose up -d postgres."
+  fi
   return 1
 }
 

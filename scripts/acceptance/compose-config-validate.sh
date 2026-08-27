@@ -39,8 +39,10 @@ python3 "$VALIDATOR" --self-test
 python3 "$VPS_ENV_VALIDATOR" --self-test
 python3 "$ROOT_DIR/scripts/acceptance/vps_host_ports.py" --self-test
 python3 "$EDGE_VALIDATOR" --self-test
+python3 "$ROOT_DIR/scripts/acceptance/vps_operator_validate.py" --self-test
 python3 "$VPS_ENV_VALIDATOR" "$VPS_FIXTURE_ENV"
 python3 "$EDGE_VALIDATOR" "$SYSTEM_NGINX_EXAMPLE" "$CLOUDFLARED_EXAMPLE"
+python3 "$ROOT_DIR/scripts/acceptance/vps_operator_validate.py" "$ROOT_DIR"
 if python3 "$VPS_ENV_VALIDATOR" "$ROOT_DIR/.env.vps.example" >/dev/null 2>&1; then
   echo "sanitized VPS template unexpectedly passed environment validation"
   exit 1
