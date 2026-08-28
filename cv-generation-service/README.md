@@ -6,14 +6,15 @@ Stateless FastAPI microservice that generates ATS-safe tailored CVs for JobTrack
 - Service-to-service Bearer token auth
 - Gemini key stays in this service only
 - Gemini-backed evidence interpretation and CV drafting
-- Deterministic fake provider restricted to automated tests
+- Deterministic fake provider restricted to local tests and explicit smoke settings
+- Configuration is environment variables only (no `.env` file loading)
 
 ## Endpoints
 
 | Method | Path | Auth | Description |
 |--------|------|------|-------------|
-| `GET` | `/health/live` | none | Liveness |
-| `GET` | `/health/ready` | none | Readiness (real-provider config check) |
+| `GET` | `/health/live` | none | Liveness: process is running |
+| `GET` | `/health/ready` | none | Readiness: production provider configuration is usable |
 | `POST` | `/v1/generate` | Bearer | Generate tailored CV |
 
 ### `POST /v1/generate`
@@ -41,18 +42,30 @@ Failure: `{"code":"...","message":"..."}` with stable error codes.
 
 ## Configuration
 
+All settings come from the process environment. Use placeholders in examples; never commit real tokens or Gemini keys.
+
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `CV_GENERATION_SERVICE_TOKEN` | *(required in prod)* | Bearer token |
-| `CV_GENERATION_PROVIDER` | `gemini` | User-facing generation requires `gemini` |
-| `GOOGLE_AI_API_KEY` / `GEMINI_API_KEY` | — | Required when provider=`gemini` |
+| `CV_GENERATION_PROFILE` | `local` | `local` and `test` allow the documented default token. The release image sets `production`. |
+| `CV_GENERATION_SERVICE_TOKEN` | `dev-service-token` | Bearer token. Required and must not be the default outside local/test. |
+| `CV_GENERATION_PROVIDER` | `gemini` | User-facing generation requires `gemini`. `fake` is never the implicit default. |
+| `CV_GENERATION_ALLOW_FAKE_PROVIDER` | `false` | Must be `true` **and** `CV_GENERATION_PROFILE` must be `local` or `test` to use the deterministic fake provider. |
+| `GOOGLE_AI_API_KEY` / `GEMINI_API_KEY` | — | Required for readiness when provider=`gemini` |
 | `CV_GENERATION_MODEL_ID` | `gemini-3.1-flash-lite` | Low-latency model id reported in headers |
 | `CV_GENERATION_WORKFLOW_VERSION` | `cv-graph-v2` | Workflow version header |
-| `CV_GENERATION_REQUEST_TIMEOUT_SECONDS` | `120` | Soft request timeout |
+| `CV_GENERATION_REQUEST_TIMEOUT_SECONDS` | `300` | Hard request deadline (five minutes) |
 | `MAX_BASE_CV_BYTES` | `10485760` | 10MB |
 | `MAX_JOB_DESCRIPTION_CHARS` | `50000` | JD length cap |
 | `MAX_ADDITIONAL_INFO_CHARS` | `5000` | Additional info cap |
 | `MAX_EXTRACTED_TEXT_CHARS` | `100000` | Extracted text cap |
+
+### Provider modes and readiness
+
+- **Liveness** (`/health/live`) returns `200` as soon as the process is serving HTTP.
+- **Readiness** (`/health/ready`) returns `200` only when this process can perform generation:
+  - `gemini` needs a Gemini key, and outside local/test a non-default service token
+  - `fake` is ready only when `CV_GENERATION_ALLOW_FAKE_PROVIDER=true` and the profile is `local` or `test`
+- Missing Gemini configuration, the documented default token in production, or an implicit fake provider returns `503`.
 
 ## Local development
 
@@ -65,10 +78,10 @@ export GOOGLE_AI_API_KEY=your-key
 uvicorn cv_generation.main:app --reload --port 8081
 ```
 
-Or with uv:
+Or with uv (preferred; `./scripts/dev-cv-gen.sh` already loads the repo `.env`):
 
 ```bash
-uv sync --extra dev
+uv sync --extra dev --extra gemini
 uv run uvicorn cv_generation.main:app --reload --port 8081
 ```
 
@@ -80,18 +93,30 @@ pip install -e ".[dev]"
 pytest
 ```
 
-Pinned versions used in CI/dev are recorded in `requirements.lock.txt` (pip freeze of direct deps). Tests explicitly enable the fake provider and make no Gemini calls.
+Pinned versions used in CI/dev are recorded in `uv.lock`. Tests set `CV_GENERATION_PROFILE=test`, enable the fake provider explicitly, and make no Gemini calls.
 
-## Docker
+## Release image
+
+A clean `docker build` runs the pytest suite (no Gemini) from `uv.lock`, then packages a non-root runtime image. The image defaults to `CV_GENERATION_PROFILE=production`, `CV_GENERATION_PROVIDER=gemini`, and `CV_GENERATION_ALLOW_FAKE_PROVIDER=false`.
 
 ```bash
-docker build -t cv-generation-service .
+docker build -t jobtrackr-cv-generation:local .
 docker run --rm -p 8081:8081 \
-  -e CV_GENERATION_SERVICE_TOKEN=secret \
+  -e CV_GENERATION_SERVICE_TOKEN=replace-with-service-token \
   -e CV_GENERATION_PROVIDER=gemini \
-  -e GOOGLE_AI_API_KEY=your-key \
-  cv-generation-service
+  -e GOOGLE_AI_API_KEY=replace-with-gemini-key \
+  jobtrackr-cv-generation:local
 ```
+
+Prove the built image without Gemini:
+
+```bash
+./scripts/acceptance/cv-generation-container-smoke.sh
+```
+
+The smoke run checks production liveness vs readiness, then starts one explicit fake-provider container and performs one authenticated Markdown generation.
+
+Verified GHCR tags use `ghcr.io/ricard0g/jobtrackr/cv-generation` and are documented in [`docs/releasing-images.md`](../docs/releasing-images.md). VPS deployment is documented in [`docs/deploying-vps.md`](../docs/deploying-vps.md).
 
 ## Workflow stages
 

@@ -10,6 +10,8 @@ Primary goals:
   - `../../JobTrackrApi/src/main/java/com/ricard0g/jobtrackr_api/dto`
 - Add missing frontend workflows around companies, tags, interviews, status history, and form coverage without requiring backend contract changes.
 
+Runtime build, host-dev configuration, and the production Nginx image are documented in [`../README.md`](../README.md).
+
 Recommended reading order:
 
 1. [migration-overview.md](./migration-overview.md)

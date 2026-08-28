@@ -2,6 +2,8 @@
 
 Use this workflow when a user wants to open **JobTrackr on a phone** (or any external device) from a cloud agent environment through a **single Cloudflare quick tunnel**.
 
+This is not the VPS named-tunnel path. Standalone VPS routing through host Nginx and Cloudflare Access is documented in [`docs/deploying-vps.md`](../../../docs/deploying-vps.md).
+
 nginx reverse-proxies both the Vite frontend and the Spring Boot API behind one origin, so the phone never calls `localhost:8080`. `cloudflared` exposes that nginx origin over HTTPS with a random `*.trycloudflare.com` URL — no account or authtoken required.
 
 ## Architecture

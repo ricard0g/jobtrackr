@@ -1,0 +1,166 @@
+# Standalone VPS stack. Pulls immutable GHCR images. Does not build from this checkout.
+# Create the external volume before first start: docker volume create jobtrackr_pgdata
+# Publish only the frontend loopback mapping. 18080 is an arbitrary documented default.
+
+name: jobtrackr
+
+x-log-rotation: &log-rotation
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "3"
+
+services:
+  postgres:
+    image: postgres:16
+    restart: unless-stopped
+    logging: *log-rotation
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:?POSTGRES_DB is required}
+      POSTGRES_USER: ${POSTGRES_USER:?POSTGRES_USER is required}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}
+    volumes:
+      - jobtrackr_pgdata:/var/lib/postgresql/data
+    networks:
+      - jobtrackr
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "pg_isready -U ${POSTGRES_USER:?POSTGRES_USER is required} -d ${POSTGRES_DB:?POSTGRES_DB is required}",
+        ]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+
+  cv-generation:
+    image: ${JOBTRACKR_CV_GENERATION_IMAGE:?Set JOBTRACKR_CV_GENERATION_IMAGE to a GHCR sha- tag}
+    restart: unless-stopped
+    logging: *log-rotation
+    environment:
+      CV_GENERATION_SERVICE_TOKEN: ${CV_GENERATION_SERVICE_TOKEN:?CV_GENERATION_SERVICE_TOKEN is required}
+      CV_GENERATION_PROVIDER: gemini
+      CV_GENERATION_ALLOW_FAKE_PROVIDER: "false"
+      CV_GENERATION_PROFILE: production
+      GOOGLE_AI_API_KEY: ${GOOGLE_AI_API_KEY:?GOOGLE_AI_API_KEY is required}
+      CV_GENERATION_MODEL_ID: ${CV_GENERATION_MODEL_ID:-gemini-3.1-flash-lite}
+      CV_GENERATION_WORKFLOW_VERSION: ${CV_GENERATION_WORKFLOW_VERSION:-cv-graph-v2}
+      CV_GENERATION_REQUEST_TIMEOUT_SECONDS: ${CV_GENERATION_REQUEST_TIMEOUT_SECONDS:-300}
+      HOST: 0.0.0.0
+      PORT: 8081
+    networks:
+      - jobtrackr
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "python -c \"import urllib.request; urllib.request.urlopen('http://127.0.0.1:8081/health/ready')\"",
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 20s
+
+  gotenberg:
+    image: gotenberg/gotenberg:8.34.0-libreoffice
+    restart: unless-stopped
+    logging: *log-rotation
+    environment:
+      API_TIMEOUT: ${GOTENBERG_API_TIMEOUT:-30s}
+    networks:
+      - jobtrackr
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "curl -f http://127.0.0.1:3000/health || exit 1",
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+
+  backend:
+    image: ${JOBTRACKR_BACKEND_IMAGE:?Set JOBTRACKR_BACKEND_IMAGE to a GHCR sha- tag}
+    restart: unless-stopped
+    logging: *log-rotation
+    depends_on:
+      postgres:
+        condition: service_healthy
+      cv-generation:
+        condition: service_healthy
+      gotenberg:
+        condition: service_healthy
+    environment:
+      SPRING_PROFILES_ACTIVE: production
+      SERVER_PORT: 8080
+      DB_HOST: postgres:5432
+      DB_NAME: ${POSTGRES_DB:?POSTGRES_DB is required}
+      DB_USERNAME: ${POSTGRES_USER:?POSTGRES_USER is required}
+      DB_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}
+      JWT_SIGNING_KEY: ${JWT_SIGNING_KEY:?JWT_SIGNING_KEY is required}
+      JWT_ACCESS_EXPIRATION_MS: ${JWT_ACCESS_EXPIRATION_MS:-900000}
+      JWT_REFRESH_EXPIRATION_MS: ${JWT_REFRESH_EXPIRATION_MS:-604800000}
+      JWT_REFRESH_COOKIE_NAME: ${JWT_REFRESH_COOKIE_NAME:-refresh_token}
+      JWT_REFRESH_COOKIE_SECURE: ${JWT_REFRESH_COOKIE_SECURE:?JWT_REFRESH_COOKIE_SECURE is required}
+      JWT_REFRESH_COOKIE_SAME_SITE: ${JWT_REFRESH_COOKIE_SAME_SITE:-Lax}
+      CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS:?CORS_ALLOWED_ORIGINS is required}
+      R2_ENDPOINT: ${R2_ENDPOINT:?R2_ENDPOINT is required}
+      R2_ACCESS_KEY_ID: ${R2_ACCESS_KEY_ID:?R2_ACCESS_KEY_ID is required}
+      R2_SECRET_ACCESS_KEY: ${R2_SECRET_ACCESS_KEY:?R2_SECRET_ACCESS_KEY is required}
+      R2_BUCKET: ${R2_BUCKET:?R2_BUCKET is required}
+      R2_SIGNED_URL_SECONDS: ${R2_SIGNED_URL_SECONDS:-60}
+      CV_GENERATION_SERVICE_BASE_URL: http://cv-generation:8081
+      CV_GENERATION_SERVICE_TOKEN: ${CV_GENERATION_SERVICE_TOKEN:?CV_GENERATION_SERVICE_TOKEN is required}
+      CV_GENERATION_WORKER_CONCURRENCY: ${CV_GENERATION_WORKER_CONCURRENCY:-1}
+      CV_GENERATION_REQUEST_TIMEOUT: ${CV_GENERATION_REQUEST_TIMEOUT:-5m}
+      GOTENBERG_BASE_URL: http://gotenberg:3000
+      GOTENBERG_REQUEST_TIMEOUT: ${GOTENBERG_REQUEST_TIMEOUT:-35s}
+      GOTENBERG_MAX_RESPONSE_BYTES: ${GOTENBERG_MAX_RESPONSE_BYTES:-15728640}
+    networks:
+      - jobtrackr
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "curl",
+          "-fsS",
+          "http://127.0.0.1:8080/actuator/health/readiness",
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 60s
+
+  frontend:
+    image: ${JOBTRACKR_FRONTEND_IMAGE:?Set JOBTRACKR_FRONTEND_IMAGE to a GHCR sha- tag}
+    restart: unless-stopped
+    logging: *log-rotation
+    depends_on:
+      backend:
+        condition: service_healthy
+    ports:
+      - "127.0.0.1:${JOBTRACKR_PORT:-18080}:80"
+    networks:
+      - jobtrackr
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "wget -qO- http://127.0.0.1/health >/dev/null || exit 1",
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+      start_period: 5s
+
+volumes:
+  jobtrackr_pgdata:
+    name: jobtrackr_pgdata
+    external: true
+
+networks:
+  jobtrackr:
+    name: jobtrackr
+    driver: bridge

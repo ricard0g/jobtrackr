@@ -15,5 +15,6 @@ public class JwtProperties {
     private long refreshExpirationMs = 604_800_000L;
     private String refreshCookieName = "refresh_token";
     private boolean refreshCookieSecure = false;
+    private boolean refreshCookieAllowInsecure = false;
     private String refreshCookieSameSite = "Lax";
 }

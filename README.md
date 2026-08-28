@@ -12,6 +12,7 @@ The app is built as a monorepo with a Spring Boot API, a Vite/React web client, 
 - Store interview steps, status history, and follow-up tasks.
 - Upload Base CVs and generate tailored Application CVs (PDF, DOCX, Markdown) asynchronously.
 - Run with deterministic development data for local work and cloud agents.
+- Run the five-service stack in local Compose or on a VPS from immutable GHCR images, with documented backup, restore, update, and rollback.
 
 ## Repository Layout
 
@@ -21,13 +22,16 @@ jobtrackr-web/             Vite/React frontend
 cv-generation-service/     FastAPI + LangGraph + Gemini CV generation
 db/                        Seed and local database dump locations
 docs/                      Root project documentation
-scripts/                   Local development and database helper scripts
+scripts/                   Local development, VPS, and database helper scripts
 ```
 
 ## Documentation
 
 - [Development Setup](docs/development.md): run the full stack, reset the DB, restore local snapshots, and seed cloud-agent-safe data.
-- [Docs Index](docs/README.md): root documentation entry point.
+- [Running Locally](docs/running-locally.md): host-run Spring Boot and Vite, plus the local five-service Compose stack.
+- [Publishing Images](docs/releasing-images.md): GHCR frontend, backend, and CV Generation coordinates, tag policy, and verification.
+- [Deploying on a VPS](docs/deploying-vps.md): pull immutable GHCR images, keep PostgreSQL on an external volume, route through host Nginx and Cloudflare Access, then backup, restore, update, and roll back.
+- [Docs Index](docs/README.md): local development, full Compose, configuration, VPS deployment, Cloudflare routing, persistence, backup, restore, updates, rollback, and troubleshooting.
 - [Project Changelog](docs/changelog/): commit-based records for project changes not covered by the API changelog.
 
 Subproject-specific notes remain in `JobTrackrApi/docs/` and `jobtrackr-web/docs/`.

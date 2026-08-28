@@ -1,0 +1,7 @@
+services:
+  postgres:
+    ports: !override []
+  cv-generation:
+    ports: !override []
+  gotenberg:
+    ports: !override []

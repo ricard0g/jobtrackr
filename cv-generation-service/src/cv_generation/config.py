@@ -3,29 +3,21 @@
 from __future__ import annotations
 
 from functools import lru_cache
-from pathlib import Path
 from typing import Literal
 
 from pydantic import Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 ProviderName = Literal["fake", "gemini"]
-
-_SERVICE_ROOT = Path(__file__).resolve().parents[2]
-_REPO_ROOT = Path(__file__).resolve().parents[3]
-_ENV_FILES = tuple(
-    str(path)
-    for path in (_REPO_ROOT / ".env", _SERVICE_ROOT / ".env")
-    if path.is_file()
-)
+ProfileName = Literal["local", "test", "production"]
+_PERMISSIVE_PROFILES = frozenset({"local", "test"})
+_DEV_DEFAULT_SERVICE_TOKEN = "dev-service-token"
 
 
 class Settings(BaseSettings):
     """Runtime settings. Limits are documented here for operators."""
 
     model_config = SettingsConfigDict(
-        env_file=_ENV_FILES or None,
-        env_file_encoding="utf-8",
         extra="ignore",
     )
 
@@ -34,6 +26,11 @@ class Settings(BaseSettings):
         default="dev-service-token",
         alias="CV_GENERATION_SERVICE_TOKEN",
         description="Bearer token expected from the JobTrackr API.",
+    )
+    cv_generation_profile: ProfileName = Field(
+        default="local",
+        alias="CV_GENERATION_PROFILE",
+        description="local/test allow the documented default token; production does not.",
     )
 
     # Provider
@@ -92,28 +89,44 @@ class Settings(BaseSettings):
     host: str = Field(default="0.0.0.0", alias="HOST")
     port: int = Field(default=8081, alias="PORT")
 
-    @field_validator("cv_generation_provider", mode="before")
+    @field_validator("cv_generation_provider", "cv_generation_profile", mode="before")
     @classmethod
-    def _normalize_provider(cls, value: object) -> object:
+    def _normalize_lower(cls, value: object) -> object:
         if isinstance(value, str):
             return value.strip().lower()
         return value
 
     @property
     def resolved_gemini_api_key(self) -> str | None:
-        return self.google_ai_api_key or self.gemini_api_key
+        key = self.google_ai_api_key or self.gemini_api_key
+        if key is None:
+            return None
+        stripped = key.strip()
+        return stripped or None
 
     @property
     def is_fake(self) -> bool:
         return self.cv_generation_provider == "fake"
 
+    @property
+    def is_local_or_test(self) -> bool:
+        return self.cv_generation_profile in _PERMISSIVE_PROFILES
+
     def readiness_ok(self) -> tuple[bool, str]:
         """Return whether this process can perform user-facing generation."""
         if self.is_fake:
-            if self.cv_generation_allow_fake_provider:
+            if self.cv_generation_allow_fake_provider and self.is_local_or_test:
                 return True, "fake provider explicitly enabled for tests"
             return False, "fake provider is test-only"
-        if not self.cv_generation_service_token:
+        token = self.cv_generation_service_token.strip()
+        if not self.is_local_or_test and (
+            not token or token == _DEV_DEFAULT_SERVICE_TOKEN
+        ):
+            return (
+                False,
+                "CV_GENERATION_SERVICE_TOKEN must be set to a non-default value outside local/test profiles",
+            )
+        if not token:
             return False, "CV_GENERATION_SERVICE_TOKEN missing"
         if not self.resolved_gemini_api_key:
             return False, "GOOGLE_AI_API_KEY / GEMINI_API_KEY missing"

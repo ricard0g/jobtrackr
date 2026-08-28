@@ -23,6 +23,8 @@ cp .env.example .env
 
 `dev-up.sh` starts Compose services for PostgreSQL and `cv-generation` (FastAPI on port `8081` by default). Spring and Vite continue to run on the host.
 
+The `full` profile builds the backend and frontend runtime images and starts all five services. Inter-service traffic uses Compose DNS names (`postgres`, `cv-generation`, `gotenberg`, `backend`). The frontend publishes only on loopback (`127.0.0.1:18080` by default) and proxies `/api/v1` to `backend`. Use `./scripts/dev-full.sh` or `docker compose --profile full --env-file .env.compose up --build` for that path. Keep `./scripts/dev-api.sh` and `./scripts/dev-web.sh` for fast host iteration. This is not the VPS deployment workflow. Verified GHCR images are documented in [Publishing Images](releasing-images.md). First VPS deployment, Cloudflare routing, persistence, backup, restore, updates, rollback, and troubleshooting are documented in [Deploying on a VPS](deploying-vps.md). See [Running Locally](running-locally.md) for both local modes.
+
 Start the API:
 
 ```bash
@@ -42,9 +44,10 @@ The CV generation service runs on `http://localhost:8081`.
 ### CV generation service
 
 - User-facing generation defaults to Gemini and requires `GOOGLE_AI_API_KEY` (or `GEMINI_API_KEY`).
-- The deterministic fake provider is explicitly enabled by the automated test suite only.
+- The deterministic fake provider is enabled only by an explicit local or test setting (`CV_GENERATION_ALLOW_FAKE_PROVIDER=true`); it is never the image default.
 - Spring authenticates to FastAPI with `CV_GENERATION_SERVICE_TOKEN` (Bearer). The browser never talks to FastAPI.
-- Health: `GET http://localhost:8081/health/live` and `GET http://localhost:8081/health/ready`
+- Health: `GET http://localhost:8081/health/live` (process up) and `GET http://localhost:8081/health/ready` (provider configuration usable).
+- The release image runs pytest during `docker build`, then runs as a non-root user with a five-minute (`300` second) generation timeout default.
 - WeasyPrint system libraries are installed in the service Dockerfile for PDF rendering.
 
 Required Spring env vars (see `.env.example`):
@@ -58,7 +61,7 @@ The database schema is recreated from those migrations whenever the API starts a
 
 ## Database Portability
 
-Use `./scripts/db-dump-local-pg.sh` to export a full PostgreSQL snapshot from the existing `local-pg` Docker container into `db/dumps/local-snapshot.dump`.
+Use `./scripts/db-dump-local-pg.sh` to export a full PostgreSQL snapshot from the Compose `postgres` service into `db/dumps/local-snapshot.dump`.
 
 `db/dumps/` is intentionally ignored by Git because local database dumps may contain personal data, password hashes, or other sensitive state. Commit a sanitized seed file under `db/seed/` only when it is safe for cloud agents and GitHub.
 

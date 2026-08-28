@@ -1,0 +1,7 @@
+services:
+  cv-generation:
+    build: !reset null
+  backend:
+    build: !reset null
+  frontend:
+    build: !reset null

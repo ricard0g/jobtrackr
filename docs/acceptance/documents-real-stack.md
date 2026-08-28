@@ -2,10 +2,14 @@
 
 Prove the complete Documents workflow against the real React app, Spring API, PostgreSQL, configured R2 bucket, and pinned Gotenberg container (`gotenberg/gotenberg:8.34.0-libreoffice`). MSW-only success does not satisfy this path.
 
+Set `JOBTRACKR_APP_ORIGIN` to the application entrypoint under test. That setting is independent of Vite's `VITE_API_ORIGIN` build variable. Host-run still falls back to `VITE_API_ORIGIN` or `http://localhost:8080` when `JOBTRACKR_APP_ORIGIN` is unset.
+
 ## Prerequisites
 
 1. Copy and configure `.env` with working `R2_*` credentials and `GOTENBERG_BASE_URL`.
-2. Start infrastructure and apps from the repo root:
+2. Start infrastructure and apps from the repo root.
+
+Host-run:
 
 ```bash
 ./scripts/dev-up.sh
@@ -13,11 +17,28 @@ Prove the complete Documents workflow against the real React app, Spring API, Po
 ./scripts/dev-web.sh
 ```
 
-3. Confirm health:
+Full Compose (same origin for SPA and API through frontend Nginx):
 
 ```bash
-curl -s http://localhost:8080/actuator/health
+cp .env.compose.example .env.compose
+# put real R2 values in .env.compose
+./scripts/dev-full.sh
+export JOBTRACKR_APP_ORIGIN=http://127.0.0.1:18080
+```
+
+Full Compose is a local development mode. It is not the VPS deployment workflow. See `docs/deploying-vps.md` for the GHCR loopback stack.
+
+3. Confirm the origin:
+
+```bash
+curl -s "${JOBTRACKR_APP_ORIGIN:-http://localhost:8080}/api/v1/auth/csrf"
 curl -s http://localhost:3000/health
+```
+
+On the full Compose stack, also confirm frontend health:
+
+```bash
+curl -s http://127.0.0.1:18080/health
 ```
 
 Optional seed login (`agent@example.test` / `dev-password`) is useful for the manual UI checklist, but the automated path registers its own disposable user.
@@ -34,7 +55,7 @@ The script prints `✓` for each proven step and exits non-zero on the first fai
 
 ## Manual UI checklist
 
-With the web app at `http://localhost:5173` and `VITE_API_MOCKING=false`:
+With the selected application origin (`http://localhost:5173` for host-run Vite, or `http://127.0.0.1:18080` for full Compose) and `VITE_API_MOCKING=false` on host-run:
 
 1. Sign in (seed user or the disposable user printed by the script).
 2. Open Documents and confirm Base CVs remain primary above the recessed Generated CV section.
