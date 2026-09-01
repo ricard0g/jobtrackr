@@ -10,7 +10,12 @@ import type {
 	StatusHistory,
 } from "@/types/application";
 import type { AuthResponse, LoginRequest, RegisterRequest } from "@/types/auth";
-import type { Company, CompanyPage, CompanySearchParams, CompanyWriteRequest } from "@/types/company";
+import type {
+	Company,
+	CompanyPage,
+	CompanySearchParams,
+	CompanyWriteRequest,
+} from "@/types/company";
 import type {
 	Interview,
 	InterviewCreateRequest,
@@ -22,7 +27,11 @@ import { API_BASE_URL, AUTH_BASE_URL } from "@/lib/api-config";
 import type { Tag, TagWriteRequest } from "@/types/tag";
 import type { User } from "@/types/user";
 import type { BaseCv, BaseCvDownload } from "@/types/base-cv";
-import type { GeneratedCv, GeneratedCvDownload, GeneratedCvPage } from "@/types/generated-cv";
+import type {
+	GeneratedCv,
+	GeneratedCvDownload,
+	GeneratedCvPage,
+} from "@/types/generated-cv";
 import type {
 	AiConsent,
 	AiConsentRequest,
@@ -34,7 +43,12 @@ import type { BoardGenerationReminder } from "@/lib/board-generation-reminders";
 
 let accessToken: string | null = null;
 let csrfToken: string | null = null;
-let csrfHeaderName = "X-XSRF-TOKEN";
+const DEFAULT_CSRF_HEADER_NAME = "X-XSRF-TOKEN";
+type CsrfTokenDetails = {
+	headerName: String;
+	token: String;
+};
+let csrfPromise: Promise<CsrfTokenDetails> | null = null;
 let refreshPromise: Promise<AuthResponse> | null = null;
 
 export class ApiError extends Error {
@@ -42,7 +56,12 @@ export class ApiError extends Error {
 	code?: string;
 	fieldErrors?: Record<string, string>;
 
-	constructor(message: string, status: number, code?: string, fieldErrors?: Record<string, string>) {
+	constructor(
+		message: string,
+		status: number,
+		code?: string,
+		fieldErrors?: Record<string, string>,
+	) {
 		super(message);
 		this.name = "ApiError";
 		this.status = status;
@@ -84,7 +103,10 @@ function toFieldErrors(fieldErrors: ErrorResponse["fieldErrors"]) {
 	);
 }
 
-async function parseApiError(response: Response, fallback: string): Promise<ApiError> {
+async function parseApiError(
+	response: Response,
+	fallback: string,
+): Promise<ApiError> {
 	try {
 		const body = (await response.json()) as ErrorResponse;
 
@@ -109,35 +131,53 @@ async function readJson<T>(response: Response): Promise<T> {
 	return (await response.json()) as T;
 }
 
-async function getCsrfToken() {
-	if (csrfToken) {
-		return { headerName: csrfHeaderName, token: csrfToken };
-	}
-
+async function fetchCsrfToken(): Promise<CsrfTokenDetails> {
 	const response = await fetch(`${AUTH_BASE_URL}/csrf`, {
 		credentials: "include",
-		headers: { Accept: "application/json" },
+		headers: {
+			Accept: "application/json",
+		},
 	});
 
 	if (!response.ok) {
-		throw await parseApiError(response, "No se pudo inicializar la sesion.");
+		throw await parseApiError(response, "Session couldn't be initialized.");
 	}
 
 	const body = (await response.json()) as CsrfResponse;
-	csrfToken = body.token ?? null;
-	csrfHeaderName = body.headerName ?? csrfHeaderName;
 
-	if (!csrfToken) {
-		throw new ApiError("No se pudo inicializar la sesion.", response.status);
+	if (!body.token) {
+		throw new ApiError("Session couldn't be initialized", response.status);
 	}
 
-	return { headerName: csrfHeaderName, token: csrfToken };
+	return {
+		headerName: body.headerName ?? DEFAULT_CSRF_HEADER_NAME,
+		token: body.token,
+	};
+}
+
+async function getCsrfToken() {
+	if (csrfPromise) {
+		return csrfPromise;
+	}
+
+	const pendingCsrfRequest = fetchCsrfToken();
+
+	csrfPromise = pendingCsrfRequest;
+
+	try {
+		return await pendingCsrfRequest;
+	} finally {
+		if (csrfPromise === pendingCsrfRequest) {
+			csrfPromise = null;
+		}
+	}
 }
 
 async function authRequest<T>(
 	path: string,
 	init: RequestInit = {},
 	requiresCsrf = false,
+	allowCsrfRetry = true,
 ): Promise<T> {
 	const headers = new Headers(init.headers);
 
@@ -158,7 +198,22 @@ async function authRequest<T>(
 	});
 
 	if (!response.ok) {
-		throw await parseApiError(response, "No se pudo completar la autenticacion.");
+		const error = await parseApiError(
+			response,
+			"Session couldn't be initialized.",
+		);
+
+		const shouldRetryWithFreshCsrf =
+			requiresCsrf &&
+			allowCsrfRetry &&
+			response.status === 403 &&
+			error.code === "CSRF_TOKEN_INVALID";
+
+		if (shouldRetryWithFreshCsrf) {
+			return authRequest<T>(path, init, true, false);
+		}
+
+		throw error;
 	}
 
 	return readJson<T>(response);
@@ -205,13 +260,21 @@ export async function refreshSession() {
 
 export async function logout() {
 	try {
-		await authRequest<void>("/logout", { method: "POST", headers: jsonHeaders }, true);
+		await authRequest<void>(
+			"/logout",
+			{ method: "POST", headers: jsonHeaders },
+			true,
+		);
 	} finally {
 		clearAccessToken();
 	}
 }
 
-async function apiRequest<T>(path: string, init: RequestInit = {}, retry = true): Promise<T> {
+async function apiRequest<T>(
+	path: string,
+	init: RequestInit = {},
+	retry = true,
+): Promise<T> {
 	const headers = new Headers(init.headers);
 
 	if (!headers.has("Accept")) headers.set("Accept", "application/json");
@@ -233,13 +296,20 @@ async function apiRequest<T>(path: string, init: RequestInit = {}, retry = true)
 	}
 
 	if (!response.ok) {
-		throw await parseApiError(response, "No se pudo completar la solicitud.");
+		throw await parseApiError(
+			response,
+			"No se pudo completar la solicitud.",
+		);
 	}
 
 	return readJson<T>(response);
 }
 
-async function apiRequestBlob(path: string, init: RequestInit = {}, retry = true): Promise<Blob> {
+async function apiRequestBlob(
+	path: string,
+	init: RequestInit = {},
+	retry = true,
+): Promise<Blob> {
 	const headers = new Headers(init.headers);
 
 	if (!headers.has("Accept")) headers.set("Accept", "application/pdf");
@@ -282,7 +352,10 @@ export const api = {
 	uploadBaseCv: (file: File) => {
 		const formData = new FormData();
 		formData.set("file", file);
-		return apiRequest<BaseCv>("/base-cvs", { method: "POST", body: formData });
+		return apiRequest<BaseCv>("/base-cvs", {
+			method: "POST",
+			body: formData,
+		});
 	},
 	deleteBaseCv: (baseCvId: number) =>
 		apiRequest<void>(`/base-cvs/${baseCvId}`, { method: "DELETE" }),
@@ -307,7 +380,9 @@ export const api = {
 			size: String(size),
 		});
 
-		return apiRequest<CompanyPage>(`/companies?${params.toString()}`, { signal });
+		return apiRequest<CompanyPage>(`/companies?${params.toString()}`, {
+			signal,
+		});
 	},
 	getCompanyById: (companyId: number) =>
 		apiRequest<Company>(`/companies/${companyId}`),
@@ -353,20 +428,28 @@ export const api = {
 			headers: jsonHeaders,
 			body: JSON.stringify(request),
 		}),
-	patchApplication: (applicationId: number, request: ApplicationPatchRequest) =>
+	patchApplication: (
+		applicationId: number,
+		request: ApplicationPatchRequest,
+	) =>
 		apiRequest<Application>(`/applications/${applicationId}`, {
 			method: "PATCH",
 			headers: jsonHeaders,
 			body: JSON.stringify(request),
 		}),
-	patchApplicationStatus: (applicationId: number, request: ApplicationStatusPatchRequest) =>
+	patchApplicationStatus: (
+		applicationId: number,
+		request: ApplicationStatusPatchRequest,
+	) =>
 		apiRequest<Application>(`/applications/${applicationId}/status`, {
 			method: "PATCH",
 			headers: jsonHeaders,
 			body: JSON.stringify(request),
 		}),
 	getApplicationStatusHistory: (applicationId: number) =>
-		apiRequest<StatusHistory[]>(`/applications/${applicationId}/status-history`),
+		apiRequest<StatusHistory[]>(
+			`/applications/${applicationId}/status-history`,
+		),
 	createAndAttachTag: (applicationId: number, request: TagWriteRequest) =>
 		apiRequest<Tag>(`/applications/${applicationId}/tags`, {
 			method: "POST",
@@ -374,7 +457,9 @@ export const api = {
 			body: JSON.stringify(request),
 		}),
 	deleteApplication: (applicationId: number) =>
-		apiRequest<void>(`/applications/${applicationId}`, { method: "DELETE" }),
+		apiRequest<void>(`/applications/${applicationId}`, {
+			method: "DELETE",
+		}),
 	getInterviews: (applicationId: number) =>
 		apiRequest<Interview[]>(`/applications/${applicationId}/interviews`),
 	getInterviewById: (applicationId: number, interviewId: number) =>
@@ -401,9 +486,12 @@ export const api = {
 			},
 		),
 	deleteInterview: (applicationId: number, interviewId: number) =>
-		apiRequest<void>(`/applications/${applicationId}/interviews/${interviewId}`, {
-			method: "DELETE",
-		}),
+		apiRequest<void>(
+			`/applications/${applicationId}/interviews/${interviewId}`,
+			{
+				method: "DELETE",
+			},
+		),
 	patchInterviewOutcome: (
 		applicationId: number,
 		interviewId: number,
@@ -417,13 +505,18 @@ export const api = {
 				body: JSON.stringify(request),
 			},
 		),
-	setApplicationStatus: (applicationId: number, applicationStatus: ApplicationStatus) =>
-		api.patchApplicationStatus(applicationId, { applicationStatus }),
+	setApplicationStatus: (
+		applicationId: number,
+		applicationStatus: ApplicationStatus,
+	) => api.patchApplicationStatus(applicationId, { applicationStatus }),
 	setInterviewOutcome: (
 		applicationId: number,
 		interviewId: number,
 		interviewOutcome: InterviewOutcome,
-	) => api.patchInterviewOutcome(applicationId, interviewId, { interviewOutcome }),
+	) =>
+		api.patchInterviewOutcome(applicationId, interviewId, {
+			interviewOutcome,
+		}),
 	getCvGenerations: (applicationId?: number) => {
 		const params =
 			applicationId === undefined
@@ -433,7 +526,10 @@ export const api = {
 	},
 	getCvGeneration: (cvGenerationId: number) =>
 		apiRequest<CvGeneration>(`/cv-generations/${cvGenerationId}`),
-	createCvGeneration: (request: CreateCvGenerationRequest, idempotencyKey: string) =>
+	createCvGeneration: (
+		request: CreateCvGenerationRequest,
+		idempotencyKey: string,
+	) =>
 		apiRequest<CvGeneration>("/cv-generations", {
 			method: "POST",
 			headers: {
@@ -454,9 +550,13 @@ export const api = {
 			body: JSON.stringify(request),
 		}),
 	getJobDescription: (applicationId: number) =>
-		apiRequest<JobDescriptionResponse>(`/applications/${applicationId}/job-description`),
+		apiRequest<JobDescriptionResponse>(
+			`/applications/${applicationId}/job-description`,
+		),
 	getGeneratedCvs: (applicationId: number) =>
-		apiRequest<GeneratedCv[]>(`/applications/${applicationId}/generated-cvs`),
+		apiRequest<GeneratedCv[]>(
+			`/applications/${applicationId}/generated-cvs`,
+		),
 	getGeneratedCvsPage: ({
 		page = 0,
 		size = 10,
@@ -474,12 +574,18 @@ export const api = {
 			sort,
 			direction,
 		});
-		return apiRequest<GeneratedCvPage>(`/generated-cvs?${params.toString()}`);
+		return apiRequest<GeneratedCvPage>(
+			`/generated-cvs?${params.toString()}`,
+		);
 	},
 	getGeneratedCvDownload: (generatedCvId: number) =>
-		apiRequest<GeneratedCvDownload>(`/generated-cvs/${generatedCvId}/download`),
+		apiRequest<GeneratedCvDownload>(
+			`/generated-cvs/${generatedCvId}/download`,
+		),
 	deleteGeneratedCv: (generatedCvId: number) =>
-		apiRequest<void>(`/generated-cvs/${generatedCvId}`, { method: "DELETE" }),
+		apiRequest<void>(`/generated-cvs/${generatedCvId}`, {
+			method: "DELETE",
+		}),
 };
 
 export type AppLoaderData = {

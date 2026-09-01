@@ -4,7 +4,6 @@ on:
   push:
     branches:
       - main
-      - feature/full-containerization-services
   pull_request:
   workflow_dispatch:
 
