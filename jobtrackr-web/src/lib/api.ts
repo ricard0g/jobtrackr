@@ -42,11 +42,10 @@ import type {
 import type { BoardGenerationReminder } from "@/lib/board-generation-reminders";
 
 let accessToken: string | null = null;
-let csrfToken: string | null = null;
 const DEFAULT_CSRF_HEADER_NAME = "X-XSRF-TOKEN";
 type CsrfTokenDetails = {
-	headerName: String;
-	token: String;
+	headerName: string;
+	token: string;
 };
 let csrfPromise: Promise<CsrfTokenDetails> | null = null;
 let refreshPromise: Promise<AuthResponse> | null = null;
