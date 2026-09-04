@@ -75,11 +75,12 @@ public class AuthService {
             throw new InvalidRefreshTokenException("Refresh token is missing");
         }
         final RotationResult rotationResult = refreshTokenService.rotateRefreshToken(rawRefreshToken);
-        final String accessToken = jwtService.generateAccessToken(rotationResult.user().getUserId());
+        final User user = rotationResult.user();
+        final String accessToken = generateAccessToken(user);
         final AuthResponse authResponse = AuthResponse.of(
                 accessToken,
                 jwtService.getAccessExpirationSeconds(),
-                UserResponseDto.from(rotationResult.user()));
+                UserResponseDto.from(user));
         return new AuthTokenPair(authResponse, rotationResult.rawToken(), rotationResult.expiresAt());
     }
 
@@ -91,13 +92,17 @@ public class AuthService {
     }
 
     private AuthTokenPair issueTokenPair(final User user) {
-        final String accessToken = jwtService.generateAccessToken(user.getUserId());
+        final String accessToken = generateAccessToken(user);
         final IssuedRefreshToken issuedRefreshToken = refreshTokenService.createRefreshToken(user);
         final AuthResponse authResponse = AuthResponse.of(
                 accessToken,
                 jwtService.getAccessExpirationSeconds(),
                 UserResponseDto.from(user));
         return new AuthTokenPair(authResponse, issuedRefreshToken.rawToken(), issuedRefreshToken.expiresAt());
+    }
+
+    private String generateAccessToken(final User user) {
+        return jwtService.generateAccessToken(user.getUserId(), user.getUserAuthVersion());
     }
 
     private String normalizeEmail(final String email) {

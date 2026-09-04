@@ -1,9 +1,7 @@
 package com.ricard0g.jobtrackr_api.config.security;
 
-import java.util.List;
 import java.util.UUID;
 
-import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.security.core.userdetails.UserDetailsService;
 import org.springframework.security.core.userdetails.UsernameNotFoundException;
@@ -23,14 +21,12 @@ public class CustomUserDetailsService implements UserDetailsService {
     @Override
     public UserDetails loadUserByUsername(final String username) throws UsernameNotFoundException {
         final User user = findUser(username);
-        return new org.springframework.security.core.userdetails.User(
-                user.getUserId().toString(),
-                user.getUserPasswordHash() != null ? user.getUserPasswordHash() : "",
+        return new JobTrackrUserDetails(
+                user.getUserId(),
+                user.getUserPasswordHash(),
                 user.isUserEnabled(),
-                true,
-                true,
-                !user.isUserLocked(),
-                List.of(new SimpleGrantedAuthority("ROLE_USER")));
+                user.isUserLocked(),
+                user.getUserAuthVersion());
     }
 
     private User findUser(final String username) {
