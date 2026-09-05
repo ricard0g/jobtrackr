@@ -2,6 +2,7 @@ package com.ricard0g.jobtrackr_api.exception;
 
 import java.util.List;
 
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.MethodArgumentNotValidException;
@@ -165,5 +166,12 @@ public class GlobalExceptionHandler {
             final org.springframework.security.authentication.BadCredentialsException exception) {
         return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
                 .body(ErrorResponse.of("INVALID_CREDENTIALS", "Invalid email or password"));
+    }
+
+    @ExceptionHandler(RateLimitedException.class)
+    public ResponseEntity<ErrorResponse> handleRateLimited(final RateLimitedException exception) {
+        return ResponseEntity.status(HttpStatus.TOO_MANY_REQUESTS)
+                .header(HttpHeaders.RETRY_AFTER, Long.toString(exception.retryAfterSeconds()))
+                .body(ErrorResponse.of("RATE_LIMITED", exception.getMessage()));
     }
 }

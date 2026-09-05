@@ -30,6 +30,7 @@ import com.ricard0g.jobtrackr_api.exception.GlobalExceptionHandler;
 import com.ricard0g.jobtrackr_api.exception.InvalidRefreshTokenException;
 import com.ricard0g.jobtrackr_api.exception.RestAccessDeniedHandler;
 import com.ricard0g.jobtrackr_api.exception.RestAuthenticationEntryPoint;
+import com.ricard0g.jobtrackr_api.security.ratelimit.AuthenticationRateLimiter;
 import com.ricard0g.jobtrackr_api.service.AuthService;
 import com.ricard0g.jobtrackr_api.service.CompanyService;
 
@@ -59,6 +60,9 @@ class SecurityCsrfIntegrationTest {
 
     @MockitoBean
     private AuthService authService;
+
+    @MockitoBean
+    private AuthenticationRateLimiter authenticationRateLimiter;
 
     @MockitoBean
     private CompanyService companyService;
