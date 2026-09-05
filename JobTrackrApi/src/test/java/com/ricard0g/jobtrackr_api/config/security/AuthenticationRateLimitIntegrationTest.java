@@ -160,9 +160,9 @@ class AuthenticationRateLimitIntegrationTest {
     }
 
     @Test
-    void passwordLogin_successfulLoginClearsEmailIpFailureBucket() throws Exception {
+    void passwordLogin_successfulLoginRefundsOnlyThatAttempt() throws Exception {
         // given
-        final String email = uniqueEmail("reset");
+        final String email = uniqueEmail("refund");
         final String clientIp = uniqueIp();
         register(email, clientIp).andExpect(status().isCreated());
 
@@ -176,6 +176,9 @@ class AuthenticationRateLimitIntegrationTest {
         login(email, WRONG_PASSWORD, clientIp)
                 .andExpect(status().isUnauthorized())
                 .andExpect(jsonPath("$.code").value("INVALID_CREDENTIALS"));
+        login(email, WRONG_PASSWORD, clientIp)
+                .andExpect(status().isTooManyRequests())
+                .andExpect(jsonPath("$.code").value("RATE_LIMITED"));
     }
 
     @Test

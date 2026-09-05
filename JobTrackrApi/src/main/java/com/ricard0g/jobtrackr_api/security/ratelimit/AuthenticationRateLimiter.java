@@ -4,5 +4,5 @@ public interface AuthenticationRateLimiter {
 
     void consume(AuthenticationAction action, AuthenticationRateLimitKey key);
 
-    void reset(AuthenticationAction action, AuthenticationRateLimitKey key);
+    void refundSuccessfulPasswordLogin(AuthenticationRateLimitKey key);
 }

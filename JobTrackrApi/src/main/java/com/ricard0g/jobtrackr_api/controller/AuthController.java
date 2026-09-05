@@ -65,7 +65,7 @@ public class AuthController {
                 loginRequestDto.email(), clientIp(request));
         authenticationRateLimiter.consume(AuthenticationAction.PASSWORD_LOGIN, loginKey);
         final AuthTokenPair tokenPair = authService.login(loginRequestDto);
-        authenticationRateLimiter.reset(AuthenticationAction.PASSWORD_LOGIN, loginKey);
+        authenticationRateLimiter.refundSuccessfulPasswordLogin(loginKey);
         refreshTokenCookieService.writeRefreshTokenCookie(
                 response, tokenPair.refreshToken(), tokenPair.refreshExpiresAt());
         return ResponseEntity.ok(tokenPair.authResponse());

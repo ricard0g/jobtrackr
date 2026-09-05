@@ -75,11 +75,12 @@ public class Bucket4jAuthenticationRateLimiter implements AuthenticationRateLimi
     }
 
     @Override
-    public void reset(final AuthenticationAction action, final AuthenticationRateLimitKey key) {
-        if (action != AuthenticationAction.PASSWORD_LOGIN) {
+    public void refundSuccessfulPasswordLogin(final AuthenticationRateLimitKey key) {
+        final Bucket emailIpBucket = buckets.getIfPresent(emailIpKey(requireEmailAndIp(key)));
+        if (emailIpBucket == null) {
             return;
         }
-        buckets.invalidate(emailIpKey(requireEmailAndIp(key)));
+        emailIpBucket.addTokens(TOKENS_PER_ATTEMPT);
     }
 
     private void consumePasswordLogin(final AuthenticationRateLimitKey key) {
