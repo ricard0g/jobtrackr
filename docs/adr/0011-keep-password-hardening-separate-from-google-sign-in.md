@@ -1,0 +1,3 @@
+# Keep password hardening separate from Google Sign-In
+
+The Google Sign-In work keeps JobTrackr's existing BCrypt password storage and eight-character minimum instead of combining identity-provider support with a password migration. Registration, password creation, and password change share one validation policy that accepts spaces and Unicode without composition rules and enforces BCrypt's actual maximum of 72 UTF-8 bytes rather than 72 characters. A later password-hardening change can evaluate Argon2id, a longer minimum, and a breached-password blocklist with an explicit migration plan; this scope boundary avoids silently changing existing password behavior while new credential-management paths are introduced.
