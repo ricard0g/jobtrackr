@@ -1,5 +1,7 @@
 import { redirect } from "react-router";
 
+import { loginPathForRequest } from "@/lib/account-settings";
+
 import type {
 	Application,
 	ApplicationPatchRequest,
@@ -25,7 +27,7 @@ import type {
 } from "@/types/interview";
 import { API_BASE_URL, AUTH_BASE_URL } from "@/lib/api-config";
 import type { Tag, TagWriteRequest } from "@/types/tag";
-import type { User } from "@/types/user";
+import type { User, UserPatchRequest } from "@/types/user";
 import type { BaseCv, BaseCvDownload } from "@/types/base-cv";
 import type {
 	GeneratedCv,
@@ -333,7 +335,7 @@ async function apiRequestBlob(
 	return response.blob();
 }
 
-export async function requireSession() {
+export async function requireSession(request?: Request) {
 	if (accessToken) {
 		return;
 	}
@@ -341,12 +343,18 @@ export async function requireSession() {
 	try {
 		await refreshSession();
 	} catch {
-		throw redirect("/auth/login");
+		throw redirect(request ? loginPathForRequest(request) : "/auth/login");
 	}
 }
 
 export const api = {
 	getCurrentUser: () => apiRequest<User>("/user"),
+	patchUser: (request: UserPatchRequest) =>
+		apiRequest<User>("/user", {
+			method: "PATCH",
+			headers: jsonHeaders,
+			body: JSON.stringify(request),
+		}),
 	getBaseCvs: () => apiRequest<BaseCv[]>("/base-cvs"),
 	uploadBaseCv: (file: File) => {
 		const formData = new FormData();

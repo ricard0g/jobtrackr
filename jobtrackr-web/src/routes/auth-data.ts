@@ -2,6 +2,7 @@ import type { ActionFunctionArgs } from "react-router";
 import { redirect } from "react-router";
 
 import { ApiError, login, register } from "@/lib/api";
+import { redirectPathAfterAuth } from "@/lib/account-settings";
 import type { AuthActionData, LoginRequest, RegisterRequest } from "@/types/auth";
 
 export function publicAuthLoader() {
@@ -23,7 +24,7 @@ export async function loginAction({ request }: ActionFunctionArgs) {
 
 	try {
 		await login({ email, password } satisfies LoginRequest);
-		return redirect("/");
+		return redirect(redirectPathAfterAuth(request));
 	} catch (error) {
 		if (error instanceof ApiError) {
 			return {
@@ -68,7 +69,7 @@ export async function registerAction({ request }: ActionFunctionArgs) {
 			password,
 			displayName: displayName || undefined,
 		} satisfies RegisterRequest);
-		return redirect("/");
+		return redirect(redirectPathAfterAuth(request));
 	} catch (error) {
 		if (error instanceof ApiError) {
 			return {

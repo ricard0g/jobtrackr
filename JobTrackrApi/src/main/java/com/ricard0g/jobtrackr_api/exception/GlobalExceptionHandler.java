@@ -55,6 +55,12 @@ public class GlobalExceptionHandler {
                 .body(ErrorResponse.of("USER_NOT_FOUND", exception.getMessage()));
     }
 
+    @ExceptionHandler(EmailNotMutableException.class)
+    public ResponseEntity<ErrorResponse> handleEmailNotMutable(final EmailNotMutableException exception) {
+        return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                .body(ErrorResponse.of("EMAIL_NOT_MUTABLE", exception.getMessage()));
+    }
+
     @ExceptionHandler(CompanyNotFoundException.class)
     public ResponseEntity<ErrorResponse> handleCompanyNotFound(final CompanyNotFoundException exception) {
         return ResponseEntity.status(HttpStatus.NOT_FOUND)

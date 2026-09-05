@@ -3,6 +3,7 @@ import {
 	Form as RouterForm,
 	Link,
 	useActionData,
+	useLocation,
 	useNavigation,
 } from "react-router";
 import { BriefcaseBusiness, Loader2 } from "lucide-react";
@@ -50,15 +51,21 @@ function AuthShell({
 export function LoginPage() {
 	const actionData = useActionData() as AuthActionData | undefined;
 	const navigation = useNavigation();
+	const location = useLocation();
 	const isSubmitting = navigation.state !== "idle";
+	const registerTo = {
+		pathname: "/auth/register",
+		search: location.search,
+	};
 
 	return (
 		<AuthShell title="Log in" subtitle="Access your application board">
 			<RouterForm method="post" className="grid gap-4">
 				<FormField name="email">
-					<FormLabel>Email</FormLabel>
+					<FormLabel htmlFor="login-email">Email</FormLabel>
 					<FormControl asChild>
 						<Input
+							id="login-email"
 							name="email"
 							type="email"
 							autoComplete="email"
@@ -73,9 +80,10 @@ export function LoginPage() {
 				</FormField>
 
 				<FormField name="password">
-					<FormLabel>Password</FormLabel>
+					<FormLabel htmlFor="login-password">Password</FormLabel>
 					<FormControl asChild>
 						<Input
+							id="login-password"
 							name="password"
 							type="password"
 							autoComplete="current-password"
@@ -102,7 +110,7 @@ export function LoginPage() {
 
 			<p className="mt-4 text-sm text-medium-gray">
 				New to JobTrackr?{" "}
-				<Link className="font-medium text-darkest-accent underline" to="/auth/register">
+				<Link className="font-medium text-darkest-accent underline" to={registerTo}>
 					Create an account
 				</Link>
 			</p>
@@ -113,7 +121,12 @@ export function LoginPage() {
 export function RegisterPage() {
 	const actionData = useActionData() as AuthActionData | undefined;
 	const navigation = useNavigation();
+	const location = useLocation();
 	const isSubmitting = navigation.state !== "idle";
+	const loginTo = {
+		pathname: "/auth/login",
+		search: location.search,
+	};
 
 	return (
 		<AuthShell title="Create account" subtitle="Start tracking your search">
@@ -177,7 +190,7 @@ export function RegisterPage() {
 
 			<p className="mt-4 text-sm text-medium-gray">
 				Already have an account?{" "}
-				<Link className="font-medium text-darkest-accent underline" to="/auth/login">
+				<Link className="font-medium text-darkest-accent underline" to={loginTo}>
 					Log in
 				</Link>
 			</p>

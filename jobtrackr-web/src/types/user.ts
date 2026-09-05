@@ -1,3 +1,7 @@
+export type UserPatchRequest = {
+	displayName: string | null;
+};
+
 export interface User {
 	userId: string;
 	userEmail: string;

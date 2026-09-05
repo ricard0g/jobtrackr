@@ -1,6 +1,7 @@
 import { HttpResponse, http } from "msw";
 
 import { API_BASE_URL, AUTH_BASE_URL } from "@/lib/api-config";
+import { DISPLAY_NAME_MAX_LENGTH } from "@/lib/account-settings";
 import {
 	createOwnedTag,
 	findAccessibleCompany,
@@ -492,6 +493,35 @@ export const handlers = [
 		const state = loadState();
 		const auth = requireAuth(request, state);
 		if (auth instanceof Response) return auth;
+		return HttpResponse.json(auth.user);
+	}),
+
+	http.patch(`${API_BASE_URL}/user`, async ({ request }) => {
+		const state = loadState();
+		const auth = requireAuth(request, state);
+		if (auth instanceof Response) return auth;
+		const body = await readJson<{
+			displayName?: string | null;
+			userEmail?: string;
+			email?: string;
+		}>(request);
+		const emailMutationAttempted =
+			body.userEmail !== undefined || body.email !== undefined;
+		if (emailMutationAttempted) {
+			return errorJson(400, "EMAIL_NOT_MUTABLE", "Primary Email cannot be changed");
+		}
+
+		const displayName = normalizeOptional(body.displayName);
+		if (displayName && displayName.length > DISPLAY_NAME_MAX_LENGTH) {
+			return validationError([
+				toValidationField("displayName", "size must be between 0 and 160"),
+			]);
+		}
+
+		const timestamp = nowIso();
+		auth.user.userDisplayName = displayName;
+		auth.user.userUpdatedAt = timestamp;
+		saveState(state);
 		return HttpResponse.json(auth.user);
 	}),
 
