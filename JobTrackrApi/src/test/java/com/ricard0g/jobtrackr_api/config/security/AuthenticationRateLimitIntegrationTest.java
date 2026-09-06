@@ -28,6 +28,7 @@ import org.springframework.test.context.TestPropertySource;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.ResultActions;
+import org.springframework.test.web.servlet.request.MockHttpServletRequestBuilder;
 import org.springframework.test.web.servlet.request.RequestPostProcessor;
 import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
@@ -114,6 +115,25 @@ class AuthenticationRateLimitIntegrationTest {
         }
 
         login(email, WRONG_PASSWORD, clientIp)
+                .andExpect(status().isTooManyRequests())
+                .andExpect(jsonPath("$.code").value("RATE_LIMITED"))
+                .andExpect(header().exists(HttpHeaders.RETRY_AFTER));
+    }
+
+    @Test
+    void passwordLogin_spoofedForwardedForHeaderDoesNotBypassTheEmailIpLimit() throws Exception {
+        // given
+        final String email = uniqueEmail("xff");
+        final String clientIp = uniqueIp();
+
+        // when / then
+        for (int attempt = 0; attempt < PASSWORD_LOGIN_EMAIL_IP_LIMIT; attempt++) {
+            login(email, WRONG_PASSWORD, clientIp, "198.51.100." + (attempt + 1))
+                    .andExpect(status().isUnauthorized())
+                    .andExpect(jsonPath("$.code").value("INVALID_CREDENTIALS"));
+        }
+
+        login(email, WRONG_PASSWORD, clientIp, "198.51.100.99")
                 .andExpect(status().isTooManyRequests())
                 .andExpect(jsonPath("$.code").value("RATE_LIMITED"))
                 .andExpect(header().exists(HttpHeaders.RETRY_AFTER));
@@ -375,7 +395,15 @@ class AuthenticationRateLimitIntegrationTest {
     }
 
     private ResultActions login(final String email, final String password, final String clientIp) throws Exception {
-        return mockMvc.perform(post("/api/v1/auth/login")
+        return login(email, password, clientIp, null);
+    }
+
+    private ResultActions login(
+            final String email,
+            final String password,
+            final String clientIp,
+            final String forwardedFor) throws Exception {
+        MockHttpServletRequestBuilder request = post("/api/v1/auth/login")
                 .with(remoteAddr(clientIp))
                 .with(csrf())
                 .contentType(MediaType.APPLICATION_JSON)
@@ -384,7 +412,11 @@ class AuthenticationRateLimitIntegrationTest {
                           "email": "%s",
                           "password": "%s"
                         }
-                        """.formatted(email, password)));
+                        """.formatted(email, password));
+        if (forwardedFor != null) {
+            request = request.header("X-Forwarded-For", forwardedFor);
+        }
+        return mockMvc.perform(request);
     }
 
     private ResultActions register(final String email, final String clientIp) throws Exception {

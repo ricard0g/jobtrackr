@@ -215,7 +215,7 @@ The example listens on `127.0.0.1:18081` and proxies the complete hostname to `h
 
 The example sets `Host`, `X-Forwarded-Host`, `X-Forwarded-For`, and `X-Forwarded-Proto https`. The hop from cloudflared to system Nginx is HTTP, so `$scheme` would be wrong. Frontend Nginx already passes those headers through to Spring. Together they preserve the public hostname, the client chain, and the external HTTPS scheme so secure refresh and CSRF cookies are issued for `https://jobtrackr.example.test`.
 
-`JOBTRACKR_PUBLIC_ORIGIN` and `CORS_ALLOWED_ORIGINS` in `.env.vps` must be that same `https://` origin. Spring already uses `server.forward-headers-strategy=framework`.
+`JOBTRACKR_PUBLIC_ORIGIN` and `CORS_ALLOWED_ORIGINS` in `.env.vps` must be that same `https://` origin. Spring uses `server.forward-headers-strategy=native` so Tomcat only rewrites the client IP from `X-Forwarded-For` when the immediate peer is a trusted proxy, walking the chain from the right.
 
 ## Cloudflare Tunnel
 

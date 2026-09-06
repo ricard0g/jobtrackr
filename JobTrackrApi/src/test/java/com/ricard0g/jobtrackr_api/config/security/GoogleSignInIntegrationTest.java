@@ -319,12 +319,13 @@ class GoogleSignInIntegrationTest {
     void alreadyAuthenticatedDifferentUser_isNotReplaced() throws Exception {
         final RegisteredUser googleUser = registerUser("google-owner@example.com");
         final RegisteredUser passwordUser = registerUser("password-owner@example.com");
+        final OffsetDateTime linkedAt = OffsetDateTime.now().minusDays(1);
         linkGoogleIdentity(
                 googleUser.userId(),
                 "google-subject",
                 "google-owner@example.com",
-                OffsetDateTime.now().minusDays(1));
-        GOOGLE.planSuccess("google-subject", "google-owner@example.com", true);
+                linkedAt);
+        GOOGLE.planSuccess("google-subject", "stolen-google@example.com", true);
 
         final Cookie passwordRefresh = login(passwordUser.email()).getResponse().getCookie("refresh_token");
         final StartedFlow started = startGoogle("/api/v1/auth/oauth2/authorization/google");
@@ -341,6 +342,14 @@ class GoogleSignInIntegrationTest {
                         .cookie(passwordRefresh))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.user.userId").value(passwordUser.userId().toString()));
+
+        final UserIdentity identity = userIdentityRepository
+                .findByProviderAndSubject(IdentityProvider.GOOGLE, "google-subject")
+                .orElseThrow();
+        assertThat(identity.getUser().getUserId()).isEqualTo(googleUser.userId());
+        assertThat(identity.getLastUsedAt().toInstant().truncatedTo(ChronoUnit.MILLIS))
+                .isEqualTo(linkedAt.toInstant().truncatedTo(ChronoUnit.MILLIS));
+        assertThat(identity.getProviderEmail()).isEqualToIgnoringCase("google-owner@example.com");
     }
 
     @Test

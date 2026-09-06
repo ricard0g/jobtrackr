@@ -20,11 +20,9 @@ public class GoogleSignInService {
 
     private final UserIdentityRepository userIdentityRepository;
 
-    @Transactional
-    public User completeReturningGoogleSignIn(final String subject, final String verifiedEmail) {
-        final UserIdentity identity = userIdentityRepository
-                .findByProviderAndSubject(IdentityProvider.GOOGLE, subject)
-                .orElseThrow(() -> new GoogleSignInRejectedException(OAuthResultCode.FAILED));
+    @Transactional(readOnly = true)
+    public User requireReturningGoogleUser(final String subject) {
+        final UserIdentity identity = requireGoogleIdentity(subject);
         final User user = identity.getUser();
         final boolean unavailableUser = !user.isUserEnabled()
                 || user.isUserLocked()
@@ -32,9 +30,19 @@ public class GoogleSignInService {
         if (unavailableUser) {
             throw new GoogleSignInRejectedException(OAuthResultCode.FAILED);
         }
+        return user;
+    }
 
+    @Transactional
+    public void recordSuccessfulGoogleUse(final String subject, final String verifiedEmail) {
+        final UserIdentity identity = requireGoogleIdentity(subject);
         identity.recordSuccessfulUse(verifiedEmail, OffsetDateTime.now());
         userIdentityRepository.save(identity);
-        return user;
+    }
+
+    private UserIdentity requireGoogleIdentity(final String subject) {
+        return userIdentityRepository
+                .findByProviderAndSubject(IdentityProvider.GOOGLE, subject)
+                .orElseThrow(() -> new GoogleSignInRejectedException(OAuthResultCode.FAILED));
     }
 }
