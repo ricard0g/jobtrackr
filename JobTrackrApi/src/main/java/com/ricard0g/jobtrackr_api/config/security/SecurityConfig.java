@@ -2,6 +2,7 @@ package com.ricard0g.jobtrackr_api.config.security;
 
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.core.annotation.Order;
 import org.springframework.http.HttpHeaders;
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.authentication.ProviderManager;
@@ -43,6 +44,7 @@ public class SecurityConfig {
     }
 
     @Bean
+    @Order(2)
     public SecurityFilterChain securityFilterChain(final HttpSecurity http, final JwtAuthFilter jwtAuthFilter)
             throws Exception {
         final XorCsrfTokenRequestAttributeHandler csrfTokenRequestHandler = new XorCsrfTokenRequestAttributeHandler();
@@ -74,6 +76,8 @@ public class SecurityConfig {
                                 "/api/v1/auth/refresh",
                                 "/api/v1/auth/logout",
                                 "/api/v1/auth/csrf",
+                                "/api/v1/auth/providers",
+                                "/api/v1/auth/oauth2/**",
                                 "/actuator/health",
                                 "/actuator/health/liveness",
                                 "/actuator/health/readiness")

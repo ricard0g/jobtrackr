@@ -3,11 +3,13 @@ import {
 	Form as RouterForm,
 	Link,
 	useActionData,
+	useLoaderData,
 	useLocation,
 	useNavigation,
 } from "react-router";
 import { BriefcaseBusiness, Loader2 } from "lucide-react";
 
+import { ContinueWithGoogleButton } from "@/components/auth/ContinueWithGoogleButton";
 import { Button } from "@/components/ui/button";
 import {
 	FormControl,
@@ -16,6 +18,13 @@ import {
 	FormMessage,
 } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
+import { AUTH_BASE_URL } from "@/lib/api-config";
+import {
+	googleAuthorizationHref,
+	oauthResultMessage,
+	sanitizeOauthReturnTo,
+} from "@/lib/google-auth";
+import type { PublicAuthLoaderData } from "@/routes/auth-data";
 import type { AuthActionData } from "@/types/auth";
 
 function AuthShell({
@@ -48,6 +57,40 @@ function AuthShell({
 	);
 }
 
+function GoogleSignInSection({ screen }: { screen: "login" | "register" }) {
+	const { google, oauthResult } = useLoaderData() as PublicAuthLoaderData;
+	const location = useLocation();
+	const banner = oauthResult ? (
+		<p
+			role="status"
+			className="rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive"
+		>
+			{oauthResultMessage(oauthResult)}
+		</p>
+	) : null;
+	if (!google) {
+		return banner ? <div className="mb-4">{banner}</div> : null;
+	}
+
+	const href = googleAuthorizationHref(
+		screen,
+		sanitizeOauthReturnTo(new URLSearchParams(location.search).get("returnTo")),
+		`${AUTH_BASE_URL}/oauth2/authorization/google`,
+	);
+
+	return (
+		<div className="mb-4 grid gap-3">
+			{banner}
+			<ContinueWithGoogleButton href={href} />
+			<div className="flex items-center gap-3 text-xs uppercase tracking-wide text-medium-gray">
+				<span className="h-px flex-1 bg-light-gray" />
+				or
+				<span className="h-px flex-1 bg-light-gray" />
+			</div>
+		</div>
+	);
+}
+
 export function LoginPage() {
 	const actionData = useActionData() as AuthActionData | undefined;
 	const navigation = useNavigation();
@@ -60,6 +103,7 @@ export function LoginPage() {
 
 	return (
 		<AuthShell title="Log in" subtitle="Access your application board">
+			<GoogleSignInSection screen="login" />
 			<RouterForm method="post" className="grid gap-4">
 				<FormField name="email">
 					<FormLabel htmlFor="login-email">Email</FormLabel>
@@ -130,6 +174,7 @@ export function RegisterPage() {
 
 	return (
 		<AuthShell title="Create account" subtitle="Start tracking your search">
+			<GoogleSignInSection screen="register" />
 			<RouterForm method="post" className="grid gap-4">
 				<FormField name="displayName">
 					<FormLabel>Display name</FormLabel>

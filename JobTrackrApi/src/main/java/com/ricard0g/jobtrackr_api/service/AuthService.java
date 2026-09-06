@@ -91,6 +91,13 @@ public class AuthService {
         }
     }
 
+    @Transactional
+    public AuthTokenPair issueSession(final User user) {
+        user.setUserLastLoginAt(OffsetDateTime.now());
+        final User savedUser = userRepository.save(user);
+        return issueTokenPair(savedUser);
+    }
+
     private AuthTokenPair issueTokenPair(final User user) {
         final String accessToken = generateAccessToken(user);
         final IssuedRefreshToken issuedRefreshToken = refreshTokenService.createRefreshToken(user);

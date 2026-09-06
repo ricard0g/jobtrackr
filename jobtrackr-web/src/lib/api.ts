@@ -26,6 +26,7 @@ import type {
 	InterviewPutRequest,
 } from "@/types/interview";
 import { API_BASE_URL, AUTH_BASE_URL } from "@/lib/api-config";
+import type { AuthProviders } from "@/lib/google-auth";
 import type { Tag, TagWriteRequest } from "@/types/tag";
 import type { User, UserPatchRequest } from "@/types/user";
 import type { BaseCv, BaseCvDownload } from "@/types/base-cv";
@@ -218,6 +219,15 @@ async function authRequest<T>(
 	}
 
 	return readJson<T>(response);
+}
+
+export async function getAuthProviders(): Promise<AuthProviders> {
+	try {
+		const providers = await authRequest<AuthProviders>("/providers");
+		return { google: providers.google === true };
+	} catch {
+		return { google: false };
+	}
 }
 
 export async function login(request: LoginRequest) {

@@ -1,12 +1,41 @@
-import type { ActionFunctionArgs } from "react-router";
+import type { ActionFunctionArgs, LoaderFunctionArgs } from "react-router";
 import { redirect } from "react-router";
 
-import { ApiError, login, register } from "@/lib/api";
+import { ApiError, getAuthProviders, login, register } from "@/lib/api";
 import { redirectPathAfterAuth } from "@/lib/account-settings";
+import {
+	parseOAuthResult,
+	type OAuthResultCode,
+} from "@/lib/google-auth";
 import type { AuthActionData, LoginRequest, RegisterRequest } from "@/types/auth";
 
-export function publicAuthLoader() {
-	return null;
+const OAUTH_RESULT_FLASH_KEY = "jobtrackr.oauthResult";
+
+export type PublicAuthLoaderData = {
+	google: boolean;
+	oauthResult: OAuthResultCode | null;
+};
+
+export async function publicAuthLoader({
+	request,
+}: LoaderFunctionArgs): Promise<PublicAuthLoaderData> {
+	const url = new URL(request.url);
+	const incomingResult = parseOAuthResult(url.searchParams.get("oauthResult"));
+	if (incomingResult) {
+		sessionStorage.setItem(OAUTH_RESULT_FLASH_KEY, incomingResult);
+		url.searchParams.delete("oauthResult");
+		throw redirect(`${url.pathname}${url.search}${url.hash}`);
+	}
+
+	const flashedResult = parseOAuthResult(sessionStorage.getItem(OAUTH_RESULT_FLASH_KEY));
+	if (flashedResult) {
+		sessionStorage.removeItem(OAUTH_RESULT_FLASH_KEY);
+	}
+
+	return {
+		google: (await getAuthProviders()).google,
+		oauthResult: flashedResult,
+	};
 }
 
 export async function loginAction({ request }: ActionFunctionArgs) {

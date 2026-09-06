@@ -385,6 +385,10 @@ const patchNullable = <T>(
 };
 
 export const handlers = [
+	http.get(`${AUTH_BASE_URL}/providers`, () => {
+		return HttpResponse.json({ google: false });
+	}),
+
 	http.get(`${AUTH_BASE_URL}/csrf`, () => {
 		const state = loadState();
 		return HttpResponse.json({
