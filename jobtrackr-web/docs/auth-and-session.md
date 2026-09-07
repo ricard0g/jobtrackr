@@ -28,6 +28,14 @@ Base path: `/api/v1/auth`
 | GET | `/oauth2/authorization/google` | none | `302` to Google | Present when Google is enabled. Starts a purpose-bound OAuth session and requests `prompt=select_account`. |
 | GET | `/oauth2/callback/google` | none | `302` to the SPA | Completes Google Sign-In. Success returns to an allowlisted path with no tokens in the URL. Failure uses `oauthResult` codes only. |
 
+## User credential endpoints
+
+Base path: `/api/v1/user`
+
+| Method | Path | Body | Response | Notes |
+| --- | --- | --- | --- | --- |
+| PUT | `/password` | `{ currentPassword?, newPassword }` | `200 AuthResponse` | Authenticated. Change requires the current password when password sign-in exists. Confirmation is UI-only. Revokes every refresh family, increments auth version, and writes a new refresh cookie. |
+
 ## DTOs
 
 `LoginRequestDto`:
@@ -44,7 +52,7 @@ type LoginRequest = {
 ```ts
 type RegisterRequest = {
   email: string; // @NotNull @Email
-  password: string; // @NotNull @Size(min=8, max=72)
+  password: string; // @NotNull @ValidPassword (min 8 characters, max 72 UTF-8 bytes)
   displayName?: string | null;
 };
 ```

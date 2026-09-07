@@ -3,6 +3,7 @@ import { redirect } from "react-router";
 
 import { ApiError, getAuthProviders, login, register } from "@/lib/api";
 import { redirectPathAfterAuth } from "@/lib/account-settings";
+import { passwordPolicyError } from "@/lib/password-policy";
 import {
 	consumeOAuthResultParam,
 	type OAuthResultCode,
@@ -72,8 +73,9 @@ export async function registerAction({ request }: ActionFunctionArgs) {
 	const fieldErrors: Record<string, string> = {};
 
 	if (!email) fieldErrors.email = "Email is required.";
-	if (password.length < 8) {
-		fieldErrors.password = "Password must be at least 8 characters.";
+	const policyError = passwordPolicyError(password);
+	if (policyError) {
+		fieldErrors.password = policyError;
 	}
 
 	if (Object.keys(fieldErrors).length > 0) {

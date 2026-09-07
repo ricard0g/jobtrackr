@@ -16,6 +16,11 @@ export interface RegisterRequest extends LoginRequest {
 	displayName?: string;
 }
 
+export interface PasswordChangeRequest {
+	currentPassword: string;
+	newPassword: string;
+}
+
 export type AuthActionData = {
 	formError?: string;
 	fieldErrors?: Record<string, string>;

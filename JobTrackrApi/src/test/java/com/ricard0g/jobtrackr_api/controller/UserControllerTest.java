@@ -19,6 +19,7 @@ import org.springframework.http.MediaType;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 
+import com.ricard0g.jobtrackr_api.config.security.RefreshTokenCookieService;
 import com.ricard0g.jobtrackr_api.dto.UserDto.SignInMethodsResponseDto;
 import com.ricard0g.jobtrackr_api.dto.UserDto.SignInMethodsResponseDto.GoogleSignInMethodDto;
 import com.ricard0g.jobtrackr_api.dto.UserDto.SignInMethodsResponseDto.PasswordSignInMethodDto;
@@ -27,6 +28,7 @@ import com.ricard0g.jobtrackr_api.exception.GlobalExceptionHandler;
 import com.ricard0g.jobtrackr_api.exception.UserNotFoundException;
 import com.ricard0g.jobtrackr_api.security.ratelimit.AuthenticationRateLimiter;
 import com.ricard0g.jobtrackr_api.service.GoogleLinkIntentService;
+import com.ricard0g.jobtrackr_api.service.UserPasswordService;
 import com.ricard0g.jobtrackr_api.service.UserService;
 
 @WebMvcTest(controllers = UserController.class)
@@ -46,7 +48,13 @@ class UserControllerTest {
     private UserService userService;
 
     @MockitoBean
+    private UserPasswordService userPasswordService;
+
+    @MockitoBean
     private GoogleLinkIntentService googleLinkIntentService;
+
+    @MockitoBean
+    private RefreshTokenCookieService refreshTokenCookieService;
 
     @MockitoBean
     private AuthenticationRateLimiter authenticationRateLimiter;

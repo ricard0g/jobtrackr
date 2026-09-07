@@ -11,7 +11,7 @@ import type {
 	ApplicationCreateRequest,
 	StatusHistory,
 } from "@/types/application";
-import type { AuthResponse, LoginRequest, RegisterRequest } from "@/types/auth";
+import type { AuthResponse, LoginRequest, PasswordChangeRequest, RegisterRequest } from "@/types/auth";
 import type {
 	Company,
 	CompanyPage,
@@ -302,16 +302,19 @@ async function apiRequest<T>(
 		headers,
 	});
 
-	if (response.status === 401 && retry) {
-		await refreshSession();
-		return apiRequest<T>(path, init, false);
-	}
-
 	if (!response.ok) {
-		throw await parseApiError(
+		const error = await parseApiError(
 			response,
 			"No se pudo completar la solicitud.",
 		);
+		const expiredAccessToken =
+			response.status === 401 && retry && error.code !== "INVALID_CREDENTIALS";
+		if (expiredAccessToken) {
+			await refreshSession();
+			return apiRequest<T>(path, init, false);
+		}
+
+		throw error;
 	}
 
 	return readJson<T>(response);
@@ -334,13 +337,16 @@ async function apiRequestBlob(
 		headers,
 	});
 
-	if (response.status === 401 && retry) {
-		await refreshSession();
-		return apiRequestBlob(path, init, false);
-	}
-
 	if (!response.ok) {
-		throw await parseApiError(response, "Preview could not be loaded.");
+		const error = await parseApiError(response, "Preview could not be loaded.");
+		const expiredAccessToken =
+			response.status === 401 && retry && error.code !== "INVALID_CREDENTIALS";
+		if (expiredAccessToken) {
+			await refreshSession();
+			return apiRequestBlob(path, init, false);
+		}
+
+		throw error;
 	}
 
 	return response.blob();
@@ -367,6 +373,16 @@ export const api = {
 			body: JSON.stringify(request),
 		}),
 	getSignInMethods: () => apiRequest<SignInMethods>("/user/sign-in-methods"),
+	changePassword: async (request: PasswordChangeRequest) => {
+		const response = await apiRequest<AuthResponse>("/user/password", {
+			method: "PUT",
+			headers: jsonHeaders,
+			credentials: "include",
+			body: JSON.stringify(request),
+		});
+		setAccessToken(response.accessToken);
+		return response;
+	},
 	createGoogleLinkIntent: (currentPassword: string) =>
 		apiRequest<void>("/user/sign-in-identities/google/link-intent", {
 			method: "POST",

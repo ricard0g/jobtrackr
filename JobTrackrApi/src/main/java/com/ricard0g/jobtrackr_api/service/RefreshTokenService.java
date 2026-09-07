@@ -112,6 +112,11 @@ public class RefreshTokenService {
         refreshTokenRepository.revokeAllByFamilyId(familyId, revokedAt);
     }
 
+    @Transactional
+    public void revokeAllForUser(final UUID userId) {
+        refreshTokenRepository.revokeAllByUserId(userId, OffsetDateTime.now());
+    }
+
     private String generateOpaqueToken() {
         final byte[] tokenBytes = new byte[OPAQUE_TOKEN_BYTE_LENGTH];
         secureRandom.nextBytes(tokenBytes);

@@ -98,6 +98,11 @@ public class AuthService {
         return issueTokenPair(savedUser);
     }
 
+    @Transactional
+    public AuthTokenPair issueReplacementSession(final User user) {
+        return issueTokenPair(user);
+    }
+
     private AuthTokenPair issueTokenPair(final User user) {
         final String accessToken = generateAccessToken(user);
         final IssuedRefreshToken issuedRefreshToken = refreshTokenService.createRefreshToken(user);

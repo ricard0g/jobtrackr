@@ -2,6 +2,7 @@ import { HttpResponse, http } from "msw";
 
 import { API_BASE_URL, AUTH_BASE_URL } from "@/lib/api-config";
 import { DISPLAY_NAME_MAX_LENGTH } from "@/lib/account-settings";
+import { passwordPolicyError } from "@/lib/password-policy";
 import {
 	createOwnedTag,
 	findAccessibleCompany,
@@ -41,7 +42,7 @@ import type {
 	ApplicationStatus,
 	ApplicationStatusPatchRequest,
 } from "@/types/application";
-import type { AuthResponse, LoginRequest, RegisterRequest } from "@/types/auth";
+import type { AuthResponse, LoginRequest, PasswordChangeRequest, RegisterRequest } from "@/types/auth";
 import type { CompanyWriteRequest } from "@/types/company";
 import type { InterviewCreateRequest, InterviewOutcomePatchRequest, InterviewPutRequest } from "@/types/interview";
 import type { TagWriteRequest } from "@/types/tag";
@@ -428,11 +429,11 @@ export const handlers = [
 		const body = await readJson<RegisterRequest>(request);
 		const email = normalizeEmail(body.email ?? "");
 
-		if (!email || !body.password || body.password.length < 8) {
+		if (!email || !body.password || passwordPolicyError(body.password)) {
 			return validationError([
 				...(!email ? [toValidationField("email", "must be a well-formed email address")] : []),
-				...(!body.password || body.password.length < 8
-					? [toValidationField("password", "size must be between 8 and 72")]
+				...(passwordPolicyError(body.password ?? "")
+					? [toValidationField("password", passwordPolicyError(body.password ?? "") ?? "")]
 					: []),
 			]);
 		}
@@ -559,6 +560,46 @@ export const handlers = [
 		const auth = requireAuth(request, state);
 		if (auth instanceof Response) return auth;
 		return HttpResponse.json(toPublicSignInMethods(state, auth.user));
+	}),
+
+	http.put(`${API_BASE_URL}/user/password`, async ({ request }) => {
+		const state = loadState();
+		const auth = requireAuth(request, state);
+		if (auth instanceof Response) return auth;
+		const body = await readJson<PasswordChangeRequest>(request);
+		const credentials = state.credentials.find((entry) => entry.userId === auth.user.userId);
+		if (!credentials) {
+			return errorJson(
+				403,
+				"PASSWORD_CREATION_GRANT_REQUIRED",
+				"A Password Creation Grant is required to create password sign-in",
+			);
+		}
+		if (!body.currentPassword) {
+			return errorJson(400, "CURRENT_PASSWORD_REQUIRED", "Current password is required");
+		}
+		if (credentials.password !== body.currentPassword) {
+			return errorJson(401, "INVALID_CREDENTIALS", "Invalid email or password");
+		}
+		const policyError = passwordPolicyError(body.newPassword ?? "");
+		if (policyError) {
+			return validationError([toValidationField("newPassword", policyError)]);
+		}
+		if (body.newPassword === credentials.password) {
+			return errorJson(
+				400,
+				"PASSWORD_UNCHANGED",
+				"New password must be different from the current password",
+			);
+		}
+
+		const timestamp = nowIso();
+		credentials.password = body.newPassword;
+		auth.user.userPasswordChangedAt = timestamp;
+		auth.user.userUpdatedAt = timestamp;
+		const response = createAuthResponse(state, auth.user);
+		saveState(state);
+		return HttpResponse.json(response);
 	}),
 
 	http.post(`${API_BASE_URL}/user/sign-in-identities/google/link-intent`, async ({ request }) => {

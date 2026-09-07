@@ -476,6 +476,99 @@ describe("Account Settings Sign-in Methods", () => {
 		});
 	});
 
+	it("expands current-password, new-password, and confirmation when Change is chosen", async () => {
+		stubSignInMethods(passwordOnlyMethods());
+		const dialog = await openSignInMethods();
+
+		fireEvent.click(within(dialog).getByRole("button", { name: "Change" }));
+
+		expect(within(dialog).getByLabelText("Current password")).toBeTruthy();
+		expect(within(dialog).getByLabelText("New password")).toBeTruthy();
+		expect(within(dialog).getByLabelText("Confirm new password")).toBeTruthy();
+		expect(within(dialog).getByRole("button", { name: "Save password" })).toBeTruthy();
+	});
+
+	it("catches confirmation mismatch before submitting a password change", async () => {
+		stubSignInMethods(passwordOnlyMethods());
+		const dialog = await openSignInMethods();
+
+		fireEvent.click(within(dialog).getByRole("button", { name: "Change" }));
+		fireEvent.change(within(dialog).getByLabelText("Current password"), {
+			target: { value: demoCredentials.password },
+		});
+		fireEvent.change(within(dialog).getByLabelText("New password"), {
+			target: { value: "new-password-456" },
+		});
+		fireEvent.change(within(dialog).getByLabelText("Confirm new password"), {
+			target: { value: "does-not-match" },
+		});
+		fireEvent.click(within(dialog).getByRole("button", { name: "Save password" }));
+
+		expect(await within(dialog).findByText("New password and confirmation must match.")).toBeTruthy();
+		expect(within(dialog).queryByText(/Changed/)).toBeNull();
+		expect(screen.getByRole("dialog", { name: "Account Settings" })).toBeTruthy();
+	});
+
+	it("adopts the fresh session after a successful password change", async () => {
+		const dialog = await openSignInMethods();
+
+		fireEvent.click(within(dialog).getByRole("button", { name: "Change" }));
+		fireEvent.change(within(dialog).getByLabelText("Current password"), {
+			target: { value: demoCredentials.password },
+		});
+		fireEvent.change(within(dialog).getByLabelText("New password"), {
+			target: { value: "new-password-456" },
+		});
+		fireEvent.change(within(dialog).getByLabelText("Confirm new password"), {
+			target: { value: "new-password-456" },
+		});
+		fireEvent.click(within(dialog).getByRole("button", { name: "Save password" }));
+
+		expect(await within(dialog).findByText(/Changed/)).toBeTruthy();
+		expect(within(dialog).queryByLabelText("New password")).toBeNull();
+		expect(screen.getByRole("dialog", { name: "Account Settings" })).toBeTruthy();
+	});
+
+	it("keeps the User in Account Settings when password change current password is wrong", async () => {
+		let passwordAttempts = 0;
+		let refreshAttempts = 0;
+		mswServer.use(
+			http.put(`${API_BASE_URL}/user/password`, () => {
+				passwordAttempts += 1;
+				return HttpResponse.json(
+					{ code: "INVALID_CREDENTIALS", message: "Invalid email or password" },
+					{ status: 401 },
+				);
+			}),
+			http.post(`${AUTH_BASE_URL}/refresh`, () => {
+				refreshAttempts += 1;
+				return HttpResponse.json(
+					{ code: "INVALID_REFRESH_TOKEN", message: "Refresh should not run" },
+					{ status: 401 },
+				);
+			}),
+		);
+		const dialog = await openSignInMethods();
+
+		fireEvent.click(within(dialog).getByRole("button", { name: "Change" }));
+		fireEvent.change(within(dialog).getByLabelText("Current password"), {
+			target: { value: "wrong-password" },
+		});
+		fireEvent.change(within(dialog).getByLabelText("New password"), {
+			target: { value: "new-password-456" },
+		});
+		fireEvent.change(within(dialog).getByLabelText("Confirm new password"), {
+			target: { value: "new-password-456" },
+		});
+		fireEvent.click(within(dialog).getByRole("button", { name: "Save password" }));
+
+		expect(await within(dialog).findByText("Current password is incorrect.")).toBeTruthy();
+		expect(within(dialog).queryByText(/Changed/)).toBeNull();
+		expect(screen.getByRole("dialog", { name: "Account Settings" })).toBeTruthy();
+		expect(passwordAttempts).toBe(1);
+		expect(refreshAttempts).toBe(0);
+	});
+
 	it("expands current-password confirmation when Connect is chosen", async () => {
 		stubSignInMethods(passwordOnlyMethods());
 		const dialog = await openSignInMethods();

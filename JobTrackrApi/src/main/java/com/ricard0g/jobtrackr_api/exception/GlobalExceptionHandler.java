@@ -61,6 +61,26 @@ public class GlobalExceptionHandler {
                 .body(ErrorResponse.of("EMAIL_NOT_MUTABLE", exception.getMessage()));
     }
 
+    @ExceptionHandler(CurrentPasswordRequiredException.class)
+    public ResponseEntity<ErrorResponse> handleCurrentPasswordRequired(
+            final CurrentPasswordRequiredException exception) {
+        return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                .body(ErrorResponse.of("CURRENT_PASSWORD_REQUIRED", exception.getMessage()));
+    }
+
+    @ExceptionHandler(PasswordUnchangedException.class)
+    public ResponseEntity<ErrorResponse> handlePasswordUnchanged(final PasswordUnchangedException exception) {
+        return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                .body(ErrorResponse.of("PASSWORD_UNCHANGED", exception.getMessage()));
+    }
+
+    @ExceptionHandler(PasswordCreationGrantRequiredException.class)
+    public ResponseEntity<ErrorResponse> handlePasswordCreationGrantRequired(
+            final PasswordCreationGrantRequiredException exception) {
+        return ResponseEntity.status(HttpStatus.FORBIDDEN)
+                .body(ErrorResponse.of("PASSWORD_CREATION_GRANT_REQUIRED", exception.getMessage()));
+    }
+
     @ExceptionHandler(CompanyNotFoundException.class)
     public ResponseEntity<ErrorResponse> handleCompanyNotFound(final CompanyNotFoundException exception) {
         return ResponseEntity.status(HttpStatus.NOT_FOUND)

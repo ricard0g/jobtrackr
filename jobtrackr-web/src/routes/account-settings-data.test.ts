@@ -106,4 +106,94 @@ describe("accountSettingsAction", () => {
 			},
 		});
 	});
+
+	it("rejects a confirmation mismatch without calling the password API", async () => {
+		setAccessToken("test-token");
+		const changePassword = vi.spyOn(api, "changePassword");
+
+		const result = await accountSettingsAction(
+			actionArgs(
+				createFormData({
+					intent: "change-password",
+					currentPassword: "password123",
+					newPassword: "new-password-456",
+					confirmPassword: "does-not-match",
+				}),
+			),
+		);
+
+		expect(result).toEqual({
+			ok: false,
+			intent: "change-password",
+			fieldErrors: {
+				confirmPassword: "New password and confirmation must match.",
+			},
+		});
+		expect(changePassword).not.toHaveBeenCalled();
+	});
+
+	it("submits current and new password without confirmation", async () => {
+		setAccessToken("test-token");
+		const changePassword = vi.spyOn(api, "changePassword").mockResolvedValue({
+			accessToken: "fresh-access-token",
+			tokenType: "Bearer",
+			expiresIn: 900,
+			user: {
+				userId: "11111111-1111-1111-1111-111111111111",
+				userEmail: "demo@jobtrackr.local",
+				userDisplayName: "Demo User",
+				userPictureUrl: null,
+				userEnabled: true,
+				userLocked: false,
+				userDeletedAt: null,
+				userPasswordChangedAt: "2026-09-07T21:00:00.000Z",
+				userLastLoginAt: "2026-06-04T12:00:00.000Z",
+				userCreatedAt: "2026-06-04T12:00:00.000Z",
+				userUpdatedAt: "2026-09-07T21:00:00.000Z",
+			},
+		});
+
+		const result = await accountSettingsAction(
+			actionArgs(
+				createFormData({
+					intent: "change-password",
+					currentPassword: "password123",
+					newPassword: "new-password-456",
+					confirmPassword: "new-password-456",
+				}),
+			),
+		);
+
+		expect(result).toEqual({ ok: true, intent: "change-password" });
+		expect(changePassword).toHaveBeenCalledWith({
+			currentPassword: "password123",
+			newPassword: "new-password-456",
+		});
+	});
+
+	it("maps an incorrect current password on change to a field error", async () => {
+		setAccessToken("test-token");
+		vi.spyOn(api, "changePassword").mockRejectedValue(
+			new ApiError("Invalid email or password", 401, "INVALID_CREDENTIALS"),
+		);
+
+		const result = await accountSettingsAction(
+			actionArgs(
+				createFormData({
+					intent: "change-password",
+					currentPassword: "wrong-password",
+					newPassword: "new-password-456",
+					confirmPassword: "new-password-456",
+				}),
+			),
+		);
+
+		expect(result).toEqual({
+			ok: false,
+			intent: "change-password",
+			fieldErrors: {
+				currentPassword: "Current password is incorrect.",
+			},
+		});
+	});
 });

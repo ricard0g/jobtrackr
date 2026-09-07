@@ -4,6 +4,7 @@ import { redirect } from "react-router";
 import { DISPLAY_NAME_MAX_LENGTH } from "@/lib/account-settings";
 import { ApiError, api, requireSession } from "@/lib/api";
 import { AUTH_BASE_URL } from "@/lib/api-config";
+import { passwordPolicyError } from "@/lib/password-policy";
 import {
 	consumeOAuthResultParam,
 	googleLinkAuthorizationHref,
@@ -11,7 +12,7 @@ import {
 } from "@/lib/google-auth";
 import type { SignInMethods } from "@/types/sign-in-methods";
 
-export type AccountSettingsActionIntent = "profile" | "google-link";
+export type AccountSettingsActionIntent = "profile" | "google-link" | "change-password";
 
 export type AccountSettingsActionData = {
 	ok: boolean;
@@ -50,6 +51,9 @@ export async function accountSettingsAction({
 	const intent = String(formData.get("intent") ?? "profile");
 	if (intent === "google-link") {
 		return beginGoogleLink(formData);
+	}
+	if (intent === "change-password") {
+		return changePassword(formData);
 	}
 	return saveProfile(formData);
 }
@@ -143,3 +147,73 @@ async function beginGoogleLink(formData: FormData): Promise<AccountSettingsActio
 		};
 	}
 }
+
+async function changePassword(formData: FormData): Promise<AccountSettingsActionData> {
+	const currentPassword = String(formData.get("currentPassword") ?? "");
+	const newPassword = String(formData.get("newPassword") ?? "");
+	const confirmPassword = String(formData.get("confirmPassword") ?? "");
+	const fieldErrors: Record<string, string> = {};
+
+	if (currentPassword.length === 0) {
+		fieldErrors.currentPassword = "Current password is required.";
+	}
+
+	const policyError = passwordPolicyError(newPassword);
+	if (policyError) {
+		fieldErrors.newPassword = policyError;
+	}
+
+	if (newPassword !== confirmPassword) {
+		fieldErrors.confirmPassword = "New password and confirmation must match.";
+	}
+
+	if (Object.keys(fieldErrors).length > 0) {
+		return {
+			ok: false,
+			intent: "change-password",
+			fieldErrors,
+		};
+	}
+
+	try {
+		await api.changePassword({ currentPassword, newPassword });
+		return { ok: true, intent: "change-password" };
+	} catch (error) {
+		if (error instanceof ApiError) {
+			if (error.code === "INVALID_CREDENTIALS") {
+				return {
+					ok: false,
+					intent: "change-password",
+					fieldErrors: {
+						currentPassword: "Current password is incorrect.",
+					},
+				};
+			}
+			if (error.code === "PASSWORD_UNCHANGED") {
+				return {
+					ok: false,
+					intent: "change-password",
+					fieldErrors: {
+						newPassword: error.message,
+					},
+				};
+			}
+			return {
+				ok: false,
+				intent: "change-password",
+				formError: error.message,
+				fieldErrors: error.fieldErrors,
+			};
+		}
+
+		return {
+			ok: false,
+			intent: "change-password",
+			formError:
+				error instanceof Error
+					? error.message
+					: "Could not change password. Check your connection and try again.",
+		};
+	}
+}
+

@@ -339,9 +339,13 @@ function SignInMethodsContent({
 					</p>
 				) : null}
 				<div className="mt-3">
-					<Button type="button" variant="outline" size="sm">
-						{signInMethods.password.enabled ? "Change" : "Create"}
-					</Button>
+					{signInMethods.password.enabled ? (
+						<PasswordChangeForm />
+					) : (
+						<Button type="button" variant="outline" size="sm">
+							Create
+						</Button>
+					)}
 				</div>
 			</SignInMethodRow>
 			<SignInMethodRow title="Google">
@@ -409,6 +413,120 @@ function SignInMethodRow({
 			<h3 className="font-medium">{title}</h3>
 			<div className="mt-2 grid gap-1">{children}</div>
 		</div>
+	);
+}
+
+function PasswordChangeForm() {
+	const fetcher = useFetcher<AccountSettingsActionData>();
+	const [expanded, setExpanded] = useState(false);
+	const [currentPassword, setCurrentPassword] = useState("");
+	const [newPassword, setNewPassword] = useState("");
+	const [confirmPassword, setConfirmPassword] = useState("");
+	const [confirmError, setConfirmError] = useState<string | undefined>();
+	const submitting = fetcher.state !== "idle";
+	const changeResult = fetcher.data?.intent === "change-password" ? fetcher.data : undefined;
+	const succeeded = changeResult?.ok === true;
+
+	useEffect(() => {
+		if (!succeeded) return;
+		setExpanded(false);
+		setCurrentPassword("");
+		setNewPassword("");
+		setConfirmPassword("");
+		setConfirmError(undefined);
+	}, [succeeded]);
+
+	if (!expanded) {
+		return (
+			<Button type="button" variant="outline" size="sm" onClick={() => setExpanded(true)}>
+				Change
+			</Button>
+		);
+	}
+
+	const currentPasswordError =
+		changeResult?.ok === false ? changeResult.fieldErrors?.currentPassword : undefined;
+	const newPasswordError =
+		changeResult?.ok === false ? changeResult.fieldErrors?.newPassword : undefined;
+	const confirmationError =
+		confirmError ?? (changeResult?.ok === false ? changeResult.fieldErrors?.confirmPassword : undefined);
+	const formError = changeResult?.ok === false ? changeResult.formError : undefined;
+
+	return (
+		<fetcher.Form
+			method="post"
+			action={ACCOUNT_SETTINGS_PATH}
+			className="grid w-full gap-3"
+			onSubmit={(event) => {
+				if (newPassword !== confirmPassword) {
+					event.preventDefault();
+					setConfirmError("New password and confirmation must match.");
+				}
+			}}
+		>
+			<input type="hidden" name="intent" value="change-password" />
+			<FormField name="currentPassword">
+				<FormLabel htmlFor="change-current-password">Current password</FormLabel>
+				<FormControl asChild>
+					<Input
+						id="change-current-password"
+						name="currentPassword"
+						type="password"
+						autoComplete="current-password"
+						value={currentPassword}
+						onChange={(event) => setCurrentPassword(event.target.value)}
+						aria-invalid={Boolean(currentPasswordError)}
+						disabled={submitting}
+					/>
+				</FormControl>
+				{currentPasswordError ? <FormMessage>{currentPasswordError}</FormMessage> : null}
+			</FormField>
+			<FormField name="newPassword">
+				<FormLabel htmlFor="change-new-password">New password</FormLabel>
+				<FormControl asChild>
+					<Input
+						id="change-new-password"
+						name="newPassword"
+						type="password"
+						autoComplete="new-password"
+						value={newPassword}
+						onChange={(event) => setNewPassword(event.target.value)}
+						aria-invalid={Boolean(newPasswordError)}
+						disabled={submitting}
+					/>
+				</FormControl>
+				{newPasswordError ? <FormMessage>{newPasswordError}</FormMessage> : null}
+			</FormField>
+			<FormField name="confirmPassword">
+				<FormLabel htmlFor="change-confirm-password">Confirm new password</FormLabel>
+				<FormControl asChild>
+					<Input
+						id="change-confirm-password"
+						name="confirmPassword"
+						type="password"
+						autoComplete="new-password"
+						value={confirmPassword}
+						onChange={(event) => {
+							setConfirmPassword(event.target.value);
+							setConfirmError(undefined);
+						}}
+						aria-invalid={Boolean(confirmationError)}
+						disabled={submitting}
+					/>
+				</FormControl>
+				{confirmationError ? <FormMessage>{confirmationError}</FormMessage> : null}
+			</FormField>
+			{formError ? (
+				<p className="rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive">
+					{formError}
+				</p>
+			) : null}
+			<div>
+				<Button type="submit" size="sm" disabled={submitting}>
+					Save password
+				</Button>
+			</div>
+		</fetcher.Form>
 	);
 }
 
