@@ -88,6 +88,13 @@ public class User {
         return user;
     }
 
+    public static User googleJustInTime(final String verifiedEmail) {
+        final User user = new User();
+        user.setUserEmail(verifiedEmail);
+        user.setUserEmailVerified(true);
+        return user;
+    }
+
     public void advanceAuthenticationVersion() {
         userAuthVersion = userAuthVersion + 1;
     }

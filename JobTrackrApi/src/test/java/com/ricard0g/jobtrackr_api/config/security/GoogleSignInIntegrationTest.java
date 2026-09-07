@@ -18,6 +18,11 @@ import java.nio.charset.StandardCharsets;
 import java.time.OffsetDateTime;
 import java.time.temporal.ChronoUnit;
 import java.util.UUID;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import org.junit.jupiter.api.AfterAll;
@@ -79,6 +84,8 @@ class GoogleSignInIntegrationTest {
 
     private static final String PASSWORD = "password123";
     private static final String PUBLIC_ORIGIN = "http://localhost:5173";
+    private static final int CONCURRENT_JIT_ATTEMPTS = 2;
+    private static final int CONCURRENT_JIT_TIMEOUT_SECONDS = 10;
     private static final DockerImageName POSTGRES_IMAGE = DockerImageName.parse("postgres:16");
     private static final MockGoogleOidcServer GOOGLE = MockGoogleOidcServer.start();
 
@@ -202,16 +209,119 @@ class GoogleSignInIntegrationTest {
     }
 
     @Test
-    void unknownGoogleSubject_doesNotCreateAUser() throws Exception {
+    void unknownGoogleSubject_createsExactlyOneUserAndIdentityWhenEmailIsUnused() throws Exception {
+        final String email = uniqueEmail("jit");
+        final String subject = "jit-subject-" + UUID.randomUUID();
+        GOOGLE.planSuccess(subject, email, true);
         final long userCount = userRepository.count();
-        GOOGLE.planSuccess("unknown-subject", "unknown@example.com", true);
+        final long identityCount = userIdentityRepository.count();
 
         final MvcResult callback = completeGoogleSignIn("/api/v1/auth/oauth2/authorization/google");
 
+        assertThat(callback.getResponse().getRedirectedUrl()).isEqualTo(PUBLIC_ORIGIN + "/");
+        assertThat(callback.getResponse().getRedirectedUrl()).doesNotContain(email);
+        assertThat(callback.getResponse().getRedirectedUrl()).doesNotContain(subject);
+        final Cookie refreshCookie = callback.getResponse().getCookie("refresh_token");
+        assertThat(refreshCookie).isNotNull();
+
+        final MvcResult refreshed = mockMvc.perform(post("/api/v1/auth/refresh")
+                        .with(csrf())
+                        .cookie(refreshCookie))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.user.userEmail").value(email))
+                .andExpect(jsonPath("$.user.userDisplayName").isEmpty())
+                .andReturn();
+        final String userId = JsonPath.read(refreshed.getResponse().getContentAsString(), "$.user.userId");
+
+        assertThat(userRepository.count()).isEqualTo(userCount + 1);
+        assertThat(userIdentityRepository.count()).isEqualTo(identityCount + 1);
+        final User created = userRepository.findById(UUID.fromString(userId)).orElseThrow();
+        assertThat(created.getUserEmail()).isEqualTo(email);
+        assertThat(created.getUserPasswordHash()).isNull();
+        assertThat(created.getUserDisplayName()).isNull();
+        assertThat(created.isUserEmailVerified()).isTrue();
+        final UserIdentity identity = userIdentityRepository
+                .findByProviderAndSubject(IdentityProvider.GOOGLE, subject)
+                .orElseThrow();
+        assertThat(identity.getUser().getUserId()).isEqualTo(created.getUserId());
+        assertThat(identity.getProviderEmail()).isEqualToIgnoringCase(email);
+    }
+
+    @Test
+    void unknownGoogleSubject_withExistingPrimaryEmail_isRejectedWithoutLinking() throws Exception {
+        final RegisteredUser registered = registerUser("Taken@example.com");
+        final User existing = userRepository.findById(registered.userId()).orElseThrow();
+        existing.setUserEmailVerified(true);
+        userRepository.save(existing);
+        final String subject = "collision-subject-" + UUID.randomUUID();
+        GOOGLE.planSuccess(subject, "taken@example.com", true);
+        final long userCount = userRepository.count();
+        final long identityCount = userIdentityRepository.count();
+
+        final MvcResult callback = completeGoogleSignIn(
+                "/api/v1/auth/oauth2/authorization/google?screen=register");
+
         assertThat(callback.getResponse().getRedirectedUrl())
-                .isEqualTo(PUBLIC_ORIGIN + "/auth/login?oauthResult=failed");
+                .isEqualTo(PUBLIC_ORIGIN + "/auth/register?oauthResult=conflict");
+        assertThat(callback.getResponse().getRedirectedUrl()).doesNotContain("taken@example.com");
+        assertThat(callback.getResponse().getRedirectedUrl()).doesNotContain(subject);
         assertThat(callback.getResponse().getCookie("refresh_token")).isNull();
         assertThat(userRepository.count()).isEqualTo(userCount);
+        assertThat(userIdentityRepository.count()).isEqualTo(identityCount);
+        assertThat(userIdentityRepository.findByProviderAndSubject(IdentityProvider.GOOGLE, subject)).isEmpty();
+        assertThat(userRepository.findById(registered.userId()).orElseThrow().getUserEmail())
+                .isEqualToIgnoringCase("taken@example.com");
+    }
+
+    @Test
+    void incompleteGoogleIdentity_failsClosedWithoutCreatingAUser() throws Exception {
+        assertIncompleteGoogleIdentityFailsClosed(() -> GOOGLE.planMissingEmail());
+        assertIncompleteGoogleIdentityFailsClosed(
+                () -> GOOGLE.planSuccess("unverified-subject", uniqueEmail("unverified"), false));
+        assertIncompleteGoogleIdentityFailsClosed(
+                () -> GOOGLE.planMissingSubject(uniqueEmail("missing-sub")));
+    }
+
+    @Test
+    void concurrentCallbacksForTheSameNewIdentity_createOneUserAndOneIdentity() throws Exception {
+        final String email = uniqueEmail("race");
+        final String subject = "race-subject-" + UUID.randomUUID();
+        GOOGLE.planSuccess(subject, email, true);
+        final long userCount = userRepository.count();
+        final long identityCount = userIdentityRepository.count();
+        final ExecutorService executor = Executors.newFixedThreadPool(CONCURRENT_JIT_ATTEMPTS);
+        final CountDownLatch start = new CountDownLatch(1);
+
+        try {
+            final Future<MvcResult> first = executor.submit(() -> {
+                start.await();
+                return completeGoogleSignIn("/api/v1/auth/oauth2/authorization/google");
+            });
+            final Future<MvcResult> second = executor.submit(() -> {
+                start.await();
+                return completeGoogleSignIn("/api/v1/auth/oauth2/authorization/google");
+            });
+            start.countDown();
+            final MvcResult firstCallback = first.get(CONCURRENT_JIT_TIMEOUT_SECONDS, TimeUnit.SECONDS);
+            final MvcResult secondCallback = second.get(CONCURRENT_JIT_TIMEOUT_SECONDS, TimeUnit.SECONDS);
+
+            assertThat(firstCallback.getResponse().getRedirectedUrl()).isEqualTo(PUBLIC_ORIGIN + "/");
+            assertThat(secondCallback.getResponse().getRedirectedUrl()).isEqualTo(PUBLIC_ORIGIN + "/");
+            assertThat(firstCallback.getResponse().getCookie("refresh_token")).isNotNull();
+            assertThat(secondCallback.getResponse().getCookie("refresh_token")).isNotNull();
+            assertThat(firstCallback.getResponse().getRedirectedUrl()).doesNotContain(email);
+            assertThat(secondCallback.getResponse().getRedirectedUrl()).doesNotContain(subject);
+        } finally {
+            executor.shutdownNow();
+        }
+
+        assertThat(userRepository.count()).isEqualTo(userCount + 1);
+        assertThat(userIdentityRepository.count()).isEqualTo(identityCount + 1);
+        final UserIdentity identity = userIdentityRepository
+                .findByProviderAndSubject(IdentityProvider.GOOGLE, subject)
+                .orElseThrow();
+        assertThat(identity.getUser().getUserEmail()).isEqualToIgnoringCase(email);
+        assertThat(userRepository.findByUserEmail(email)).isPresent();
     }
 
     @Test
@@ -398,6 +508,21 @@ class GoogleSignInIntegrationTest {
         assertThat(identity.getUser().getUserId()).isEqualTo(registered.userId());
     }
 
+    private void assertIncompleteGoogleIdentityFailsClosed(final Runnable planner) throws Exception {
+        userIdentityRepository.deleteAll();
+        planner.run();
+        final long userCount = userRepository.count();
+        final long identityCount = userIdentityRepository.count();
+
+        final MvcResult callback = completeGoogleSignIn("/api/v1/auth/oauth2/authorization/google");
+
+        assertThat(callback.getResponse().getRedirectedUrl())
+                .isEqualTo(PUBLIC_ORIGIN + "/auth/login?oauthResult=failed");
+        assertThat(callback.getResponse().getCookie("refresh_token")).isNull();
+        assertThat(userRepository.count()).isEqualTo(userCount);
+        assertThat(userIdentityRepository.count()).isEqualTo(identityCount);
+    }
+
     private MvcResult completeGoogleSignIn(final String startPath) throws Exception {
         final StartedFlow started = startGoogle(startPath);
         return performCallback(
@@ -486,6 +611,10 @@ class GoogleSignInIntegrationTest {
                 HttpRequest.newBuilder(URI.create(googleLocation)).GET().build(),
                 HttpResponse.BodyHandlers.discarding());
         return response.headers().firstValue("location").orElseThrow();
+    }
+
+    private static String uniqueEmail(final String prefix) {
+        return prefix + "-" + UUID.randomUUID() + "@example.com";
     }
 
     private RegisteredUser registerUser(final String email) throws Exception {

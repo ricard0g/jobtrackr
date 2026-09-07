@@ -61,7 +61,7 @@ public class GoogleOAuthSuccessHandler implements AuthenticationSuccessHandler {
                 throw new GoogleSignInRejectedException(OAuthResultCode.FAILED);
             }
 
-            final User signedInUser = googleSignInService.requireReturningGoogleUser(subject);
+            final User signedInUser = googleSignInService.resolveGoogleSignIn(subject, email);
             refuseToReplaceDifferentUser(request, signedInUser);
             googleSignInService.recordSuccessfulGoogleUse(subject, email);
 

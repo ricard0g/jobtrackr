@@ -46,4 +46,12 @@ describe("oauthResultMessage", () => {
 			"Google sign-in failed. Try again or use your password.",
 		);
 	});
+
+	it("directs collisions to password sign-in without exposing Google details", () => {
+		const message = oauthResultMessage("conflict");
+		expect(message).toBe(
+			"This Google identity is not linked to your JobTrackr User. Sign in with your password to connect it.",
+		);
+		expect(message).not.toMatch(/id_token|access_token|@/);
+	});
 });

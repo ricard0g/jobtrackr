@@ -97,6 +97,11 @@ public final class MockGoogleOidcServer implements AutoCloseable {
         plannedToken = PlannedToken.VALID;
     }
 
+    public void planMissingSubject(final String email) {
+        plannedAuthorization = PlannedAuthorization.success(null, email, true);
+        plannedToken = PlannedToken.VALID;
+    }
+
     @Override
     public void close() {
         httpServer.stop(0);
@@ -169,11 +174,13 @@ public final class MockGoogleOidcServer implements AutoCloseable {
         final Instant now = Instant.now();
         final JWTClaimsSet.Builder claims = new JWTClaimsSet.Builder()
                 .issuer(issuer())
-                .subject(pending.subject())
                 .audience(CLIENT_ID)
                 .issueTime(Date.from(now))
                 .expirationTime(Date.from(now.plusSeconds(300)))
                 .claim("nonce", pending.nonce());
+        if (pending.subject() != null) {
+            claims.subject(pending.subject());
+        }
         if (pending.email() != null) {
             claims.claim("email", pending.email());
         }
