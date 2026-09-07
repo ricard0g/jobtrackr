@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
 	consumeOAuthResultParam,
 	googleAuthorizationHref,
+	googleLinkAuthorizationHref,
 	oauthResultMessage,
 	parseOAuthResult,
 	sanitizeOauthReturnTo,
@@ -54,6 +55,22 @@ describe("oauthResultMessage", () => {
 			"This Google identity is not linked to your JobTrackr User. Sign in with your password to connect it.",
 		);
 		expect(message).not.toMatch(/id_token|access_token|@/);
+	});
+
+	it("describes an identity mismatch without exposing Google details", () => {
+		const message = oauthResultMessage("mismatch");
+		expect(message).toBe("That Google identity does not match your Primary Email.");
+		expect(message).not.toMatch(/id_token|access_token|sub=/);
+	});
+});
+
+describe("googleLinkAuthorizationHref", () => {
+	it("returns to Account Settings without requesting the account chooser in the URL", () => {
+		const href = googleLinkAuthorizationHref("/api/v1/auth/oauth2/authorization/google");
+		expect(href).toBe(
+			"/api/v1/auth/oauth2/authorization/google?returnTo=%2Fsettings%2Faccount",
+		);
+		expect(href).not.toContain("prompt=");
 	});
 });
 

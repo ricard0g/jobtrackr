@@ -1,12 +1,14 @@
 import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { HttpResponse, http } from "msw";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { createMemoryRouter, RouterProvider } from "react-router";
 
 import App from "@/App";
 import { login } from "@/lib/api";
 import { API_BASE_URL } from "@/lib/api-config";
 import { ACCOUNT_SETTINGS_PATH } from "@/lib/account-settings";
+import { AUTH_BASE_URL } from "@/lib/api-config";
+import * as googleAuth from "@/lib/google-auth";
 import { appAction, appLoader, appShouldRevalidate } from "@/routes/app-data";
 import { accountSettingsAction, accountSettingsLoader } from "@/routes/account-settings-data";
 import { AccountSettingsFallbackRoute } from "@/routes/AccountSettingsRoute";
@@ -20,6 +22,7 @@ startMsw();
 afterEach(() => {
 	cleanup();
 	window.sessionStorage.clear();
+	vi.restoreAllMocks();
 });
 
 const demoCredentials = {
@@ -468,6 +471,95 @@ describe("Account Settings Sign-in Methods", () => {
 		expect(await within(dialog).findByText(/Changed/)).toBeTruthy();
 		expect(within(dialog).getByRole("status").textContent).toContain("Google sign-in failed");
 		expect(signInMethodReads).toBeGreaterThan(readsBeforeReturn);
+		await waitFor(() => {
+			expect(router.state.location.search).not.toContain("oauthResult");
+		});
+	});
+
+	it("expands current-password confirmation when Connect is chosen", async () => {
+		stubSignInMethods(passwordOnlyMethods());
+		const dialog = await openSignInMethods();
+
+		fireEvent.click(within(dialog).getByRole("button", { name: "Connect" }));
+
+		expect(within(dialog).getByLabelText("Current password")).toBeTruthy();
+		expect(within(dialog).getByRole("button", { name: "Continue to Google" })).toBeTruthy();
+	});
+
+	it("warns before expanding Connect when Profile edits are dirty", async () => {
+		stubSignInMethods(passwordOnlyMethods());
+		const dialog = await openSignInMethods();
+		fireEvent.change(within(dialog).getByLabelText("Display name"), {
+			target: { value: "Changed name" },
+		});
+		fireEvent.click(within(dialog).getByRole("button", { name: "Connect" }));
+
+		const confirm = await screen.findByRole("alertdialog", {
+			name: "Discard unsaved Profile changes?",
+		});
+		expect(within(dialog).queryByLabelText("Current password")).toBeNull();
+		fireEvent.click(within(confirm).getByRole("button", { name: "Keep editing" }));
+		expect(within(dialog).queryByLabelText("Current password")).toBeNull();
+
+		fireEvent.click(within(dialog).getByRole("button", { name: "Connect" }));
+		fireEvent.click(
+			within(await screen.findByRole("alertdialog", { name: "Discard unsaved Profile changes?" })).getByRole(
+				"button",
+				{ name: "Discard" },
+			),
+		);
+
+		expect(await within(dialog).findByLabelText("Current password")).toBeTruthy();
+		expect((within(dialog).getByLabelText("Display name") as HTMLInputElement).value).toBe("Demo User");
+	});
+
+	it("leaves for Google after a successful link-intent", async () => {
+		stubSignInMethods(passwordOnlyMethods());
+		const redirect = vi.spyOn(googleAuth, "redirectToGoogleAuthorization").mockImplementation(() => undefined);
+		const dialog = await openSignInMethods();
+
+		fireEvent.click(within(dialog).getByRole("button", { name: "Connect" }));
+		fireEvent.change(within(dialog).getByLabelText("Current password"), {
+			target: { value: demoCredentials.password },
+		});
+		fireEvent.click(within(dialog).getByRole("button", { name: "Continue to Google" }));
+
+		await waitFor(() => {
+			expect(redirect).toHaveBeenCalledWith(
+				`${AUTH_BASE_URL}/oauth2/authorization/google?returnTo=${encodeURIComponent(ACCOUNT_SETTINGS_PATH)}`,
+			);
+		});
+	});
+
+	it("keeps the User in Account Settings when the current password is wrong", async () => {
+		stubSignInMethods(passwordOnlyMethods());
+		const redirect = vi.spyOn(googleAuth, "redirectToGoogleAuthorization").mockImplementation(() => undefined);
+		const dialog = await openSignInMethods();
+
+		fireEvent.click(within(dialog).getByRole("button", { name: "Connect" }));
+		fireEvent.change(within(dialog).getByLabelText("Current password"), {
+			target: { value: "wrong-password" },
+		});
+		fireEvent.click(within(dialog).getByRole("button", { name: "Continue to Google" }));
+
+		expect(await within(dialog).findByText("Current password is incorrect.")).toBeTruthy();
+		expect(redirect).not.toHaveBeenCalled();
+		expect(screen.getByRole("dialog", { name: "Account Settings" })).toBeTruthy();
+	});
+
+	it("shows a generic mismatch banner after a linking OAuth return", async () => {
+		stubSignInMethods(passwordOnlyMethods());
+		await authenticateDemoUser();
+		const router = renderApp(["/"]);
+		await screen.findByText("Kanban page");
+
+		await router.navigate(`${ACCOUNT_SETTINGS_PATH}?oauthResult=mismatch`);
+
+		const dialog = await screen.findByRole("dialog", { name: "Account Settings" });
+		expect(within(dialog).getByRole("status").textContent).toBe(
+			"That Google identity does not match your Primary Email.",
+		);
+		expect(dialog.textContent).not.toMatch(/id_token|sub=|@gmail/);
 		await waitFor(() => {
 			expect(router.state.location.search).not.toContain("oauthResult");
 		});

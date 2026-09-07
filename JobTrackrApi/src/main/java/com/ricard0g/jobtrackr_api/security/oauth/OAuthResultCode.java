@@ -5,7 +5,8 @@ public enum OAuthResultCode {
     EXPIRED("expired"),
     UNAVAILABLE("unavailable"),
     FAILED("failed"),
-    CONFLICT("conflict");
+    CONFLICT("conflict"),
+    MISMATCH("mismatch");
 
     private final String queryValue;
 

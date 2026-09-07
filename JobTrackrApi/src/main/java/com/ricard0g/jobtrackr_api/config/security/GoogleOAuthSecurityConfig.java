@@ -21,6 +21,7 @@ import com.ricard0g.jobtrackr_api.security.oauth.GoogleOAuthFailureHandler;
 import com.ricard0g.jobtrackr_api.security.oauth.GoogleOAuthStartFilter;
 import com.ricard0g.jobtrackr_api.security.oauth.GoogleOAuthSuccessHandler;
 import com.ricard0g.jobtrackr_api.security.ratelimit.AuthenticationRateLimiter;
+import com.ricard0g.jobtrackr_api.service.RefreshTokenService;
 
 import lombok.RequiredArgsConstructor;
 
@@ -36,6 +37,8 @@ public class GoogleOAuthSecurityConfig {
     private final GoogleAuthProperties googleAuthProperties;
     private final AuthenticationRateLimiter authenticationRateLimiter;
     private final OauthSessionCookieService oauthSessionCookieService;
+    private final RefreshTokenCookieService refreshTokenCookieService;
+    private final RefreshTokenService refreshTokenService;
     private final GoogleOAuthSuccessHandler googleOAuthSuccessHandler;
     private final GoogleOAuthFailureHandler googleOAuthFailureHandler;
     private final CorsConfigurationSource corsConfigurationSource;
@@ -72,7 +75,9 @@ public class GoogleOAuthSecurityConfig {
 
         final GoogleOAuthStartFilter startFilter = new GoogleOAuthStartFilter(
                 authenticationRateLimiter,
-                oauthSessionCookieService);
+                oauthSessionCookieService,
+                refreshTokenCookieService,
+                refreshTokenService);
 
         return http
                 .securityMatcher("/api/v1/auth/oauth2/**")

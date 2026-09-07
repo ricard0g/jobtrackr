@@ -2,6 +2,7 @@ package com.ricard0g.jobtrackr_api.security.oauth;
 
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
+import java.util.UUID;
 
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
@@ -9,10 +10,13 @@ import org.springframework.http.MediaType;
 import org.springframework.web.filter.OncePerRequestFilter;
 
 import com.ricard0g.jobtrackr_api.config.security.OauthSessionCookieService;
+import com.ricard0g.jobtrackr_api.config.security.RefreshTokenCookieService;
 import com.ricard0g.jobtrackr_api.exception.RateLimitedException;
+import com.ricard0g.jobtrackr_api.model.User;
 import com.ricard0g.jobtrackr_api.security.ratelimit.AuthenticationAction;
 import com.ricard0g.jobtrackr_api.security.ratelimit.AuthenticationRateLimitKey;
 import com.ricard0g.jobtrackr_api.security.ratelimit.AuthenticationRateLimiter;
+import com.ricard0g.jobtrackr_api.service.RefreshTokenService;
 
 import jakarta.annotation.Nonnull;
 import jakarta.servlet.FilterChain;
@@ -31,6 +35,8 @@ public class GoogleOAuthStartFilter extends OncePerRequestFilter {
 
     private final AuthenticationRateLimiter authenticationRateLimiter;
     private final OauthSessionCookieService oauthSessionCookieService;
+    private final RefreshTokenCookieService refreshTokenCookieService;
+    private final RefreshTokenService refreshTokenService;
 
     @Override
     protected boolean shouldNotFilter(@Nonnull final HttpServletRequest request) {
@@ -53,8 +59,37 @@ public class GoogleOAuthStartFilter extends OncePerRequestFilter {
             return;
         }
 
-        replaceOauthSession(request, response);
+        if (!preserveProtectedOauthSession(request)) {
+            replaceOauthSession(request, response);
+        }
         filterChain.doFilter(request, response);
+    }
+
+    private boolean preserveProtectedOauthSession(final HttpServletRequest request) {
+        final HttpSession session = request.getSession(false);
+        if (session == null) {
+            return false;
+        }
+        final boolean linkGooglePurpose =
+                OAuthPurpose.LINK_GOOGLE.name().equals(session.getAttribute(OAuthSession.PURPOSE_ATTRIBUTE));
+        if (!linkGooglePurpose) {
+            return false;
+        }
+        final Object boundUserId = session.getAttribute(OAuthSession.USER_ID_ATTRIBUTE);
+        if (!(boundUserId instanceof String boundUserIdValue)) {
+            return false;
+        }
+        final UUID refreshUserId = refreshTokenService
+                .findActiveUser(refreshTokenCookieService.readRefreshTokenCookie(request))
+                .map(User::getUserId)
+                .orElse(null);
+        final boolean boundUserMatchesRefresh =
+                refreshUserId != null && boundUserIdValue.equals(refreshUserId.toString());
+        if (!boundUserMatchesRefresh) {
+            return false;
+        }
+        session.setMaxInactiveInterval(OAuthSession.TIMEOUT_SECONDS);
+        return true;
     }
 
     private void replaceOauthSession(final HttpServletRequest request, final HttpServletResponse response) {

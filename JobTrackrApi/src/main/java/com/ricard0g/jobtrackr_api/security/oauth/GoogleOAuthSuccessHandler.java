@@ -51,7 +51,7 @@ public class GoogleOAuthSuccessHandler implements AuthenticationSuccessHandler {
         final String returnTo = sessionReturnTo(session);
 
         try {
-            requireSignInPurpose(session);
+            final OAuthPurpose purpose = requirePurpose(session);
             final OidcUser oidcUser = requireOidcUser(authentication);
             final String subject = oidcUser.getSubject();
             final String email = oidcUser.getEmail();
@@ -59,6 +59,11 @@ public class GoogleOAuthSuccessHandler implements AuthenticationSuccessHandler {
             final boolean missingIdentityClaims = isBlank(subject) || isBlank(email) || !emailVerified;
             if (missingIdentityClaims) {
                 throw new GoogleSignInRejectedException(OAuthResultCode.FAILED);
+            }
+
+            if (purpose == OAuthPurpose.LINK_GOOGLE) {
+                completeGoogleLink(request, response, session, subject, email, returnTo);
+                return;
             }
 
             final UUID currentUserId = currentSessionUserId(request);
@@ -74,21 +79,47 @@ public class GoogleOAuthSuccessHandler implements AuthenticationSuccessHandler {
                     tokenPair.refreshExpiresAt());
             log.info(
                     "[GoogleSignIn] - COMPLETE: outcome: success, purpose: {}, userId: {}",
-                    OAuthPurpose.SIGN_IN,
+                    purpose,
                     signedInUser.getUserId());
             terminateOauthSession(request, response);
             response.sendRedirect(OAuthRedirects.successLocation(
                     googleAuthProperties.normalizedPublicOrigin(),
                     returnTo));
         } catch (GoogleSignInRejectedException exception) {
-            redirectFailure(request, response, failurePath, exception.resultCode());
+            redirectFailure(request, response, failurePath, exception.resultCode(), sessionPurpose(session));
         } catch (RuntimeException exception) {
             log.warn(
                     "[GoogleSignIn] - COMPLETE: outcome: failed, purpose: {}, errorMessage: {}",
-                    OAuthPurpose.SIGN_IN,
+                    sessionPurpose(session),
                     exception.getClass().getSimpleName());
-            redirectFailure(request, response, failurePath, OAuthResultCode.FAILED);
+            redirectFailure(request, response, failurePath, OAuthResultCode.FAILED, sessionPurpose(session));
         }
+    }
+
+    private void completeGoogleLink(
+            final HttpServletRequest request,
+            final HttpServletResponse response,
+            final HttpSession session,
+            final String subject,
+            final String email,
+            final String returnTo) throws IOException {
+        final UUID boundUserId = boundSessionUserId(session);
+        final UUID refreshUserId = currentSessionUserId(request);
+        final boolean refreshBelongsToBoundUser =
+                refreshUserId != null && refreshUserId.equals(boundUserId);
+        if (!refreshBelongsToBoundUser) {
+            throw new GoogleSignInRejectedException(OAuthResultCode.EXPIRED);
+        }
+
+        googleSignInService.linkGoogleIdentity(boundUserId, subject, email);
+        log.info(
+                "[GoogleSignIn] - COMPLETE: outcome: success, purpose: {}, userId: {}",
+                OAuthPurpose.LINK_GOOGLE,
+                boundUserId);
+        terminateOauthSession(request, response);
+        response.sendRedirect(OAuthRedirects.successLocation(
+                googleAuthProperties.normalizedPublicOrigin(),
+                returnTo));
     }
 
     private void refuseUnknownGoogleSignInWhileAuthenticated(final UUID currentUserId, final String subject) {
@@ -120,11 +151,12 @@ public class GoogleOAuthSuccessHandler implements AuthenticationSuccessHandler {
             final HttpServletRequest request,
             final HttpServletResponse response,
             final String failurePath,
-            final OAuthResultCode resultCode) throws IOException {
+            final OAuthResultCode resultCode,
+            final OAuthPurpose purpose) throws IOException {
         log.info(
                 "[GoogleSignIn] - COMPLETE: outcome: {}, purpose: {}",
                 resultCode.queryValue(),
-                OAuthPurpose.SIGN_IN);
+                purpose);
         terminateOauthSession(request, response);
         response.sendRedirect(OAuthRedirects.failureLocation(
                 googleAuthProperties.normalizedPublicOrigin(),
@@ -145,14 +177,44 @@ public class GoogleOAuthSuccessHandler implements AuthenticationSuccessHandler {
         response.setHeader("Referrer-Policy", REFERRER_POLICY_NO_REFERRER);
     }
 
-    private static void requireSignInPurpose(final HttpSession session) {
+    private static OAuthPurpose requirePurpose(final HttpSession session) {
         if (session == null) {
             throw new GoogleSignInRejectedException(OAuthResultCode.EXPIRED);
         }
         final Object purpose = session.getAttribute(OAuthSession.PURPOSE_ATTRIBUTE);
-        if (!OAuthPurpose.SIGN_IN.name().equals(purpose)) {
+        if (OAuthPurpose.LINK_GOOGLE.name().equals(purpose)) {
+            return OAuthPurpose.LINK_GOOGLE;
+        }
+        if (OAuthPurpose.SIGN_IN.name().equals(purpose)) {
+            return OAuthPurpose.SIGN_IN;
+        }
+        throw new GoogleSignInRejectedException(OAuthResultCode.EXPIRED);
+    }
+
+    private static OAuthPurpose sessionPurpose(final HttpSession session) {
+        if (session == null) {
+            return OAuthPurpose.SIGN_IN;
+        }
+        final Object purpose = session.getAttribute(OAuthSession.PURPOSE_ATTRIBUTE);
+        if (OAuthPurpose.LINK_GOOGLE.name().equals(purpose)) {
+            return OAuthPurpose.LINK_GOOGLE;
+        }
+        return OAuthPurpose.SIGN_IN;
+    }
+
+    private static UUID boundSessionUserId(final HttpSession session) {
+        if (session == null) {
             throw new GoogleSignInRejectedException(OAuthResultCode.EXPIRED);
         }
+        final Object boundUserId = session.getAttribute(OAuthSession.USER_ID_ATTRIBUTE);
+        if (boundUserId instanceof String value) {
+            try {
+                return UUID.fromString(value);
+            } catch (final IllegalArgumentException ignored) {
+                throw new GoogleSignInRejectedException(OAuthResultCode.EXPIRED);
+            }
+        }
+        throw new GoogleSignInRejectedException(OAuthResultCode.EXPIRED);
     }
 
     private static OidcUser requireOidcUser(final Authentication authentication) {

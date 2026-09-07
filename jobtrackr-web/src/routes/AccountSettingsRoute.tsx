@@ -1,5 +1,5 @@
 import { X } from "lucide-react";
-import { useEffect, useState, type ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import {
 	useBlocker,
 	useFetcher,
@@ -16,8 +16,8 @@ import {
 	formatSignInTimestamp,
 	isAccountSettingsLocation,
 } from "@/lib/account-settings";
-import type { AccountLoaderData } from "@/lib/api";
-import { oauthResultMessage } from "@/lib/google-auth";
+import { type AccountLoaderData } from "@/lib/api";
+import { oauthResultMessage, redirectToGoogleAuthorization } from "@/lib/google-auth";
 import {
 	AlertDialog,
 	AlertDialogAction,
@@ -71,6 +71,7 @@ export function AccountSettingsDialog() {
 	}
 	const isDirty = displayName !== savedDisplayName;
 	const [confirmClose, setConfirmClose] = useState(false);
+	const [pendingDirtyProceed, setPendingDirtyProceed] = useState<(() => void) | null>(null);
 	const isSaving = fetcher.state !== "idle";
 	const fieldErrors = fetcher.data?.ok === false ? fetcher.data.fieldErrors : undefined;
 	const loaderData = routeData ?? methodsFetcher.data;
@@ -108,6 +109,7 @@ export function AccountSettingsDialog() {
 
 	const keepEditing = () => {
 		setConfirmClose(false);
+		setPendingDirtyProceed(null);
 		if (blocker.state === "blocked") {
 			blocker.reset();
 		}
@@ -115,12 +117,29 @@ export function AccountSettingsDialog() {
 
 	const discardChanges = () => {
 		setConfirmClose(false);
+		setDisplayName(savedDisplayName);
+		const proceed = pendingDirtyProceed;
+		setPendingDirtyProceed(null);
 		if (blocker.state === "blocked") {
 			blocker.proceed();
 			return;
 		}
+		if (proceed) {
+			proceed();
+			return;
+		}
 
 		closeSettings();
+	};
+
+	const confirmIfProfileDirty = (proceed: () => void) => {
+		if (!isDirty) {
+			proceed();
+			return;
+		}
+
+		setPendingDirtyProceed(() => proceed);
+		setConfirmClose(true);
 	};
 
 	const requestClose = () => {
@@ -167,6 +186,7 @@ export function AccountSettingsDialog() {
 							Profile
 						</h2>
 						<fetcher.Form method="post" action={ACCOUNT_SETTINGS_PATH} className="grid gap-4">
+							<input type="hidden" name="intent" value="profile" />
 							<FormField name="displayName">
 								<FormLabel htmlFor="display-name">Display name</FormLabel>
 								<FormControl asChild>
@@ -217,6 +237,7 @@ export function AccountSettingsDialog() {
 						loaderData={loaderData}
 						methodsRequested={methodsRequested}
 						methodsLoadIdle={methodsFetcher.state === "idle"}
+						confirmIfProfileDirty={confirmIfProfileDirty}
 					/>
 				</DialogContent>
 			</Dialog>
@@ -249,11 +270,13 @@ function SignInMethodsSection({
 	loaderData,
 	methodsRequested,
 	methodsLoadIdle,
+	confirmIfProfileDirty,
 }: {
 	primaryEmail: string;
 	loaderData: AccountSettingsLoaderData | undefined;
 	methodsRequested: boolean;
 	methodsLoadIdle: boolean;
+	confirmIfProfileDirty: (proceed: () => void) => void;
 }) {
 	const statusCopy =
 		loaderData || !methodsRequested || !methodsLoadIdle
@@ -266,7 +289,11 @@ function SignInMethodsSection({
 				Sign-in Methods
 			</h2>
 			{loaderData ? (
-				<SignInMethodsContent primaryEmail={primaryEmail} data={loaderData} />
+				<SignInMethodsContent
+					primaryEmail={primaryEmail}
+					data={loaderData}
+					confirmIfProfileDirty={confirmIfProfileDirty}
+				/>
 			) : (
 				<p role="status" className="text-sm text-medium-gray">
 					{statusCopy}
@@ -279,9 +306,11 @@ function SignInMethodsSection({
 function SignInMethodsContent({
 	primaryEmail,
 	data,
+	confirmIfProfileDirty,
 }: {
 	primaryEmail: string;
 	data: AccountSettingsLoaderData;
+	confirmIfProfileDirty: (proceed: () => void) => void;
 }) {
 	const { signInMethods, oauthResult } = data;
 	const providerEmail = signInMethods.google.providerEmail;
@@ -360,9 +389,7 @@ function SignInMethodsContent({
 							)}
 						</>
 					) : (
-						<Button type="button" variant="outline" size="sm">
-							Connect
-						</Button>
+						<GoogleConnectForm confirmIfProfileDirty={confirmIfProfileDirty} />
 					)}
 				</div>
 			</SignInMethodRow>
@@ -382,5 +409,84 @@ function SignInMethodRow({
 			<h3 className="font-medium">{title}</h3>
 			<div className="mt-2 grid gap-1">{children}</div>
 		</div>
+	);
+}
+
+function GoogleConnectForm({
+	confirmIfProfileDirty,
+}: {
+	confirmIfProfileDirty: (proceed: () => void) => void;
+}) {
+	const fetcher = useFetcher<AccountSettingsActionData>();
+	const redirectedRef = useRef<AccountSettingsActionData | null>(null);
+	const [expanded, setExpanded] = useState(false);
+	const [currentPassword, setCurrentPassword] = useState("");
+	const submitting = fetcher.state !== "idle";
+	const linkResult = fetcher.data?.intent === "google-link" ? fetcher.data : undefined;
+	const error =
+		linkResult?.ok === false
+			? (linkResult.fieldErrors?.currentPassword ?? linkResult.formError)
+			: undefined;
+
+	useEffect(() => {
+		if (fetcher.state !== "idle") return;
+		const data = fetcher.data;
+		if (!data?.ok || data.intent !== "google-link" || !data.googleAuthorizationHref) return;
+		if (redirectedRef.current === data) return;
+		redirectedRef.current = data;
+		redirectToGoogleAuthorization(data.googleAuthorizationHref);
+	}, [fetcher.state, fetcher.data]);
+
+	const expandConnect = () => {
+		confirmIfProfileDirty(() => setExpanded(true));
+	};
+
+	if (!expanded) {
+		return (
+			<Button type="button" variant="outline" size="sm" onClick={expandConnect}>
+				Connect
+			</Button>
+		);
+	}
+
+	return (
+		<fetcher.Form
+			method="post"
+			action={ACCOUNT_SETTINGS_PATH}
+			className="grid w-full gap-3"
+			onSubmit={(event) => {
+				event.preventDefault();
+				const form = event.currentTarget;
+				confirmIfProfileDirty(() => {
+					void fetcher.submit(form, {
+						method: "post",
+						action: ACCOUNT_SETTINGS_PATH,
+					});
+				});
+			}}
+		>
+			<input type="hidden" name="intent" value="google-link" />
+			<FormField name="currentPassword">
+				<FormLabel htmlFor="google-link-current-password">Current password</FormLabel>
+				<FormControl asChild>
+					<Input
+						id="google-link-current-password"
+						name="currentPassword"
+						type="password"
+						autoComplete="current-password"
+						value={currentPassword}
+						onChange={(event) => setCurrentPassword(event.target.value)}
+						aria-invalid={Boolean(error)}
+						disabled={submitting}
+					/>
+				</FormControl>
+				{error ? <FormMessage>{error}</FormMessage> : null}
+			</FormField>
+			<div>
+				<Button type="submit" size="sm" disabled={submitting || currentPassword.length === 0}>
+					Continue to Google
+				</Button>
+			</div>
+		</fetcher.Form>
 	);
 }

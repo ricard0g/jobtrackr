@@ -367,6 +367,13 @@ export const api = {
 			body: JSON.stringify(request),
 		}),
 	getSignInMethods: () => apiRequest<SignInMethods>("/user/sign-in-methods"),
+	createGoogleLinkIntent: (currentPassword: string) =>
+		apiRequest<void>("/user/sign-in-identities/google/link-intent", {
+			method: "POST",
+			headers: jsonHeaders,
+			credentials: "include",
+			body: JSON.stringify({ currentPassword }),
+		}),
 	getBaseCvs: () => apiRequest<BaseCv[]>("/base-cvs"),
 	uploadBaseCv: (file: File) => {
 		const formData = new FormData();

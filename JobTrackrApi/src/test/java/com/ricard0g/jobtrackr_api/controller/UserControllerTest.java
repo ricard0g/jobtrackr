@@ -2,6 +2,7 @@ package com.ricard0g.jobtrackr_api.controller;
 
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -14,6 +15,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.boot.webmvc.test.autoconfigure.WebMvcTest;
 import org.springframework.context.annotation.Import;
+import org.springframework.http.MediaType;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 
@@ -23,6 +25,8 @@ import com.ricard0g.jobtrackr_api.dto.UserDto.SignInMethodsResponseDto.PasswordS
 import com.ricard0g.jobtrackr_api.dto.UserDto.UserResponseDto;
 import com.ricard0g.jobtrackr_api.exception.GlobalExceptionHandler;
 import com.ricard0g.jobtrackr_api.exception.UserNotFoundException;
+import com.ricard0g.jobtrackr_api.security.ratelimit.AuthenticationRateLimiter;
+import com.ricard0g.jobtrackr_api.service.GoogleLinkIntentService;
 import com.ricard0g.jobtrackr_api.service.UserService;
 
 @WebMvcTest(controllers = UserController.class)
@@ -40,6 +44,12 @@ class UserControllerTest {
 
     @MockitoBean
     private UserService userService;
+
+    @MockitoBean
+    private GoogleLinkIntentService googleLinkIntentService;
+
+    @MockitoBean
+    private AuthenticationRateLimiter authenticationRateLimiter;
 
     @Test
     void getAuthenticatedUser_returns200() throws Exception {
@@ -78,6 +88,22 @@ class UserControllerTest {
                 .andExpect(jsonPath("$.google.connected").value(true))
                 .andExpect(jsonPath("$.google.providerEmail").value("google@example.com"))
                 .andExpect(jsonPath("$.google.subject").doesNotExist());
+    }
+
+    @Test
+    void createGoogleLinkIntent_returns204() throws Exception {
+        // given
+
+        // when / then
+        mockMvc.perform(post(BASE_PATH + "/sign-in-identities/google/link-intent")
+                        .principal(authenticatedUser())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "currentPassword": "password123"
+                                }
+                                """))
+                .andExpect(status().isNoContent());
     }
 
     private static UserResponseDto sampleUser() {

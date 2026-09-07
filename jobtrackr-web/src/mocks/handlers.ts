@@ -561,6 +561,21 @@ export const handlers = [
 		return HttpResponse.json(toPublicSignInMethods(state, auth.user));
 	}),
 
+	http.post(`${API_BASE_URL}/user/sign-in-identities/google/link-intent`, async ({ request }) => {
+		const state = loadState();
+		const auth = requireAuth(request, state);
+		if (auth instanceof Response) return auth;
+		const body = await readJson<{ currentPassword?: string }>(request);
+		const credentials = state.credentials.find((entry) => entry.userId === auth.user.userId);
+		if (!credentials || credentials.password !== body.currentPassword) {
+			return errorJson(401, "INVALID_CREDENTIALS", "Invalid email or password");
+		}
+		if (state.googleIdentities.some((identity) => identity.userId === auth.user.userId)) {
+			return errorJson(409, "IDENTITY_ALREADY_LINKED", "Google is already connected");
+		}
+		return new HttpResponse(null, { status: 204 });
+	}),
+
 	http.get(`${API_BASE_URL}/base-cvs`, ({ request }) => {
 		const state = loadState();
 		const auth = requireAuth(request, state);

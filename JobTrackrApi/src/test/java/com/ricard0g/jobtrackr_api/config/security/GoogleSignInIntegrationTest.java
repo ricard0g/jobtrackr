@@ -84,6 +84,7 @@ class GoogleSignInIntegrationTest {
 
     private static final String PASSWORD = "password123";
     private static final String PUBLIC_ORIGIN = "http://localhost:5173";
+    private static final String LINK_INTENT_PATH = "/api/v1/user/sign-in-identities/google/link-intent";
     private static final int CONCURRENT_JIT_ATTEMPTS = 2;
     private static final int CONCURRENT_JIT_TIMEOUT_SECONDS = 10;
     private static final DockerImageName POSTGRES_IMAGE = DockerImageName.parse("postgres:16");
@@ -124,12 +125,300 @@ class GoogleSignInIntegrationTest {
     @MockitoBean
     private CvGenerationScheduler cvGenerationScheduler;
 
-    private final AtomicInteger googleStartIp = new AtomicInteger(1);
+    private static final AtomicInteger googleStartIp = new AtomicInteger(1);
 
     @BeforeEach
     void resetGoogle() {
         userIdentityRepository.deleteAll();
         GOOGLE.planSuccess("google-subject", "linked@example.com", true);
+    }
+
+    @Test
+    void successfulLinkIntent_createsLinkGoogleSessionAndRequestsAccountChooser() throws Exception {
+        final RegisteredUser registered = registerUser(uniqueEmail("link-intent"));
+        final AuthenticatedSession session = loginSession(registered.email());
+
+        final MvcResult intent = mockMvc.perform(post(LINK_INTENT_PATH)
+                        .with(remoteAddr(registered.clientIp()))
+                        .header("Authorization", bearer(session.accessToken()))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(linkIntentBody(PASSWORD)))
+                .andExpect(status().isNoContent())
+                .andReturn();
+
+        assertThat(intent.getRequest().getSession(false).getMaxInactiveInterval())
+                .isEqualTo(OAuthSession.TIMEOUT_SECONDS);
+        assertThat(intent.getRequest().getSession(false).getAttribute(OAuthSession.PURPOSE_ATTRIBUTE))
+                .isEqualTo("LINK_GOOGLE");
+        assertThat(intent.getRequest().getSession(false).getAttribute(OAuthSession.USER_ID_ATTRIBUTE))
+                .isEqualTo(registered.userId().toString());
+        assertThat(intent.getRequest().getSession(false).getAttribute(OAuthSession.RETURN_TO_ATTRIBUTE))
+                .isEqualTo("/settings/account");
+        assertThat(intent.getRequest().getSession(false).getAttribute(OAuthSession.FAILURE_PATH_ATTRIBUTE))
+                .isEqualTo("/settings/account");
+
+        final MvcResult started = mockMvc.perform(get("/api/v1/auth/oauth2/authorization/google")
+                        .with(remoteAddr(nextGoogleStartIp()))
+                        .session((MockHttpSession) intent.getRequest().getSession(false))
+                        .cookie(intent.getResponse().getCookies())
+                        .cookie(session.refreshCookie()))
+                .andExpect(status().isFound())
+                .andReturn();
+
+        assertThat(started.getResponse().getRedirectedUrl()).contains("prompt=select_account");
+        assertThat(started.getRequest().getSession(false).getAttribute(OAuthSession.PURPOSE_ATTRIBUTE))
+                .isEqualTo("LINK_GOOGLE");
+        assertThat(started.getRequest().getSession(false).getAttribute(OAuthSession.USER_ID_ATTRIBUTE))
+                .isEqualTo(registered.userId().toString());
+    }
+
+    @Test
+    void linkIntent_withoutAuthentication_returns401() throws Exception {
+        mockMvc.perform(post(LINK_INTENT_PATH)
+                        .with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(linkIntentBody(PASSWORD)))
+                .andExpect(status().isUnauthorized());
+    }
+
+    @Test
+    void linkIntent_withoutCsrfToken_returns403() throws Exception {
+        mockMvc.perform(post(LINK_INTENT_PATH)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(linkIntentBody(PASSWORD)))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.code").value("CSRF_TOKEN_INVALID"));
+    }
+
+    @Test
+    void linkIntent_withWrongPassword_returns401() throws Exception {
+        final RegisteredUser registered = registerUser(uniqueEmail("wrong-password"));
+        final AuthenticatedSession session = loginSession(registered.email());
+
+        mockMvc.perform(post(LINK_INTENT_PATH)
+                        .with(remoteAddr(registered.clientIp()))
+                        .header("Authorization", bearer(session.accessToken()))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(linkIntentBody("not-the-password")))
+                .andExpect(status().isUnauthorized())
+                .andExpect(jsonPath("$.code").value("INVALID_CREDENTIALS"));
+    }
+
+    @Test
+    void linkIntent_sixthAttemptForSameUserAndIp_returnsRateLimited() throws Exception {
+        final RegisteredUser registered = registerUser(uniqueEmail("link-limit"));
+        final AuthenticatedSession session = loginSession(registered.email());
+
+        for (int attempt = 0; attempt < 5; attempt++) {
+            mockMvc.perform(post(LINK_INTENT_PATH)
+                            .with(remoteAddr("203.0.113.81"))
+                            .header("Authorization", bearer(session.accessToken()))
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content(linkIntentBody("not-the-password")))
+                    .andExpect(status().isUnauthorized());
+        }
+
+        mockMvc.perform(post(LINK_INTENT_PATH)
+                        .with(remoteAddr("203.0.113.81"))
+                        .header("Authorization", bearer(session.accessToken()))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(linkIntentBody(PASSWORD)))
+                .andExpect(status().isTooManyRequests())
+                .andExpect(jsonPath("$.code").value("RATE_LIMITED"))
+                .andExpect(header().exists(HttpHeaders.RETRY_AFTER));
+    }
+
+    @Test
+    void successfulGoogleLink_createsIdentityWithoutChangingSessions() throws Exception {
+        final RegisteredUser registered = registerUser(uniqueEmail("link-success"));
+        final AuthenticatedSession session = loginSession(registered.email());
+        final int authVersion = userRepository.findById(registered.userId()).orElseThrow().getUserAuthVersion();
+        final String subject = "link-subject-" + UUID.randomUUID();
+        GOOGLE.planSuccess(subject, registered.email().toUpperCase(), true);
+
+        final MvcResult callback = completeGoogleLink(registered, session);
+
+        assertThat(callback.getResponse().getRedirectedUrl())
+                .isEqualTo(PUBLIC_ORIGIN + "/settings/account");
+        assertThat(callback.getResponse().getRedirectedUrl()).doesNotContain(registered.email());
+        assertThat(callback.getResponse().getRedirectedUrl()).doesNotContain(subject);
+        assertThat(callback.getResponse().getCookie("refresh_token")).isNull();
+        assertThat(callback.getResponse().getHeader("Cache-Control")).isEqualTo("no-store");
+        assertThat(callback.getResponse().getHeader("Referrer-Policy")).isEqualTo("no-referrer");
+
+        mockMvc.perform(post("/api/v1/auth/refresh")
+                        .with(csrf())
+                        .cookie(session.refreshCookie()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.user.userId").value(registered.userId().toString()));
+        mockMvc.perform(get("/api/v1/user")
+                        .header("Authorization", bearer(session.accessToken())))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.userId").value(registered.userId().toString()));
+        mockMvc.perform(get("/api/v1/user/sign-in-methods")
+                        .header("Authorization", bearer(session.accessToken())))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.google.connected").value(true))
+                .andExpect(jsonPath("$.google.providerEmail").value(registered.email()))
+                .andExpect(jsonPath("$.google.linkedAt").isNotEmpty())
+                .andExpect(jsonPath("$.google.lastUsedAt").isNotEmpty())
+                .andExpect(jsonPath("$.google.subject").doesNotExist());
+
+        final UserIdentity identity = userIdentityRepository
+                .findByProviderAndSubject(IdentityProvider.GOOGLE, subject)
+                .orElseThrow();
+        assertThat(identity.getUser().getUserId()).isEqualTo(registered.userId());
+        assertThat(identity.getLinkedAt()).isEqualTo(identity.getLastUsedAt());
+        assertThat(userRepository.findById(registered.userId()).orElseThrow().getUserAuthVersion())
+                .isEqualTo(authVersion);
+        assertThat(userRepository.findById(registered.userId()).orElseThrow().isUserEmailVerified()).isTrue();
+    }
+
+    @Test
+    void googleLinkCallback_withoutRefreshCookie_returnsExpiredWithoutLinking() throws Exception {
+        final RegisteredUser registered = registerUser(uniqueEmail("link-expired"));
+        final AuthenticatedSession session = loginSession(registered.email());
+        final String subject = "expired-link-" + UUID.randomUUID();
+        GOOGLE.planSuccess(subject, registered.email(), true);
+
+        final StartedFlow started = startGoogleLink(registered, session);
+        final MvcResult callback = performCallback(
+                followGoogle(started.googleLocation()),
+                started.session(),
+                started.cookies());
+
+        assertThat(callback.getResponse().getRedirectedUrl())
+                .isEqualTo(PUBLIC_ORIGIN + "/settings/account?oauthResult=expired");
+        assertThat(userIdentityRepository.findByProviderAndSubject(IdentityProvider.GOOGLE, subject)).isEmpty();
+    }
+
+    @Test
+    void googleLinkCallback_withDifferentUserRefresh_returnsExpiredWithoutLinking() throws Exception {
+        final RegisteredUser initiator = registerUser(uniqueEmail("link-initiator"));
+        final RegisteredUser other = registerUser(uniqueEmail("link-other"));
+        final AuthenticatedSession initiatorSession = loginSession(initiator.email());
+        final AuthenticatedSession otherSession = loginSession(other.email());
+        final String subject = "wrong-user-link-" + UUID.randomUUID();
+        GOOGLE.planSuccess(subject, initiator.email(), true);
+
+        final StartedFlow started = startGoogleLink(initiator, initiatorSession);
+        final MvcResult callback = performCallback(
+                followGoogle(started.googleLocation()),
+                started.session(),
+                started.cookies(),
+                otherSession.refreshCookie());
+
+        assertThat(callback.getResponse().getRedirectedUrl())
+                .isEqualTo(PUBLIC_ORIGIN + "/settings/account?oauthResult=expired");
+        assertThat(userIdentityRepository.findByProviderAndSubject(IdentityProvider.GOOGLE, subject)).isEmpty();
+    }
+
+    @Test
+    void googleLinkCallback_withRevokedRefresh_returnsExpiredWithoutLinking() throws Exception {
+        final RegisteredUser registered = registerUser(uniqueEmail("link-revoked"));
+        final AuthenticatedSession session = loginSession(registered.email());
+        final String subject = "revoked-link-" + UUID.randomUUID();
+        GOOGLE.planSuccess(subject, registered.email(), true);
+
+        final StartedFlow started = startGoogleLink(registered, session);
+        mockMvc.perform(post("/api/v1/auth/logout")
+                        .with(csrf())
+                        .cookie(session.refreshCookie()))
+                .andExpect(status().isNoContent());
+        final MvcResult callback = performCallback(
+                followGoogle(started.googleLocation()),
+                started.session(),
+                started.cookies(),
+                session.refreshCookie());
+
+        assertThat(callback.getResponse().getRedirectedUrl())
+                .isEqualTo(PUBLIC_ORIGIN + "/settings/account?oauthResult=expired");
+        assertThat(userIdentityRepository.findByProviderAndSubject(IdentityProvider.GOOGLE, subject)).isEmpty();
+    }
+
+    @Test
+    void googleLinkCallback_withMismatchedEmail_isRejectedWithoutLinking() throws Exception {
+        final RegisteredUser registered = registerUser(uniqueEmail("link-mismatch"));
+        final AuthenticatedSession session = loginSession(registered.email());
+        final String subject = "mismatch-link-" + UUID.randomUUID();
+        GOOGLE.planSuccess(subject, uniqueEmail("other-google"), true);
+
+        final MvcResult callback = completeGoogleLink(registered, session);
+
+        assertThat(callback.getResponse().getRedirectedUrl())
+                .isEqualTo(PUBLIC_ORIGIN + "/settings/account?oauthResult=mismatch");
+        assertThat(callback.getResponse().getRedirectedUrl()).doesNotContain("@");
+        assertThat(userIdentityRepository.findByProviderAndSubject(IdentityProvider.GOOGLE, subject)).isEmpty();
+    }
+
+    @Test
+    void googleLink_isRejectedWhenUserAlreadyHasGoogleOrSubjectIsLinkedElsewhere() throws Exception {
+        final RegisteredUser existingOwner = registerUser(uniqueEmail("existing-owner"));
+        final RegisteredUser alreadyLinked = registerUser(uniqueEmail("already-linked"));
+        final RegisteredUser newLinker = registerUser(uniqueEmail("new-linker"));
+        final String takenSubject = "taken-subject-" + UUID.randomUUID();
+        linkGoogleIdentity(
+                existingOwner.userId(),
+                takenSubject,
+                existingOwner.email(),
+                OffsetDateTime.now().minusDays(1));
+        linkGoogleIdentity(
+                alreadyLinked.userId(),
+                "already-subject-" + UUID.randomUUID(),
+                alreadyLinked.email(),
+                OffsetDateTime.now().minusDays(1));
+
+        GOOGLE.planSuccess("another-subject-" + UUID.randomUUID(), alreadyLinked.email(), true);
+        final MvcResult alreadyLinkedCallback = completeGoogleLink(alreadyLinked, loginSession(alreadyLinked.email()));
+        assertThat(alreadyLinkedCallback.getResponse().getRedirectedUrl())
+                .isEqualTo(PUBLIC_ORIGIN + "/settings/account?oauthResult=failed");
+        assertThat(userIdentityRepository.findByUser_UserIdAndProvider(
+                alreadyLinked.userId(), IdentityProvider.GOOGLE)).isPresent();
+
+        GOOGLE.planSuccess(takenSubject, newLinker.email(), true);
+        final MvcResult takenSubjectCallback = completeGoogleLink(newLinker, loginSession(newLinker.email()));
+        assertThat(takenSubjectCallback.getResponse().getRedirectedUrl())
+                .isEqualTo(PUBLIC_ORIGIN + "/settings/account?oauthResult=failed");
+        assertThat(userIdentityRepository.findByProviderAndSubject(IdentityProvider.GOOGLE, takenSubject)
+                .orElseThrow()
+                .getUser()
+                .getUserId()).isEqualTo(existingOwner.userId());
+    }
+
+    @Test
+    void concurrentGoogleLinkAttempts_createAtMostOneIdentity() throws Exception {
+        final RegisteredUser registered = registerUser(uniqueEmail("link-race"));
+        final AuthenticatedSession firstSession = loginSession(registered.email());
+        final AuthenticatedSession secondSession = loginSession(registered.email());
+        final String subject = "race-link-" + UUID.randomUUID();
+        GOOGLE.planSuccess(subject, registered.email(), true);
+        final long identityCount = userIdentityRepository.count();
+        final ExecutorService executor = Executors.newFixedThreadPool(CONCURRENT_JIT_ATTEMPTS);
+        final CountDownLatch start = new CountDownLatch(1);
+
+        try {
+            final Future<MvcResult> first = executor.submit(() -> {
+                start.await();
+                return completeGoogleLink(registered, firstSession);
+            });
+            final Future<MvcResult> second = executor.submit(() -> {
+                start.await();
+                return completeGoogleLink(registered, secondSession);
+            });
+            start.countDown();
+            final MvcResult firstCallback = first.get(CONCURRENT_JIT_TIMEOUT_SECONDS, TimeUnit.SECONDS);
+            final MvcResult secondCallback = second.get(CONCURRENT_JIT_TIMEOUT_SECONDS, TimeUnit.SECONDS);
+
+            assertThat(firstCallback.getResponse().getRedirectedUrl()).isEqualTo(PUBLIC_ORIGIN + "/settings/account");
+            assertThat(secondCallback.getResponse().getRedirectedUrl()).isEqualTo(PUBLIC_ORIGIN + "/settings/account");
+            assertThat(firstCallback.getResponse().getCookie("refresh_token")).isNull();
+            assertThat(secondCallback.getResponse().getCookie("refresh_token")).isNull();
+        } finally {
+            executor.shutdownNow();
+        }
+
+        assertThat(userIdentityRepository.count()).isEqualTo(identityCount + 1);
+        assertThat(userIdentityRepository.findByProviderAndSubject(IdentityProvider.GOOGLE, subject)).isPresent();
     }
 
     @Test
@@ -142,7 +431,8 @@ class GoogleSignInIntegrationTest {
 
     @Test
     void googleStart_shouldCreateHostOnlyPurposeBoundOauthCookieAndRequestAccountChooser() throws Exception {
-        final MvcResult result = mockMvc.perform(get("/api/v1/auth/oauth2/authorization/google"))
+        final MvcResult result = mockMvc.perform(get("/api/v1/auth/oauth2/authorization/google")
+                        .with(remoteAddr(nextGoogleStartIp())))
                 .andExpect(status().isFound())
                 .andReturn();
 
@@ -590,6 +880,39 @@ class GoogleSignInIntegrationTest {
                 started.getResponse().getRedirectedUrl());
     }
 
+    private MvcResult completeGoogleLink(
+            final RegisteredUser registered,
+            final AuthenticatedSession session) throws Exception {
+        final StartedFlow started = startGoogleLink(registered, session);
+        return performCallback(
+                followGoogle(started.googleLocation()),
+                started.session(),
+                started.cookies(),
+                session.refreshCookie());
+    }
+
+    private StartedFlow startGoogleLink(
+            final RegisteredUser registered,
+            final AuthenticatedSession session) throws Exception {
+        final MvcResult intent = mockMvc.perform(post(LINK_INTENT_PATH)
+                        .with(remoteAddr(registered.clientIp()))
+                        .header("Authorization", bearer(session.accessToken()))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(linkIntentBody(PASSWORD)))
+                .andExpect(status().isNoContent())
+                .andReturn();
+        return startGoogle(
+                "/api/v1/auth/oauth2/authorization/google?returnTo=/settings/account",
+                (MockHttpSession) intent.getRequest().getSession(false),
+                mergeCookies(intent.getResponse().getCookies(), session.refreshCookie()));
+    }
+
+    private static Cookie[] mergeCookies(final Cookie[] cookies, final Cookie extra) {
+        final Cookie[] merged = java.util.Arrays.copyOf(cookies, cookies.length + 1);
+        merged[cookies.length] = extra;
+        return merged;
+    }
+
     private MvcResult performCallback(
             final String callbackUrl,
             final MockHttpSession session,
@@ -683,6 +1006,25 @@ class GoogleSignInIntegrationTest {
                 .andReturn();
     }
 
+    private AuthenticatedSession loginSession(final String email) throws Exception {
+        final MvcResult result = login(email);
+        return new AuthenticatedSession(
+                JsonPath.read(result.getResponse().getContentAsString(), "$.accessToken"),
+                result.getResponse().getCookie("refresh_token"));
+    }
+
+    private static String bearer(final String accessToken) {
+        return "Bearer " + accessToken;
+    }
+
+    private static String linkIntentBody(final String currentPassword) {
+        return """
+                {
+                  "currentPassword": "%s"
+                }
+                """.formatted(currentPassword);
+    }
+
     private void linkGoogleIdentity(
             final UUID userId,
             final String subject,
@@ -700,6 +1042,9 @@ class GoogleSignInIntegrationTest {
     }
 
     private record RegisteredUser(UUID userId, String email, String clientIp) {
+    }
+
+    private record AuthenticatedSession(String accessToken, Cookie refreshCookie) {
     }
 
     private record StartedFlow(MockHttpSession session, Cookie[] cookies, String googleLocation) {

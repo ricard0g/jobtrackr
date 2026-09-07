@@ -8,6 +8,7 @@ export const OAUTH_RESULT_CODES = [
 	"unavailable",
 	"failed",
 	"conflict",
+	"mismatch",
 ] as const;
 
 export type OAuthResultCode = (typeof OAUTH_RESULT_CODES)[number];
@@ -19,6 +20,7 @@ const oauthResultMessages: Record<OAuthResultCode, string> = {
 	failed: "Google sign-in failed. Try again or use your password.",
 	conflict:
 		"This Google identity is not linked to your JobTrackr User. Sign in with your password to connect it.",
+	mismatch: "That Google identity does not match your Primary Email.",
 };
 
 export function parseOAuthResult(value: string | null | undefined): OAuthResultCode | null {
@@ -84,4 +86,12 @@ export function googleAuthorizationHref(
 	return query
 		? `${authorizationBaseUrl}?${query}`
 		: authorizationBaseUrl;
+}
+
+export function googleLinkAuthorizationHref(authorizationBaseUrl: string): string {
+	return googleAuthorizationHref("login", "/settings/account", authorizationBaseUrl);
+}
+
+export function redirectToGoogleAuthorization(href: string) {
+	window.location.assign(href);
 }

@@ -38,10 +38,13 @@ public class GoogleOAuthFailureHandler implements AuthenticationFailureHandler {
         final HttpSession session = request.getSession(false);
         final String failurePath = sessionFailurePath(session);
         final OAuthResultCode resultCode = resultCode(exception);
+        final Object purpose = session == null
+                ? OAuthPurpose.SIGN_IN
+                : session.getAttribute(OAuthSession.PURPOSE_ATTRIBUTE);
         log.info(
                 "[GoogleSignIn] - COMPLETE: outcome: {}, purpose: {}",
                 resultCode.queryValue(),
-                OAuthPurpose.SIGN_IN);
+                purpose);
         if (session != null) {
             session.invalidate();
         }

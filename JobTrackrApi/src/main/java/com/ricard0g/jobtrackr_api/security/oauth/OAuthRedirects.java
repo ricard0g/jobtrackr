@@ -12,7 +12,8 @@ public final class OAuthRedirects {
             "/settings/account");
     private static final Set<String> ALLOWED_FAILURE_PATHS = Set.of(
             OAuthSession.LOGIN_FAILURE_PATH,
-            OAuthSession.REGISTER_FAILURE_PATH);
+            OAuthSession.REGISTER_FAILURE_PATH,
+            OAuthSession.ACCOUNT_SETTINGS_PATH);
 
     private OAuthRedirects() {
         throw new UnsupportedOperationException("This class should never be instantiated");
