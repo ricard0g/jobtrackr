@@ -33,6 +33,11 @@ public class GoogleSignInService {
                 .orElseGet(() -> createGoogleUserIfEmailUnused(subject, normalizeEmail(verifiedEmail)));
     }
 
+    @Transactional(readOnly = true)
+    public Optional<User> findLinkedUser(final String subject) {
+        return findGoogleIdentity(subject).map(UserIdentity::getUser);
+    }
+
     @Transactional
     public void recordSuccessfulGoogleUse(final String subject, final String verifiedEmail) {
         final UserIdentity identity = requireGoogleIdentity(subject);

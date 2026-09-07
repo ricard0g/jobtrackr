@@ -463,6 +463,40 @@ class GoogleSignInIntegrationTest {
     }
 
     @Test
+    void alreadyAuthenticatedDifferentUser_doesNotCreateJustInTimeUser() throws Exception {
+        // given
+        final RegisteredUser passwordUser = registerUser("password-owner-jit@example.com");
+        final String email = uniqueEmail("jit-blocked");
+        final String subject = "jit-blocked-subject-" + UUID.randomUUID();
+        GOOGLE.planSuccess(subject, email, true);
+        final long userCount = userRepository.count();
+        final long identityCount = userIdentityRepository.count();
+        final Cookie passwordRefresh = login(passwordUser.email()).getResponse().getCookie("refresh_token");
+
+        // when
+        final StartedFlow started = startGoogle("/api/v1/auth/oauth2/authorization/google");
+        final MvcResult callback = performCallback(
+                followGoogle(started.googleLocation()),
+                started.session(),
+                started.cookies(),
+                passwordRefresh);
+
+        // then
+        assertThat(callback.getResponse().getRedirectedUrl())
+                .isEqualTo(PUBLIC_ORIGIN + "/auth/login?oauthResult=failed");
+        assertThat(callback.getResponse().getCookie("refresh_token")).isNull();
+        mockMvc.perform(post("/api/v1/auth/refresh")
+                        .with(csrf())
+                        .cookie(passwordRefresh))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.user.userId").value(passwordUser.userId().toString()));
+        assertThat(userRepository.count()).isEqualTo(userCount);
+        assertThat(userIdentityRepository.count()).isEqualTo(identityCount);
+        assertThat(userIdentityRepository.findByProviderAndSubject(IdentityProvider.GOOGLE, subject)).isEmpty();
+        assertThat(userRepository.findByUserEmail(email)).isEmpty();
+    }
+
+    @Test
     void callbackReturnTo_usesAllowlistedInternalDestinationOnly() throws Exception {
         final RegisteredUser registered = registerUser("return-to@example.com");
         linkGoogleIdentity(

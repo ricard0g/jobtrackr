@@ -61,8 +61,10 @@ public class GoogleOAuthSuccessHandler implements AuthenticationSuccessHandler {
                 throw new GoogleSignInRejectedException(OAuthResultCode.FAILED);
             }
 
+            final UUID currentUserId = currentSessionUserId(request);
+            refuseUnknownGoogleSignInWhileAuthenticated(currentUserId, subject);
             final User signedInUser = googleSignInService.resolveGoogleSignIn(subject, email);
-            refuseToReplaceDifferentUser(request, signedInUser);
+            refuseToReplaceDifferentUser(currentUserId, signedInUser);
             googleSignInService.recordSuccessfulGoogleUse(subject, email);
 
             final AuthTokenPair tokenPair = authService.issueSession(signedInUser);
@@ -89,17 +91,29 @@ public class GoogleOAuthSuccessHandler implements AuthenticationSuccessHandler {
         }
     }
 
-    private void refuseToReplaceDifferentUser(final HttpServletRequest request, final User signedInUser) {
-        final UUID currentUserId = refreshTokenService
-                .findActiveUser(refreshTokenCookieService.readRefreshTokenCookie(request))
-                .map(User::getUserId)
-                .orElse(null);
+    private void refuseUnknownGoogleSignInWhileAuthenticated(final UUID currentUserId, final String subject) {
+        final boolean unknownGoogleWhileAuthenticated =
+                currentUserId != null && googleSignInService.findLinkedUser(subject).isEmpty();
+        if (unknownGoogleWhileAuthenticated) {
+            throw new GoogleSignInRejectedException(OAuthResultCode.FAILED);
+        }
+    }
+
+    private void refuseToReplaceDifferentUser(final UUID currentUserId, final User signedInUser) {
         if (currentUserId == null) {
             return;
         }
-        if (!currentUserId.equals(signedInUser.getUserId())) {
+        final boolean replacingDifferentUser = !currentUserId.equals(signedInUser.getUserId());
+        if (replacingDifferentUser) {
             throw new GoogleSignInRejectedException(OAuthResultCode.FAILED);
         }
+    }
+
+    private UUID currentSessionUserId(final HttpServletRequest request) {
+        return refreshTokenService
+                .findActiveUser(refreshTokenCookieService.readRefreshTokenCookie(request))
+                .map(User::getUserId)
+                .orElse(null);
     }
 
     private void redirectFailure(
