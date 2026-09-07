@@ -77,7 +77,8 @@ public class GoogleOAuthSecurityConfig {
                 authenticationRateLimiter,
                 oauthSessionCookieService,
                 refreshTokenCookieService,
-                refreshTokenService);
+                refreshTokenService,
+                googleAuthProperties);
 
         return http
                 .securityMatcher("/api/v1/auth/oauth2/**")

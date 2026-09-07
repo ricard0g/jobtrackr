@@ -9,6 +9,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.web.filter.OncePerRequestFilter;
 
+import com.ricard0g.jobtrackr_api.config.security.GoogleAuthProperties;
 import com.ricard0g.jobtrackr_api.config.security.OauthSessionCookieService;
 import com.ricard0g.jobtrackr_api.config.security.RefreshTokenCookieService;
 import com.ricard0g.jobtrackr_api.exception.RateLimitedException;
@@ -25,7 +26,9 @@ import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import jakarta.servlet.http.HttpSession;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 
+@Slf4j
 @RequiredArgsConstructor
 public class GoogleOAuthStartFilter extends OncePerRequestFilter {
 
@@ -37,6 +40,7 @@ public class GoogleOAuthStartFilter extends OncePerRequestFilter {
     private final OauthSessionCookieService oauthSessionCookieService;
     private final RefreshTokenCookieService refreshTokenCookieService;
     private final RefreshTokenService refreshTokenService;
+    private final GoogleAuthProperties googleAuthProperties;
 
     @Override
     protected boolean shouldNotFilter(@Nonnull final HttpServletRequest request) {
@@ -59,10 +63,23 @@ public class GoogleOAuthStartFilter extends OncePerRequestFilter {
             return;
         }
 
-        if (!preserveProtectedOauthSession(request)) {
+        if (isLinkGoogleSession(request)) {
+            if (!preserveProtectedOauthSession(request)) {
+                rejectExpiredLink(request, response);
+                return;
+            }
+        } else {
             replaceOauthSession(request, response);
         }
         filterChain.doFilter(request, response);
+    }
+
+    private boolean isLinkGoogleSession(final HttpServletRequest request) {
+        final HttpSession session = request.getSession(false);
+        if (session == null) {
+            return false;
+        }
+        return OAuthPurpose.LINK_GOOGLE.name().equals(session.getAttribute(OAuthSession.PURPOSE_ATTRIBUTE));
     }
 
     private boolean preserveProtectedOauthSession(final HttpServletRequest request) {
@@ -90,6 +107,20 @@ public class GoogleOAuthStartFilter extends OncePerRequestFilter {
         }
         session.setMaxInactiveInterval(OAuthSession.TIMEOUT_SECONDS);
         return true;
+    }
+
+    private void rejectExpiredLink(final HttpServletRequest request, final HttpServletResponse response)
+            throws IOException {
+        final HttpSession session = request.getSession(false);
+        if (session != null) {
+            session.invalidate();
+        }
+        oauthSessionCookieService.clearOauthSessionCookie(response);
+        log.info("[GoogleSignIn] - START: outcome: expired, purpose: {}", OAuthPurpose.LINK_GOOGLE);
+        response.sendRedirect(OAuthRedirects.failureLocation(
+                googleAuthProperties.normalizedPublicOrigin(),
+                OAuthSession.ACCOUNT_SETTINGS_PATH,
+                OAuthResultCode.EXPIRED));
     }
 
     private void replaceOauthSession(final HttpServletRequest request, final HttpServletResponse response) {

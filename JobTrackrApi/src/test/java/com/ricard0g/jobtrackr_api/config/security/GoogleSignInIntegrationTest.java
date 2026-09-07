@@ -173,6 +173,68 @@ class GoogleSignInIntegrationTest {
     }
 
     @Test
+    void googleLinkStart_withoutRefreshCookie_returnsExpiredWithoutRewritingToSignIn() throws Exception {
+        final RegisteredUser registered = registerUser(uniqueEmail("link-start-expired"));
+        final AuthenticatedSession session = loginSession(registered.email());
+        final MvcResult intent = beginGoogleLinkIntent(registered, session);
+        final MockHttpSession oauthSession = (MockHttpSession) intent.getRequest().getSession(false);
+
+        final MvcResult started = mockMvc.perform(get("/api/v1/auth/oauth2/authorization/google")
+                        .with(remoteAddr(nextGoogleStartIp()))
+                        .session(oauthSession)
+                        .cookie(intent.getResponse().getCookies()))
+                .andExpect(status().isFound())
+                .andReturn();
+
+        assertThat(started.getResponse().getRedirectedUrl())
+                .isEqualTo(PUBLIC_ORIGIN + "/settings/account?oauthResult=expired");
+        assertThat(started.getResponse().getRedirectedUrl()).doesNotContain("prompt=select_account");
+        assertThat(oauthSession.isInvalid()).isTrue();
+    }
+
+    @Test
+    void googleLinkStart_withDifferentUserRefresh_returnsExpiredWithoutRewritingToSignIn() throws Exception {
+        final RegisteredUser initiator = registerUser(uniqueEmail("link-start-initiator"));
+        final RegisteredUser other = registerUser(uniqueEmail("link-start-other"));
+        final AuthenticatedSession initiatorSession = loginSession(initiator.email());
+        final AuthenticatedSession otherSession = loginSession(other.email());
+        final MvcResult intent = beginGoogleLinkIntent(initiator, initiatorSession);
+
+        final MvcResult started = mockMvc.perform(get("/api/v1/auth/oauth2/authorization/google")
+                        .with(remoteAddr(nextGoogleStartIp()))
+                        .session((MockHttpSession) intent.getRequest().getSession(false))
+                        .cookie(mergeCookies(intent.getResponse().getCookies(), otherSession.refreshCookie())))
+                .andExpect(status().isFound())
+                .andReturn();
+
+        assertThat(started.getResponse().getRedirectedUrl())
+                .isEqualTo(PUBLIC_ORIGIN + "/settings/account?oauthResult=expired");
+        assertThat(started.getResponse().getRedirectedUrl()).doesNotContain("prompt=select_account");
+    }
+
+    @Test
+    void googleLinkStart_withRevokedRefresh_returnsExpiredWithoutRewritingToSignIn() throws Exception {
+        final RegisteredUser registered = registerUser(uniqueEmail("link-start-revoked"));
+        final AuthenticatedSession session = loginSession(registered.email());
+        final MvcResult intent = beginGoogleLinkIntent(registered, session);
+        mockMvc.perform(post("/api/v1/auth/logout")
+                        .with(csrf())
+                        .cookie(session.refreshCookie()))
+                .andExpect(status().isNoContent());
+
+        final MvcResult started = mockMvc.perform(get("/api/v1/auth/oauth2/authorization/google")
+                        .with(remoteAddr(nextGoogleStartIp()))
+                        .session((MockHttpSession) intent.getRequest().getSession(false))
+                        .cookie(mergeCookies(intent.getResponse().getCookies(), session.refreshCookie())))
+                .andExpect(status().isFound())
+                .andReturn();
+
+        assertThat(started.getResponse().getRedirectedUrl())
+                .isEqualTo(PUBLIC_ORIGIN + "/settings/account?oauthResult=expired");
+        assertThat(started.getResponse().getRedirectedUrl()).doesNotContain("prompt=select_account");
+    }
+
+    @Test
     void linkIntent_withoutAuthentication_returns401() throws Exception {
         mockMvc.perform(post(LINK_INTENT_PATH)
                         .with(csrf())
@@ -894,17 +956,23 @@ class GoogleSignInIntegrationTest {
     private StartedFlow startGoogleLink(
             final RegisteredUser registered,
             final AuthenticatedSession session) throws Exception {
-        final MvcResult intent = mockMvc.perform(post(LINK_INTENT_PATH)
+        final MvcResult intent = beginGoogleLinkIntent(registered, session);
+        return startGoogle(
+                "/api/v1/auth/oauth2/authorization/google?returnTo=/settings/account",
+                (MockHttpSession) intent.getRequest().getSession(false),
+                mergeCookies(intent.getResponse().getCookies(), session.refreshCookie()));
+    }
+
+    private MvcResult beginGoogleLinkIntent(
+            final RegisteredUser registered,
+            final AuthenticatedSession session) throws Exception {
+        return mockMvc.perform(post(LINK_INTENT_PATH)
                         .with(remoteAddr(registered.clientIp()))
                         .header("Authorization", bearer(session.accessToken()))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(linkIntentBody(PASSWORD)))
                 .andExpect(status().isNoContent())
                 .andReturn();
-        return startGoogle(
-                "/api/v1/auth/oauth2/authorization/google?returnTo=/settings/account",
-                (MockHttpSession) intent.getRequest().getSession(false),
-                mergeCookies(intent.getResponse().getCookies(), session.refreshCookie()));
     }
 
     private static Cookie[] mergeCookies(final Cookie[] cookies, final Cookie extra) {
