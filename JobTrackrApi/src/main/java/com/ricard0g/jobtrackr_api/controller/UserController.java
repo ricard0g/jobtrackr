@@ -11,6 +11,7 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
+import com.ricard0g.jobtrackr_api.dto.UserDto.SignInMethodsResponseDto;
 import com.ricard0g.jobtrackr_api.dto.UserDto.UserPatchRequestDto;
 import com.ricard0g.jobtrackr_api.dto.UserDto.UserResponseDto;
 import com.ricard0g.jobtrackr_api.service.UserService;
@@ -30,6 +31,12 @@ public class UserController {
     public ResponseEntity<UserResponseDto> getAuthenticatedUser(final Principal principal) {
         final UUID userId = AuthenticatedUserId.from(principal);
         return ResponseEntity.ok(userService.getUserById(userId));
+    }
+
+    @GetMapping("/sign-in-methods")
+    public ResponseEntity<SignInMethodsResponseDto> getSignInMethods(final Principal principal) {
+        final UUID userId = AuthenticatedUserId.from(principal);
+        return ResponseEntity.ok(userService.getSignInMethods(userId));
     }
 
     @PatchMapping

@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import {
+	consumeOAuthResultParam,
 	googleAuthorizationHref,
 	oauthResultMessage,
 	parseOAuthResult,
@@ -53,5 +54,21 @@ describe("oauthResultMessage", () => {
 			"This Google identity is not linked to your JobTrackr User. Sign in with your password to connect it.",
 		);
 		expect(message).not.toMatch(/id_token|access_token|@/);
+	});
+});
+
+describe("consumeOAuthResultParam", () => {
+	it("flashes an allowlisted code and then returns it on the cleaned URL", () => {
+		window.sessionStorage.clear();
+		const incoming = consumeOAuthResultParam(
+			new URL("http://localhost/settings/account?oauthResult=failed"),
+		);
+		expect(incoming.redirectHref).toBe("/settings/account");
+		expect(incoming.result).toBeNull();
+
+		const flashed = consumeOAuthResultParam(new URL("http://localhost/settings/account"));
+		expect(flashed.redirectHref).toBeNull();
+		expect(flashed.result).toBe("failed");
+		expect(window.sessionStorage.getItem("jobtrackr.oauthResult")).toBeNull();
 	});
 });

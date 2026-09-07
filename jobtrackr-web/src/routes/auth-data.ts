@@ -4,12 +4,10 @@ import { redirect } from "react-router";
 import { ApiError, getAuthProviders, login, register } from "@/lib/api";
 import { redirectPathAfterAuth } from "@/lib/account-settings";
 import {
-	parseOAuthResult,
+	consumeOAuthResultParam,
 	type OAuthResultCode,
 } from "@/lib/google-auth";
 import type { AuthActionData, LoginRequest, RegisterRequest } from "@/types/auth";
-
-const OAUTH_RESULT_FLASH_KEY = "jobtrackr.oauthResult";
 
 export type PublicAuthLoaderData = {
 	google: boolean;
@@ -20,21 +18,14 @@ export async function publicAuthLoader({
 	request,
 }: LoaderFunctionArgs): Promise<PublicAuthLoaderData> {
 	const url = new URL(request.url);
-	const incomingResult = parseOAuthResult(url.searchParams.get("oauthResult"));
-	if (incomingResult) {
-		sessionStorage.setItem(OAUTH_RESULT_FLASH_KEY, incomingResult);
-		url.searchParams.delete("oauthResult");
-		throw redirect(`${url.pathname}${url.search}${url.hash}`);
-	}
-
-	const flashedResult = parseOAuthResult(sessionStorage.getItem(OAUTH_RESULT_FLASH_KEY));
-	if (flashedResult) {
-		sessionStorage.removeItem(OAUTH_RESULT_FLASH_KEY);
+	const oauth = consumeOAuthResultParam(url);
+	if (oauth.redirectHref) {
+		throw redirect(oauth.redirectHref);
 	}
 
 	return {
 		google: (await getAuthProviders()).google,
-		oauthResult: flashedResult,
+		oauthResult: oauth.result,
 	};
 }
 

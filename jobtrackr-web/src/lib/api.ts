@@ -28,6 +28,7 @@ import type {
 import { API_BASE_URL, AUTH_BASE_URL } from "@/lib/api-config";
 import type { AuthProviders } from "@/lib/google-auth";
 import type { Tag, TagWriteRequest } from "@/types/tag";
+import type { SignInMethods } from "@/types/sign-in-methods";
 import type { User, UserPatchRequest } from "@/types/user";
 import type { BaseCv, BaseCvDownload } from "@/types/base-cv";
 import type {
@@ -365,6 +366,7 @@ export const api = {
 			headers: jsonHeaders,
 			body: JSON.stringify(request),
 		}),
+	getSignInMethods: () => apiRequest<SignInMethods>("/user/sign-in-methods"),
 	getBaseCvs: () => apiRequest<BaseCv[]>("/base-cvs"),
 	uploadBaseCv: (file: File) => {
 		const formData = new FormData();

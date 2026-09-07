@@ -98,4 +98,8 @@ public class User {
     public void advanceAuthenticationVersion() {
         userAuthVersion = userAuthVersion + 1;
     }
+
+    public boolean hasPasswordSignIn() {
+        return userPasswordHash != null && !userPasswordHash.isBlank();
+    }
 }

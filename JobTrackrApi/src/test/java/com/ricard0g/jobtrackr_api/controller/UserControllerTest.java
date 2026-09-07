@@ -17,6 +17,9 @@ import org.springframework.context.annotation.Import;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 
+import com.ricard0g.jobtrackr_api.dto.UserDto.SignInMethodsResponseDto;
+import com.ricard0g.jobtrackr_api.dto.UserDto.SignInMethodsResponseDto.GoogleSignInMethodDto;
+import com.ricard0g.jobtrackr_api.dto.UserDto.SignInMethodsResponseDto.PasswordSignInMethodDto;
 import com.ricard0g.jobtrackr_api.dto.UserDto.UserResponseDto;
 import com.ricard0g.jobtrackr_api.exception.GlobalExceptionHandler;
 import com.ricard0g.jobtrackr_api.exception.UserNotFoundException;
@@ -62,6 +65,21 @@ class UserControllerTest {
                 .andExpect(jsonPath("$.code").value("USER_NOT_FOUND"));
     }
 
+    @Test
+    void getSignInMethods_returnsPasswordAndGoogleStatusWithoutSubject() throws Exception {
+        // given
+        when(userService.getSignInMethods(USER_ID)).thenReturn(sampleSignInMethods());
+
+        // when / then
+        mockMvc.perform(get(BASE_PATH + "/sign-in-methods").principal(authenticatedUser()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.password.enabled").value(true))
+                .andExpect(jsonPath("$.password.changedAt").value("2026-06-04T12:00:00Z"))
+                .andExpect(jsonPath("$.google.connected").value(true))
+                .andExpect(jsonPath("$.google.providerEmail").value("google@example.com"))
+                .andExpect(jsonPath("$.google.subject").doesNotExist());
+    }
+
     private static UserResponseDto sampleUser() {
         return new UserResponseDto(
                 USER_ID,
@@ -75,6 +93,12 @@ class UserControllerTest {
                 null,
                 TIMESTAMP,
                 TIMESTAMP);
+    }
+
+    private static SignInMethodsResponseDto sampleSignInMethods() {
+        return new SignInMethodsResponseDto(
+                new PasswordSignInMethodDto(true, TIMESTAMP),
+                new GoogleSignInMethodDto(true, "google@example.com", TIMESTAMP, TIMESTAMP));
     }
 
     private static Principal authenticatedUser() {

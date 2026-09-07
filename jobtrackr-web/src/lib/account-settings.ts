@@ -33,6 +33,13 @@ export function sanitizeReturnTo(value: string | null | undefined): string | nul
 	return ACCOUNT_SETTINGS_PATH;
 }
 
+export function formatSignInTimestamp(value: string): string {
+	return new Intl.DateTimeFormat("en-US", {
+		dateStyle: "medium",
+		timeStyle: "short",
+	}).format(new Date(value));
+}
+
 export function loginPathForRequest(request: Request): string {
 	const pathname = new URL(request.url).pathname;
 	const returnTo = sanitizeReturnTo(pathname);

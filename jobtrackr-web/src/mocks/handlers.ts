@@ -46,6 +46,7 @@ import type { CompanyWriteRequest } from "@/types/company";
 import type { InterviewCreateRequest, InterviewOutcomePatchRequest, InterviewPutRequest } from "@/types/interview";
 import type { TagWriteRequest } from "@/types/tag";
 import type { User } from "@/types/user";
+import type { SignInMethods } from "@/types/sign-in-methods";
 import type { BaseCv, BaseCvFormat } from "@/types/base-cv";
 import type {
 	CreateCvGenerationRequest,
@@ -377,6 +378,30 @@ const ensureTagLimit = (tagIds: number[]) =>
 			)
 		: null;
 
+const toPublicSignInMethods = (state: MockState, user: User): SignInMethods => {
+	const credentials = state.credentials.find((entry) => entry.userId === user.userId);
+	const identity = state.googleIdentities.find((entry) => entry.userId === user.userId);
+	return {
+		password: {
+			enabled: Boolean(credentials?.password),
+			changedAt: user.userPasswordChangedAt,
+		},
+		google: identity
+			? {
+					connected: true,
+					providerEmail: identity.providerEmail,
+					linkedAt: identity.linkedAt,
+					lastUsedAt: identity.lastUsedAt,
+				}
+			: {
+					connected: false,
+					providerEmail: null,
+					linkedAt: null,
+					lastUsedAt: null,
+				},
+	};
+};
+
 const patchNullable = <T>(
 	value: T | null | undefined,
 	apply: (value: T) => void,
@@ -527,6 +552,13 @@ export const handlers = [
 		auth.user.userUpdatedAt = timestamp;
 		saveState(state);
 		return HttpResponse.json(auth.user);
+	}),
+
+	http.get(`${API_BASE_URL}/user/sign-in-methods`, ({ request }) => {
+		const state = loadState();
+		const auth = requireAuth(request, state);
+		if (auth instanceof Response) return auth;
+		return HttpResponse.json(toPublicSignInMethods(state, auth.user));
 	}),
 
 	http.get(`${API_BASE_URL}/base-cvs`, ({ request }) => {

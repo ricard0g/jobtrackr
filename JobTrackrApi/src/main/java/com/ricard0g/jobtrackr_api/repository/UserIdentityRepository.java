@@ -22,4 +22,6 @@ public interface UserIdentityRepository extends JpaRepository<UserIdentity, UUID
     Optional<UserIdentity> findByProviderAndSubject(
             @Param("provider") IdentityProvider provider,
             @Param("subject") String subject);
+
+    Optional<UserIdentity> findByUser_UserIdAndProvider(UUID userId, IdentityProvider provider);
 }

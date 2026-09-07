@@ -21,6 +21,14 @@ export type MockCredentials = {
 	password: string;
 };
 
+export type MockGoogleIdentity = {
+	userId: string;
+	subject: string;
+	providerEmail: string;
+	linkedAt: string;
+	lastUsedAt: string;
+};
+
 export type MockSession = {
 	userId: string;
 	accessToken: string;
@@ -70,6 +78,7 @@ export type MockState = {
 	activeRefreshToken: string | null;
 	users: User[];
 	credentials: MockCredentials[];
+	googleIdentities: MockGoogleIdentity[];
 	sessions: MockSession[];
 	companies: Company[];
 	tags: Tag[];

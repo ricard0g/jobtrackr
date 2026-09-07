@@ -1,13 +1,37 @@
-import type { ActionFunctionArgs } from "react-router";
+import type { ActionFunctionArgs, LoaderFunctionArgs } from "react-router";
+import { redirect } from "react-router";
 
 import { DISPLAY_NAME_MAX_LENGTH } from "@/lib/account-settings";
 import { ApiError, api, requireSession } from "@/lib/api";
+import { consumeOAuthResultParam, type OAuthResultCode } from "@/lib/google-auth";
+import type { SignInMethods } from "@/types/sign-in-methods";
 
 export type AccountSettingsActionData = {
 	ok: boolean;
 	formError?: string;
 	fieldErrors?: Record<string, string>;
 };
+
+export type AccountSettingsLoaderData = {
+	signInMethods: SignInMethods;
+	oauthResult: OAuthResultCode | null;
+};
+
+export async function accountSettingsLoader({
+	request,
+}: LoaderFunctionArgs): Promise<AccountSettingsLoaderData> {
+	await requireSession(request);
+	const url = new URL(request.url);
+	const oauth = consumeOAuthResultParam(url);
+	if (oauth.redirectHref) {
+		throw redirect(oauth.redirectHref);
+	}
+
+	return {
+		signInMethods: await api.getSignInMethods(),
+		oauthResult: oauth.result,
+	};
+}
 
 export async function accountSettingsAction({
 	request,

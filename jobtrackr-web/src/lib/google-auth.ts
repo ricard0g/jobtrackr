@@ -34,6 +34,30 @@ export function oauthResultMessage(code: OAuthResultCode): string {
 	return oauthResultMessages[code];
 }
 
+const OAUTH_RESULT_FLASH_KEY = "jobtrackr.oauthResult";
+
+export function consumeOAuthResultParam(url: URL): {
+	result: OAuthResultCode | null;
+	redirectHref: string | null;
+} {
+	const incomingResult = parseOAuthResult(url.searchParams.get("oauthResult"));
+	if (incomingResult) {
+		sessionStorage.setItem(OAUTH_RESULT_FLASH_KEY, incomingResult);
+		url.searchParams.delete("oauthResult");
+		return {
+			result: null,
+			redirectHref: `${url.pathname}${url.search}${url.hash}`,
+		};
+	}
+
+	const flashedResult = parseOAuthResult(sessionStorage.getItem(OAUTH_RESULT_FLASH_KEY));
+	if (flashedResult) {
+		sessionStorage.removeItem(OAUTH_RESULT_FLASH_KEY);
+	}
+
+	return { result: flashedResult, redirectHref: null };
+}
+
 const ALLOWED_RETURN_TO = new Set(["/", "/documents", "/settings/account"]);
 
 export function sanitizeOauthReturnTo(value: string | null | undefined): string | null {

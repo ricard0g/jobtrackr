@@ -34,7 +34,7 @@ import {
 	recentGeneratedCvsResourceLoader,
 	recentGeneratedCvsShouldRevalidate,
 } from "@/routes/documents-data";
-import { accountSettingsAction } from "@/routes/account-settings-data";
+import { accountSettingsAction, accountSettingsLoader } from "@/routes/account-settings-data";
 import {
 	AccountSettingsFallbackRoute,
 } from "@/routes/AccountSettingsRoute";
@@ -111,8 +111,10 @@ const router = createBrowserRouter([
 				],
 			},
 			{
+				id: "account-settings",
 				path: "settings/account",
 				Component: AccountSettingsFallbackRoute,
+				loader: accountSettingsLoader,
 				action: accountSettingsAction,
 			},
 			{

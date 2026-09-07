@@ -37,6 +37,7 @@ export const loadState = (): MockState => {
 			legacy.cvGenerations ??= [];
 			legacy.jobDescriptions ??= [];
 			legacy.aiConsents ??= [];
+			legacy.googleIdentities ??= [];
 			legacy.counters.baseCvId ??= 1;
 			legacy.counters.cvGenerationId ??= 1;
 			legacy.counters.generatedCvId ??= legacy.counters.applicationCvId ?? 1;

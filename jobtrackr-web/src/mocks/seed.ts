@@ -288,6 +288,7 @@ export const createSeedState = (): MockState => {
 				password: "password123",
 			},
 		],
+		googleIdentities: [],
 		sessions: [],
 		companies: [
 			{

@@ -1,9 +1,10 @@
 import { X } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import {
 	useBlocker,
 	useFetcher,
 	useLocation,
+	useMatches,
 	useNavigate,
 	useRouteLoaderData,
 } from "react-router";
@@ -12,9 +13,11 @@ import {
 	ACCOUNT_MENU_BUTTON_LABEL,
 	ACCOUNT_SETTINGS_PATH,
 	DISPLAY_NAME_MAX_LENGTH,
+	formatSignInTimestamp,
 	isAccountSettingsLocation,
 } from "@/lib/account-settings";
 import type { AccountLoaderData } from "@/lib/api";
+import { oauthResultMessage } from "@/lib/google-auth";
 import {
 	AlertDialog,
 	AlertDialogAction,
@@ -41,7 +44,10 @@ import {
 	FormMessage,
 } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
-import type { AccountSettingsActionData } from "@/routes/account-settings-data";
+import type {
+	AccountSettingsActionData,
+	AccountSettingsLoaderData,
+} from "@/routes/account-settings-data";
 
 export function AccountSettingsFallbackRoute() {
 	return <div className="h-full bg-bg" />;
@@ -51,7 +57,11 @@ export function AccountSettingsDialog() {
 	const { user } = useRouteLoaderData("app") as AccountLoaderData;
 	const navigate = useNavigate();
 	const location = useLocation();
+	const matches = useMatches();
+	const settingsMatch = matches.find((match) => match.id === "account-settings");
+	const routeData = settingsMatch?.data as AccountSettingsLoaderData | undefined;
 	const fetcher = useFetcher<AccountSettingsActionData>();
+	const methodsFetcher = useFetcher<AccountSettingsLoaderData>();
 	const savedDisplayName = user.userDisplayName ?? "";
 	const [displayName, setDisplayName] = useState(savedDisplayName);
 	const [savedSnapshot, setSavedSnapshot] = useState(savedDisplayName);
@@ -63,6 +73,15 @@ export function AccountSettingsDialog() {
 	const [confirmClose, setConfirmClose] = useState(false);
 	const isSaving = fetcher.state !== "idle";
 	const fieldErrors = fetcher.data?.ok === false ? fetcher.data.fieldErrors : undefined;
+	const loaderData = routeData ?? methodsFetcher.data;
+	const [methodsRequested, setMethodsRequested] = useState(false);
+
+	useEffect(() => {
+		if (routeData) return;
+		setMethodsRequested(true);
+		void methodsFetcher.load(ACCOUNT_SETTINGS_PATH);
+		// eslint-disable-next-line react-hooks/exhaustive-deps -- load once per open
+	}, [routeData]);
 
 	const closeSettings = () => {
 		if (location.pathname === ACCOUNT_SETTINGS_PATH) {
@@ -139,7 +158,7 @@ export function AccountSettingsDialog() {
 					<DialogHeader>
 						<DialogTitle>Account Settings</DialogTitle>
 						<DialogDescription>
-							Edit your display name. Primary Email stays read-only.
+							Edit your display name and review how you sign in. Primary Email stays read-only.
 						</DialogDescription>
 					</DialogHeader>
 
@@ -192,6 +211,13 @@ export function AccountSettingsDialog() {
 							</div>
 						</fetcher.Form>
 					</section>
+
+					<SignInMethodsSection
+						primaryEmail={user.userEmail}
+						loaderData={loaderData}
+						methodsRequested={methodsRequested}
+						methodsLoadIdle={methodsFetcher.state === "idle"}
+					/>
 				</DialogContent>
 			</Dialog>
 
@@ -215,5 +241,146 @@ export function AccountSettingsDialog() {
 				</AlertDialogContent>
 			</AlertDialog>
 		</>
+	);
+}
+
+function SignInMethodsSection({
+	primaryEmail,
+	loaderData,
+	methodsRequested,
+	methodsLoadIdle,
+}: {
+	primaryEmail: string;
+	loaderData: AccountSettingsLoaderData | undefined;
+	methodsRequested: boolean;
+	methodsLoadIdle: boolean;
+}) {
+	const statusCopy =
+		loaderData || !methodsRequested || !methodsLoadIdle
+			? "Loading sign-in methods…"
+			: "Could not load sign-in methods.";
+
+	return (
+		<section className="mt-8 grid gap-4" aria-labelledby="sign-in-methods-heading">
+			<h2 id="sign-in-methods-heading" className="font-display text-base font-semibold">
+				Sign-in Methods
+			</h2>
+			{loaderData ? (
+				<SignInMethodsContent primaryEmail={primaryEmail} data={loaderData} />
+			) : (
+				<p role="status" className="text-sm text-medium-gray">
+					{statusCopy}
+				</p>
+			)}
+		</section>
+	);
+}
+
+function SignInMethodsContent({
+	primaryEmail,
+	data,
+}: {
+	primaryEmail: string;
+	data: AccountSettingsLoaderData;
+}) {
+	const { signInMethods, oauthResult } = data;
+	const providerEmail = signInMethods.google.providerEmail;
+	const emailsDiffer =
+		signInMethods.google.connected &&
+		providerEmail !== null &&
+		providerEmail.toLowerCase() !== primaryEmail.toLowerCase();
+
+	return (
+		<div className="grid gap-4">
+			{oauthResult ? (
+				<p
+					role="status"
+					className="rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive"
+				>
+					{oauthResultMessage(oauthResult)}
+				</p>
+			) : null}
+			<SignInMethodRow title="Password">
+				<p className="text-sm text-medium-gray">
+					{signInMethods.password.enabled ? "Enabled" : "Not created"}
+				</p>
+				{signInMethods.password.changedAt ? (
+					<p className="text-sm text-medium-gray">
+						Changed {formatSignInTimestamp(signInMethods.password.changedAt)}
+					</p>
+				) : null}
+				<div className="mt-3">
+					<Button type="button" variant="outline" size="sm">
+						{signInMethods.password.enabled ? "Change" : "Create"}
+					</Button>
+				</div>
+			</SignInMethodRow>
+			<SignInMethodRow title="Google">
+				<p className="text-sm text-medium-gray">
+					{signInMethods.google.connected ? "Connected" : "Not connected"}
+				</p>
+				{signInMethods.google.connected && providerEmail ? (
+					<p className="text-sm">{providerEmail}</p>
+				) : null}
+				{signInMethods.google.linkedAt ? (
+					<p className="text-sm text-medium-gray">
+						Linked {formatSignInTimestamp(signInMethods.google.linkedAt)}
+					</p>
+				) : null}
+				{signInMethods.google.lastUsedAt ? (
+					<p className="text-sm text-medium-gray">
+						Last used {formatSignInTimestamp(signInMethods.google.lastUsedAt)}
+					</p>
+				) : null}
+				{emailsDiffer ? (
+					<p className="text-sm text-medium-gray">
+						The Google email differs from your Primary Email. Primary Email is unchanged.
+					</p>
+				) : null}
+				<div className="mt-3 flex flex-wrap items-center gap-2">
+					{signInMethods.google.connected ? (
+						<>
+							<Button
+								type="button"
+								variant="outline"
+								size="sm"
+								disabled={!signInMethods.password.enabled}
+							>
+								Disconnect
+							</Button>
+							{signInMethods.password.enabled ? null : (
+								<>
+									<p className="text-sm text-medium-gray">
+										Create a password before disconnecting Google.
+									</p>
+									<Button type="button" size="sm">
+										Create password
+									</Button>
+								</>
+							)}
+						</>
+					) : (
+						<Button type="button" variant="outline" size="sm">
+							Connect
+						</Button>
+					)}
+				</div>
+			</SignInMethodRow>
+		</div>
+	);
+}
+
+function SignInMethodRow({
+	title,
+	children,
+}: {
+	title: string;
+	children: ReactNode;
+}) {
+	return (
+		<div className="rounded-lg border border-light-gray p-4">
+			<h3 className="font-medium">{title}</h3>
+			<div className="mt-2 grid gap-1">{children}</div>
+		</div>
 	);
 }
