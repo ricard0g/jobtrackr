@@ -18,6 +18,7 @@ export type AccountSettingsActionIntent =
 	| "profile"
 	| "google-link"
 	| "google-reauth"
+	| "google-disconnect"
 	| "change-password"
 	| "create-password";
 
@@ -64,6 +65,9 @@ export async function accountSettingsAction({
 	const intent = String(formData.get("intent") ?? "profile");
 	if (intent === "google-link") {
 		return beginGoogleLink(formData);
+	}
+	if (intent === "google-disconnect") {
+		return disconnectGoogle(formData);
 	}
 	if (intent === "google-reauth") {
 		return beginGooglePasswordReauth();
@@ -163,6 +167,51 @@ async function beginGoogleLink(formData: FormData): Promise<AccountSettingsActio
 				error instanceof Error
 					? error.message
 					: "Could not connect Google. Check your connection and try again.",
+		};
+	}
+}
+
+async function disconnectGoogle(formData: FormData): Promise<AccountSettingsActionData> {
+	const currentPassword = String(formData.get("currentPassword") ?? "");
+	if (currentPassword.length === 0) {
+		return {
+			ok: false,
+			intent: "google-disconnect",
+			fieldErrors: {
+				currentPassword: "Current password is required.",
+			},
+		};
+	}
+
+	try {
+		await api.disconnectGoogle(currentPassword);
+		return { ok: true, intent: "google-disconnect" };
+	} catch (error) {
+		if (error instanceof ApiError) {
+			if (error.code === "INVALID_CREDENTIALS") {
+				return {
+					ok: false,
+					intent: "google-disconnect",
+					fieldErrors: {
+						currentPassword: "Current password is incorrect.",
+					},
+				};
+			}
+			return {
+				ok: false,
+				intent: "google-disconnect",
+				formError: error.message,
+				fieldErrors: error.fieldErrors,
+			};
+		}
+
+		return {
+			ok: false,
+			intent: "google-disconnect",
+			formError:
+				error instanceof Error
+					? error.message
+					: "Could not disconnect Google. Check your connection and try again.",
 		};
 	}
 }

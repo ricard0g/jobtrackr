@@ -636,6 +636,38 @@ export const handlers = [
 		return new HttpResponse(null, { status: 204 });
 	}),
 
+	http.post(`${API_BASE_URL}/user/sign-in-identities/google/disconnect`, async ({ request }) => {
+		const state = loadState();
+		const auth = requireAuth(request, state);
+		if (auth instanceof Response) return auth;
+		const body = await readJson<{ currentPassword?: string }>(request);
+		const credentials = state.credentials.find((entry) => entry.userId === auth.user.userId);
+		if (!credentials) {
+			return errorJson(
+				403,
+				"GOOGLE_DISCONNECT_NOT_ALLOWED",
+				"Create a password before disconnecting Google",
+			);
+		}
+		if (!body.currentPassword) {
+			return errorJson(400, "CURRENT_PASSWORD_REQUIRED", "Current password is required");
+		}
+		if (credentials.password !== body.currentPassword) {
+			return errorJson(401, "INVALID_CREDENTIALS", "Invalid email or password");
+		}
+		const identityIndex = state.googleIdentities.findIndex(
+			(identity) => identity.userId === auth.user.userId,
+		);
+		if (identityIndex < 0) {
+			return errorJson(409, "GOOGLE_IDENTITY_NOT_CONNECTED", "Google is not connected");
+		}
+
+		state.googleIdentities.splice(identityIndex, 1);
+		const response = createAuthResponse(state, auth.user);
+		saveState(state);
+		return HttpResponse.json(response);
+	}),
+
 	http.post(`${API_BASE_URL}/user/password/google-reauth-intent`, ({ request }) => {
 		const state = loadState();
 		const auth = requireAuth(request, state);

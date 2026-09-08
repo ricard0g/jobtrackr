@@ -383,6 +383,19 @@ export const api = {
 		setAccessToken(response.accessToken);
 		return response;
 	},
+	disconnectGoogle: async (currentPassword: string) => {
+		const response = await apiRequest<AuthResponse>(
+			"/user/sign-in-identities/google/disconnect",
+			{
+				method: "POST",
+				headers: jsonHeaders,
+				credentials: "include",
+				body: JSON.stringify({ currentPassword }),
+			},
+		);
+		setAccessToken(response.accessToken);
+		return response;
+	},
 	createGoogleLinkIntent: (currentPassword: string) =>
 		apiRequest<void>("/user/sign-in-identities/google/link-intent", {
 			method: "POST",

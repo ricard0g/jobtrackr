@@ -15,6 +15,7 @@ import org.springframework.web.bind.annotation.RestController;
 
 import com.ricard0g.jobtrackr_api.config.security.RefreshTokenCookieService;
 import com.ricard0g.jobtrackr_api.dto.AuthDto.AuthResponse;
+import com.ricard0g.jobtrackr_api.dto.UserDto.GoogleDisconnectRequestDto;
 import com.ricard0g.jobtrackr_api.dto.UserDto.GoogleLinkIntentRequestDto;
 import com.ricard0g.jobtrackr_api.dto.UserDto.SignInMethodsResponseDto;
 import com.ricard0g.jobtrackr_api.dto.UserDto.UserPasswordRequestDto;
@@ -24,6 +25,7 @@ import com.ricard0g.jobtrackr_api.security.ratelimit.AuthenticationAction;
 import com.ricard0g.jobtrackr_api.security.ratelimit.AuthenticationRateLimitKey;
 import com.ricard0g.jobtrackr_api.security.ratelimit.AuthenticationRateLimiter;
 import com.ricard0g.jobtrackr_api.service.AuthService.AuthTokenPair;
+import com.ricard0g.jobtrackr_api.service.GoogleDisconnectService;
 import com.ricard0g.jobtrackr_api.service.GoogleLinkIntentService;
 import com.ricard0g.jobtrackr_api.service.GooglePasswordReauthIntentService;
 import com.ricard0g.jobtrackr_api.service.UserPasswordService;
@@ -46,6 +48,7 @@ public class UserController {
     private final UserPasswordService userPasswordService;
     private final GoogleLinkIntentService googleLinkIntentService;
     private final GooglePasswordReauthIntentService googlePasswordReauthIntentService;
+    private final GoogleDisconnectService googleDisconnectService;
     private final RefreshTokenCookieService refreshTokenCookieService;
     private final AuthenticationRateLimiter authenticationRateLimiter;
 
@@ -110,6 +113,22 @@ public class UserController {
                 AuthenticationRateLimitKey.userAndClientIp(userId, clientIp(httpRequest)));
         googleLinkIntentService.beginLink(userId, request.currentPassword(), httpRequest, httpResponse);
         return ResponseEntity.noContent().build();
+    }
+
+    @PostMapping("/sign-in-identities/google/disconnect")
+    public ResponseEntity<AuthResponse> disconnectGoogle(
+            final Principal principal,
+            @Valid @RequestBody final GoogleDisconnectRequestDto request,
+            final HttpServletRequest httpRequest,
+            final HttpServletResponse httpResponse) {
+        final UUID userId = AuthenticatedUserId.from(principal);
+        authenticationRateLimiter.consume(
+                AuthenticationAction.PROTECTED_SECURITY,
+                AuthenticationRateLimitKey.userAndClientIp(userId, clientIp(httpRequest)));
+        final AuthTokenPair tokenPair = googleDisconnectService.disconnect(userId, request.currentPassword());
+        refreshTokenCookieService.writeRefreshTokenCookie(
+                httpResponse, tokenPair.refreshToken(), tokenPair.refreshExpiresAt());
+        return ResponseEntity.ok(tokenPair.authResponse());
     }
 
     private static String clientIp(final HttpServletRequest request) {

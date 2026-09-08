@@ -315,8 +315,27 @@ function stubSignInMethods(methods: SignInMethods) {
 	);
 }
 
-async function openSignInMethods() {
+async function seedLinkedGoogle(providerEmail = "linked-google@example.com") {
 	await authenticateDemoUser();
+	const { loadState, saveState } = await import("@/mocks/db");
+	const state = loadState();
+	const userId = state.users[0]?.userId;
+	state.googleIdentities = [
+		{
+			userId: userId ?? "",
+			subject: googleSubject,
+			providerEmail,
+			linkedAt: googleLinkedAt,
+			lastUsedAt: googleLastUsedAt,
+		},
+	];
+	saveState(state);
+}
+
+async function openSignInMethods(authenticate = true) {
+	if (authenticate) {
+		await authenticateDemoUser();
+	}
 	renderApp(["/"]);
 	await screen.findByText("Kanban page");
 	const dialog = await openAccountSettings();
@@ -325,7 +344,8 @@ async function openSignInMethods() {
 		const loaded =
 			within(dialog).queryByRole("button", { name: "Change" }) ||
 			within(dialog).queryByRole("button", { name: "Create" }) ||
-			within(dialog).queryByRole("button", { name: "Connect" });
+			within(dialog).queryByRole("button", { name: "Connect" }) ||
+			within(dialog).queryByRole("button", { name: "Disconnect" });
 		expect(loaded).toBeTruthy();
 	});
 	return dialog;
@@ -379,6 +399,75 @@ describe("Account Settings Sign-in Methods", () => {
 		const disconnect = within(dialog).getByRole("button", { name: "Disconnect" });
 		expect((disconnect as HTMLButtonElement).disabled).toBe(false);
 		expect(within(dialog).queryByText("Create a password before disconnecting Google.")).toBeNull();
+	});
+
+	it("opens a nested accessible confirmation with current password before disconnecting Google", async () => {
+		stubSignInMethods(bothMethods("linked-google@example.com"));
+		const dialog = await openSignInMethods();
+
+		fireEvent.click(within(dialog).getByRole("button", { name: "Disconnect" }));
+
+		const confirm = await screen.findByRole("alertdialog", { name: "Disconnect Google?" });
+		expect(within(confirm).getByLabelText("Current password")).toBeTruthy();
+		expect(within(confirm).getByRole("button", { name: "Disconnect Google" })).toBeTruthy();
+		expect(within(confirm).getByRole("button", { name: "Cancel" })).toBeTruthy();
+
+		fireEvent.click(within(confirm).getByRole("button", { name: "Cancel" }));
+		await waitFor(() => {
+			expect(screen.queryByRole("alertdialog", { name: "Disconnect Google?" })).toBeNull();
+		});
+		expect(screen.getByRole("dialog", { name: "Account Settings" })).toBeTruthy();
+		expect(within(dialog).getByRole("button", { name: "Disconnect" })).toBeTruthy();
+	});
+
+	it("closes the nested disconnect confirmation with Escape and keeps Account Settings open", async () => {
+		stubSignInMethods(bothMethods("linked-google@example.com"));
+		const dialog = await openSignInMethods();
+
+		fireEvent.click(within(dialog).getByRole("button", { name: "Disconnect" }));
+		const confirm = await screen.findByRole("alertdialog", { name: "Disconnect Google?" });
+
+		fireEvent.keyDown(confirm, { key: "Escape", code: "Escape" });
+		await waitFor(() => {
+			expect(screen.queryByRole("alertdialog", { name: "Disconnect Google?" })).toBeNull();
+		});
+		expect(screen.getByRole("dialog", { name: "Account Settings" })).toBeTruthy();
+		expect(within(dialog).getByRole("button", { name: "Disconnect" })).toBeTruthy();
+	});
+
+	it("keeps the confirmation open when disconnect current password is wrong", async () => {
+		await seedLinkedGoogle();
+		const dialog = await openSignInMethods(false);
+
+		fireEvent.click(within(dialog).getByRole("button", { name: "Disconnect" }));
+		const confirm = await screen.findByRole("alertdialog", { name: "Disconnect Google?" });
+		fireEvent.change(within(confirm).getByLabelText("Current password"), {
+			target: { value: "wrong-password" },
+		});
+		fireEvent.click(within(confirm).getByRole("button", { name: "Disconnect Google" }));
+
+		expect(await within(confirm).findByText("Current password is incorrect.")).toBeTruthy();
+		expect(screen.getByRole("alertdialog", { name: "Disconnect Google?" })).toBeTruthy();
+		expect(within(dialog).getByText("linked-google@example.com")).toBeTruthy();
+	});
+
+	it("revalidates Sign-in Methods and offers Connect after a successful disconnect", async () => {
+		await seedLinkedGoogle();
+		const dialog = await openSignInMethods(false);
+
+		fireEvent.click(within(dialog).getByRole("button", { name: "Disconnect" }));
+		const confirm = await screen.findByRole("alertdialog", { name: "Disconnect Google?" });
+		fireEvent.change(within(confirm).getByLabelText("Current password"), {
+			target: { value: demoCredentials.password },
+		});
+		fireEvent.click(within(confirm).getByRole("button", { name: "Disconnect Google" }));
+
+		await waitFor(() => {
+			expect(screen.queryByRole("alertdialog", { name: "Disconnect Google?" })).toBeNull();
+		});
+		expect(await within(dialog).findByRole("button", { name: "Connect" })).toBeTruthy();
+		expect(within(dialog).queryByRole("button", { name: "Disconnect" })).toBeNull();
+		expect(screen.getByRole("dialog", { name: "Account Settings" })).toBeTruthy();
 	});
 
 	it("keeps differing provider email and Primary Email visible with a neutral explanation", async () => {

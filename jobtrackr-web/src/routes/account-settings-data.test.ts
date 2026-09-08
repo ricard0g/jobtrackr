@@ -255,4 +255,62 @@ describe("accountSettingsAction", () => {
 			},
 		});
 	});
+
+	it("disconnects Google after current-password confirmation", async () => {
+		setAccessToken("test-token");
+		const disconnectGoogle = vi.spyOn(api, "disconnectGoogle").mockResolvedValue({
+			accessToken: "fresh-access-token",
+			tokenType: "Bearer",
+			expiresIn: 900,
+			user: {
+				userId: "11111111-1111-1111-1111-111111111111",
+				userEmail: "demo@jobtrackr.local",
+				userDisplayName: "Demo User",
+				userPictureUrl: null,
+				userEnabled: true,
+				userLocked: false,
+				userDeletedAt: null,
+				userPasswordChangedAt: "2026-06-04T12:00:00.000Z",
+				userLastLoginAt: "2026-06-04T12:00:00.000Z",
+				userCreatedAt: "2026-06-04T12:00:00.000Z",
+				userUpdatedAt: "2026-09-08T20:00:00.000Z",
+			},
+		});
+
+		const result = await accountSettingsAction(
+			actionArgs(
+				createFormData({
+					intent: "google-disconnect",
+					currentPassword: "password123",
+				}),
+			),
+		);
+
+		expect(result).toEqual({ ok: true, intent: "google-disconnect" });
+		expect(disconnectGoogle).toHaveBeenCalledWith("password123");
+	});
+
+	it("maps an incorrect disconnect password to a field error", async () => {
+		setAccessToken("test-token");
+		vi.spyOn(api, "disconnectGoogle").mockRejectedValue(
+			new ApiError("Invalid email or password", 401, "INVALID_CREDENTIALS"),
+		);
+
+		const result = await accountSettingsAction(
+			actionArgs(
+				createFormData({
+					intent: "google-disconnect",
+					currentPassword: "wrong-password",
+				}),
+			),
+		);
+
+		expect(result).toEqual({
+			ok: false,
+			intent: "google-disconnect",
+			fieldErrors: {
+				currentPassword: "Current password is incorrect.",
+			},
+		});
+	});
 });

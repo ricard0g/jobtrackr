@@ -377,14 +377,7 @@ function SignInMethodsContent({
 				<div className="mt-3 flex flex-wrap items-center gap-2">
 					{signInMethods.google.connected ? (
 						<>
-							<Button
-								type="button"
-								variant="outline"
-								size="sm"
-								disabled={!signInMethods.password.enabled}
-							>
-								Disconnect
-							</Button>
+							<GoogleDisconnectControl passwordEnabled={signInMethods.password.enabled} />
 							{signInMethods.password.enabled ? null : (
 								<>
 									<p className="text-sm text-medium-gray">
@@ -663,6 +656,98 @@ function GoogleReauthStartButton({
 				</p>
 			) : null}
 		</div>
+	);
+}
+
+function GoogleDisconnectControl({ passwordEnabled }: { passwordEnabled: boolean }) {
+	const fetcher = useFetcher<AccountSettingsActionData>();
+	const [open, setOpen] = useState(false);
+	const [currentPassword, setCurrentPassword] = useState("");
+	const submitting = fetcher.state !== "idle";
+	const disconnectResult = fetcher.data?.intent === "google-disconnect" ? fetcher.data : undefined;
+	const succeeded = disconnectResult?.ok === true;
+	const currentPasswordError =
+		disconnectResult?.ok === false ? disconnectResult.fieldErrors?.currentPassword : undefined;
+	const formError = disconnectResult?.ok === false ? disconnectResult.formError : undefined;
+
+	useEffect(() => {
+		if (!succeeded) return;
+		setOpen(false);
+		setCurrentPassword("");
+	}, [succeeded]);
+
+	if (!passwordEnabled) {
+		return (
+			<Button type="button" variant="outline" size="sm" disabled>
+				Disconnect
+			</Button>
+		);
+	}
+
+	return (
+		<>
+			<Button type="button" variant="outline" size="sm" onClick={() => setOpen(true)}>
+				Disconnect
+			</Button>
+			<AlertDialog
+				open={open}
+				onOpenChange={(nextOpen) => {
+					if (submitting) return;
+					setOpen(nextOpen);
+					if (!nextOpen) {
+						setCurrentPassword("");
+					}
+				}}
+			>
+				<AlertDialogContent>
+					<fetcher.Form method="post" action={ACCOUNT_SETTINGS_PATH} className="grid gap-4">
+						<input type="hidden" name="intent" value="google-disconnect" />
+						<AlertDialogHeader>
+							<AlertDialogTitle>Disconnect Google?</AlertDialogTitle>
+							<AlertDialogDescription>
+								Google will no longer be a sign-in method. You can connect it again later.
+							</AlertDialogDescription>
+						</AlertDialogHeader>
+						<FormField name="currentPassword">
+							<FormLabel htmlFor="google-disconnect-current-password">Current password</FormLabel>
+							<FormControl asChild>
+								<Input
+									id="google-disconnect-current-password"
+									name="currentPassword"
+									type="password"
+									autoComplete="current-password"
+									value={currentPassword}
+									onChange={(event) => setCurrentPassword(event.target.value)}
+									aria-invalid={Boolean(currentPasswordError)}
+									disabled={submitting}
+								/>
+							</FormControl>
+							{currentPasswordError ? <FormMessage>{currentPasswordError}</FormMessage> : null}
+						</FormField>
+						{formError ? (
+							<p className="rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive">
+								{formError}
+							</p>
+						) : null}
+						<AlertDialogFooter>
+							<AlertDialogCancel type="button" disabled={submitting} asChild>
+								<Button type="button" variant="outline" size="sm" disabled={submitting}>
+									Cancel
+								</Button>
+							</AlertDialogCancel>
+							<Button
+								type="submit"
+								variant="destructive"
+								size="sm"
+								disabled={submitting || currentPassword.length === 0}
+							>
+								Disconnect Google
+							</Button>
+						</AlertDialogFooter>
+					</fetcher.Form>
+				</AlertDialogContent>
+			</AlertDialog>
+		</>
 	);
 }
 

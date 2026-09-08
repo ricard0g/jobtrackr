@@ -20,6 +20,7 @@ import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 
 import com.ricard0g.jobtrackr_api.config.security.RefreshTokenCookieService;
+import com.ricard0g.jobtrackr_api.dto.AuthDto.AuthResponse;
 import com.ricard0g.jobtrackr_api.dto.UserDto.SignInMethodsResponseDto;
 import com.ricard0g.jobtrackr_api.dto.UserDto.SignInMethodsResponseDto.GoogleSignInMethodDto;
 import com.ricard0g.jobtrackr_api.dto.UserDto.SignInMethodsResponseDto.PasswordSignInMethodDto;
@@ -27,6 +28,8 @@ import com.ricard0g.jobtrackr_api.dto.UserDto.UserResponseDto;
 import com.ricard0g.jobtrackr_api.exception.GlobalExceptionHandler;
 import com.ricard0g.jobtrackr_api.exception.UserNotFoundException;
 import com.ricard0g.jobtrackr_api.security.ratelimit.AuthenticationRateLimiter;
+import com.ricard0g.jobtrackr_api.service.AuthService.AuthTokenPair;
+import com.ricard0g.jobtrackr_api.service.GoogleDisconnectService;
 import com.ricard0g.jobtrackr_api.service.GoogleLinkIntentService;
 import com.ricard0g.jobtrackr_api.service.GooglePasswordReauthIntentService;
 import com.ricard0g.jobtrackr_api.service.UserPasswordService;
@@ -56,6 +59,9 @@ class UserControllerTest {
 
     @MockitoBean
     private GooglePasswordReauthIntentService googlePasswordReauthIntentService;
+
+    @MockitoBean
+    private GoogleDisconnectService googleDisconnectService;
 
     @MockitoBean
     private RefreshTokenCookieService refreshTokenCookieService;
@@ -124,6 +130,30 @@ class UserControllerTest {
         mockMvc.perform(post(BASE_PATH + "/password/google-reauth-intent")
                         .principal(authenticatedUser()))
                 .andExpect(status().isNoContent());
+    }
+
+    @Test
+    void disconnectGoogle_returnsAuthResponse() throws Exception {
+        // given
+        final AuthTokenPair tokenPair = new AuthTokenPair(
+                AuthResponse.of("fresh-access-token", 900, sampleUser()),
+                "fresh-refresh-token",
+                TIMESTAMP);
+        when(googleDisconnectService.disconnect(USER_ID, "password123")).thenReturn(tokenPair);
+
+        // when / then
+        mockMvc.perform(post(BASE_PATH + "/sign-in-identities/google/disconnect")
+                        .principal(authenticatedUser())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "currentPassword": "password123"
+                                }
+                                """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.accessToken").value("fresh-access-token"))
+                .andExpect(jsonPath("$.tokenType").value("Bearer"))
+                .andExpect(jsonPath("$.user.userId").value(USER_ID_VALUE));
     }
 
     private static UserResponseDto sampleUser() {

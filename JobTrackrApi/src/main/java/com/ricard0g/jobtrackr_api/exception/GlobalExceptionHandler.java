@@ -88,6 +88,20 @@ public class GlobalExceptionHandler {
                 .body(ErrorResponse.of("GOOGLE_PASSWORD_REAUTH_NOT_ALLOWED", exception.getMessage()));
     }
 
+    @ExceptionHandler(GoogleDisconnectNotAllowedException.class)
+    public ResponseEntity<ErrorResponse> handleGoogleDisconnectNotAllowed(
+            final GoogleDisconnectNotAllowedException exception) {
+        return ResponseEntity.status(HttpStatus.FORBIDDEN)
+                .body(ErrorResponse.of("GOOGLE_DISCONNECT_NOT_ALLOWED", exception.getMessage()));
+    }
+
+    @ExceptionHandler(GoogleIdentityNotConnectedException.class)
+    public ResponseEntity<ErrorResponse> handleGoogleIdentityNotConnected(
+            final GoogleIdentityNotConnectedException exception) {
+        return ResponseEntity.status(HttpStatus.CONFLICT)
+                .body(ErrorResponse.of("GOOGLE_IDENTITY_NOT_CONNECTED", exception.getMessage()));
+    }
+
     @ExceptionHandler(CompanyNotFoundException.class)
     public ResponseEntity<ErrorResponse> handleCompanyNotFound(final CompanyNotFoundException exception) {
         return ResponseEntity.status(HttpStatus.NOT_FOUND)

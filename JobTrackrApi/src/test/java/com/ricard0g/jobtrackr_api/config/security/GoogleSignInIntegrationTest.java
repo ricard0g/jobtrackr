@@ -89,6 +89,7 @@ class GoogleSignInIntegrationTest {
     private static final String PASSWORD = "password123";
     private static final String PUBLIC_ORIGIN = "http://localhost:5173";
     private static final String LINK_INTENT_PATH = "/api/v1/user/sign-in-identities/google/link-intent";
+    private static final String DISCONNECT_PATH = "/api/v1/user/sign-in-identities/google/disconnect";
     private static final String REAUTH_INTENT_PATH = "/api/v1/user/password/google-reauth-intent";
     private static final String PASSWORD_PATH = "/api/v1/user/password";
     private static final String NEW_PASSWORD = "new-password-456";
@@ -342,6 +343,39 @@ class GoogleSignInIntegrationTest {
         assertThat(userRepository.findById(registered.userId()).orElseThrow().getUserAuthVersion())
                 .isEqualTo(authVersion);
         assertThat(userRepository.findById(registered.userId()).orElseThrow().isUserEmailVerified()).isTrue();
+    }
+
+    @Test
+    void disconnectThenRelink_usesOrdinaryLinkingRulesForTheSameSubject() throws Exception {
+        final RegisteredUser registered = registerUser(uniqueEmail("disconnect-relink"));
+        final AuthenticatedSession session = loginSession(registered.email());
+        final String subject = "relink-subject-" + UUID.randomUUID();
+        GOOGLE.planSuccess(subject, registered.email(), true);
+        completeGoogleLink(registered, session);
+
+        final MvcResult disconnect = mockMvc.perform(post(DISCONNECT_PATH)
+                        .with(remoteAddr(registered.clientIp()))
+                        .header("Authorization", bearer(session.accessToken()))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(currentPasswordBody(PASSWORD)))
+                .andExpect(status().isOk())
+                .andReturn();
+        assertThat(userIdentityRepository.findByProviderAndSubject(IdentityProvider.GOOGLE, subject)).isEmpty();
+
+        final AuthenticatedSession fresh = new AuthenticatedSession(
+                JsonPath.read(disconnect.getResponse().getContentAsString(), "$.accessToken"),
+                disconnect.getResponse().getCookie("refresh_token"));
+        assertThat(fresh.refreshCookie()).isNotNull();
+        GOOGLE.planSuccess(subject, registered.email().toUpperCase(), true);
+        completeGoogleLink(registered, fresh);
+
+        mockMvc.perform(get("/api/v1/user/sign-in-methods")
+                        .header("Authorization", bearer(fresh.accessToken())))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.google.connected").value(true))
+                .andExpect(jsonPath("$.google.providerEmail").value(registered.email()));
+        assertThat(userIdentityRepository.findByProviderAndSubject(IdentityProvider.GOOGLE, subject))
+                .isPresent();
     }
 
     @Test
@@ -1550,12 +1584,16 @@ class GoogleSignInIntegrationTest {
         return "Bearer " + accessToken;
     }
 
-    private static String linkIntentBody(final String currentPassword) {
+    private static String currentPasswordBody(final String currentPassword) {
         return """
                 {
                   "currentPassword": "%s"
                 }
                 """.formatted(currentPassword);
+    }
+
+    private static String linkIntentBody(final String currentPassword) {
+        return currentPasswordBody(currentPassword);
     }
 
     private void linkGoogleIdentity(
