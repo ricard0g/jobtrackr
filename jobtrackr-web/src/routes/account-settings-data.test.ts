@@ -171,6 +171,65 @@ describe("accountSettingsAction", () => {
 		});
 	});
 
+	it("starts Google password reauth without a current password", async () => {
+		setAccessToken("test-token");
+		const createGooglePasswordReauthIntent = vi
+			.spyOn(api, "createGooglePasswordReauthIntent")
+			.mockResolvedValue(undefined);
+
+		const result = await accountSettingsAction(
+			actionArgs(
+				createFormData({
+					intent: "google-reauth",
+				}),
+			),
+		);
+
+		expect(result).toEqual({
+			ok: true,
+			intent: "google-reauth",
+			googleAuthorizationHref: `${AUTH_BASE_URL}/oauth2/authorization/google?returnTo=${encodeURIComponent(ACCOUNT_SETTINGS_PATH)}`,
+		});
+		expect(createGooglePasswordReauthIntent).toHaveBeenCalledTimes(1);
+	});
+
+	it("creates a password without sending currentPassword", async () => {
+		setAccessToken("test-token");
+		const changePassword = vi.spyOn(api, "changePassword").mockResolvedValue({
+			accessToken: "fresh-access-token",
+			tokenType: "Bearer",
+			expiresIn: 900,
+			user: {
+				userId: "11111111-1111-1111-1111-111111111111",
+				userEmail: "demo@jobtrackr.local",
+				userDisplayName: "Demo User",
+				userPictureUrl: null,
+				userEnabled: true,
+				userLocked: false,
+				userDeletedAt: null,
+				userPasswordChangedAt: "2026-09-08T12:00:00.000Z",
+				userLastLoginAt: "2026-06-04T12:00:00.000Z",
+				userCreatedAt: "2026-06-04T12:00:00.000Z",
+				userUpdatedAt: "2026-09-08T12:00:00.000Z",
+			},
+		});
+
+		const result = await accountSettingsAction(
+			actionArgs(
+				createFormData({
+					intent: "create-password",
+					newPassword: "new-password-456",
+					confirmPassword: "new-password-456",
+				}),
+			),
+		);
+
+		expect(result).toEqual({ ok: true, intent: "create-password" });
+		expect(changePassword).toHaveBeenCalledWith({
+			newPassword: "new-password-456",
+		});
+	});
+
 	it("maps an incorrect current password on change to a field error", async () => {
 		setAccessToken("test-token");
 		vi.spyOn(api, "changePassword").mockRejectedValue(

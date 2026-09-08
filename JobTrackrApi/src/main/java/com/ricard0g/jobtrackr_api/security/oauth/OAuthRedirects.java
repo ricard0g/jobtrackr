@@ -5,6 +5,7 @@ import java.util.Set;
 public final class OAuthRedirects {
 
     public static final String RESULT_QUERY_PARAM = "oauthResult";
+    public static final String CREATE_PASSWORD_QUERY_PARAM = "createPassword";
 
     private static final Set<String> ALLOWED_RETURN_TO = Set.of(
             "/",
@@ -48,6 +49,10 @@ public final class OAuthRedirects {
 
     public static String successLocation(final String publicOrigin, final String returnTo) {
         return publicOrigin + sanitizeReturnTo(returnTo);
+    }
+
+    public static String createPasswordGrantLocation(final String publicOrigin) {
+        return publicOrigin + OAuthSession.ACCOUNT_SETTINGS_PATH + "?" + CREATE_PASSWORD_QUERY_PARAM + "=1";
     }
 
     public static String failureLocation(

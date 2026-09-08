@@ -11,12 +11,14 @@ import org.springframework.security.oauth2.client.registration.ClientRegistratio
 import org.springframework.security.oauth2.client.registration.InMemoryClientRegistrationRepository;
 import org.springframework.security.oauth2.client.web.DefaultOAuth2AuthorizationRequestResolver;
 import org.springframework.security.oauth2.client.web.OAuth2AuthorizationRequestRedirectFilter;
+import org.springframework.security.oauth2.client.web.OAuth2AuthorizationRequestResolver;
 import org.springframework.security.oauth2.core.AuthorizationGrantType;
 import org.springframework.security.oauth2.core.ClientAuthenticationMethod;
 import org.springframework.security.oauth2.core.oidc.IdTokenClaimNames;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.web.cors.CorsConfigurationSource;
 
+import com.ricard0g.jobtrackr_api.security.oauth.GoogleAuthorizationRequestResolver;
 import com.ricard0g.jobtrackr_api.security.oauth.GoogleOAuthFailureHandler;
 import com.ricard0g.jobtrackr_api.security.oauth.GoogleOAuthStartFilter;
 import com.ricard0g.jobtrackr_api.security.oauth.GoogleOAuthSuccessHandler;
@@ -32,7 +34,6 @@ public class GoogleOAuthSecurityConfig {
 
     private static final String AUTHORIZATION_BASE_URI = "/api/v1/auth/oauth2/authorization";
     private static final String REDIRECTION_BASE_URI = "/api/v1/auth/oauth2/callback/*";
-    private static final String ACCOUNT_CHOOSER_PROMPT = "select_account";
 
     private final GoogleAuthProperties googleAuthProperties;
     private final AuthenticationRateLimiter authenticationRateLimiter;
@@ -67,11 +68,10 @@ public class GoogleOAuthSecurityConfig {
     SecurityFilterChain googleOAuthSecurityFilterChain(
             final HttpSecurity http,
             final ClientRegistrationRepository clientRegistrationRepository) throws Exception {
-        final DefaultOAuth2AuthorizationRequestResolver resolver = new DefaultOAuth2AuthorizationRequestResolver(
+        final DefaultOAuth2AuthorizationRequestResolver delegate = new DefaultOAuth2AuthorizationRequestResolver(
                 clientRegistrationRepository,
                 AUTHORIZATION_BASE_URI);
-        resolver.setAuthorizationRequestCustomizer(builder -> builder.additionalParameters(
-                params -> params.put("prompt", ACCOUNT_CHOOSER_PROMPT)));
+        final OAuth2AuthorizationRequestResolver resolver = new GoogleAuthorizationRequestResolver(delegate);
 
         final GoogleOAuthStartFilter startFilter = new GoogleOAuthStartFilter(
                 authenticationRateLimiter,

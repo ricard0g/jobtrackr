@@ -81,6 +81,13 @@ public class GlobalExceptionHandler {
                 .body(ErrorResponse.of("PASSWORD_CREATION_GRANT_REQUIRED", exception.getMessage()));
     }
 
+    @ExceptionHandler(GooglePasswordReauthNotAllowedException.class)
+    public ResponseEntity<ErrorResponse> handleGooglePasswordReauthNotAllowed(
+            final GooglePasswordReauthNotAllowedException exception) {
+        return ResponseEntity.status(HttpStatus.FORBIDDEN)
+                .body(ErrorResponse.of("GOOGLE_PASSWORD_REAUTH_NOT_ALLOWED", exception.getMessage()));
+    }
+
     @ExceptionHandler(CompanyNotFoundException.class)
     public ResponseEntity<ErrorResponse> handleCompanyNotFound(final CompanyNotFoundException exception) {
         return ResponseEntity.status(HttpStatus.NOT_FOUND)

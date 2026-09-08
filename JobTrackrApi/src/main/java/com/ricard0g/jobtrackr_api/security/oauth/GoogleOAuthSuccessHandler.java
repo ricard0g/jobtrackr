@@ -1,6 +1,7 @@
 package com.ricard0g.jobtrackr_api.security.oauth;
 
 import java.io.IOException;
+import java.time.Instant;
 import java.util.UUID;
 
 import org.springframework.security.core.Authentication;
@@ -17,6 +18,7 @@ import com.ricard0g.jobtrackr_api.model.User;
 import com.ricard0g.jobtrackr_api.service.AuthService;
 import com.ricard0g.jobtrackr_api.service.AuthService.AuthTokenPair;
 import com.ricard0g.jobtrackr_api.service.GoogleSignInService;
+import com.ricard0g.jobtrackr_api.service.PasswordCreationGrantService;
 import com.ricard0g.jobtrackr_api.service.RefreshTokenService;
 
 import jakarta.servlet.http.HttpServletRequest;
@@ -39,6 +41,7 @@ public class GoogleOAuthSuccessHandler implements AuthenticationSuccessHandler {
     private final RefreshTokenCookieService refreshTokenCookieService;
     private final OauthSessionCookieService oauthSessionCookieService;
     private final GoogleAuthProperties googleAuthProperties;
+    private final PasswordCreationGrantService passwordCreationGrantService;
 
     @Override
     public void onAuthenticationSuccess(
@@ -63,6 +66,10 @@ public class GoogleOAuthSuccessHandler implements AuthenticationSuccessHandler {
 
             if (purpose == OAuthPurpose.LINK_GOOGLE) {
                 completeGoogleLink(request, response, session, subject, email, returnTo);
+                return;
+            }
+            if (purpose == OAuthPurpose.CREATE_PASSWORD) {
+                completeCreatePassword(request, response, session, oidcUser, subject, email);
                 return;
             }
 
@@ -120,6 +127,49 @@ public class GoogleOAuthSuccessHandler implements AuthenticationSuccessHandler {
         response.sendRedirect(OAuthRedirects.successLocation(
                 googleAuthProperties.normalizedPublicOrigin(),
                 returnTo));
+    }
+
+    private void completeCreatePassword(
+            final HttpServletRequest request,
+            final HttpServletResponse response,
+            final HttpSession session,
+            final OidcUser oidcUser,
+            final String subject,
+            final String email) throws IOException {
+        final UUID boundUserId = boundSessionUserId(session);
+        final UUID refreshUserId = currentSessionUserId(request);
+        final boolean refreshBelongsToBoundUser =
+                refreshUserId != null && refreshUserId.equals(boundUserId);
+        if (!refreshBelongsToBoundUser) {
+            throw new GoogleSignInRejectedException(OAuthResultCode.EXPIRED);
+        }
+
+        final boolean matchingSubject = googleSignInService.findLinkedUser(subject)
+                .filter(user -> boundUserId.equals(user.getUserId()))
+                .isPresent();
+        if (!matchingSubject) {
+            throw new GoogleSignInRejectedException(OAuthResultCode.FAILED);
+        }
+        if (!isFreshAuthentication(oidcUser)) {
+            throw new GoogleSignInRejectedException(OAuthResultCode.FAILED);
+        }
+
+        googleSignInService.recordSuccessfulGoogleUse(subject, email);
+        passwordCreationGrantService.issue(request, response, boundUserId);
+        log.info(
+                "[GoogleSignIn] - COMPLETE: outcome: success, purpose: {}, userId: {}",
+                OAuthPurpose.CREATE_PASSWORD,
+                boundUserId);
+        response.sendRedirect(OAuthRedirects.createPasswordGrantLocation(
+                googleAuthProperties.normalizedPublicOrigin()));
+    }
+
+    private static boolean isFreshAuthentication(final OidcUser oidcUser) {
+        final Instant authenticatedAt = oidcUser.getAuthenticatedAt();
+        if (authenticatedAt == null) {
+            return false;
+        }
+        return !authenticatedAt.isBefore(Instant.now().minusSeconds(OAuthSession.TIMEOUT_SECONDS));
     }
 
     private void refuseUnknownGoogleSignInWhileAuthenticated(final UUID currentUserId, final String subject) {
@@ -185,6 +235,9 @@ public class GoogleOAuthSuccessHandler implements AuthenticationSuccessHandler {
         if (OAuthPurpose.LINK_GOOGLE.name().equals(purpose)) {
             return OAuthPurpose.LINK_GOOGLE;
         }
+        if (OAuthPurpose.CREATE_PASSWORD.name().equals(purpose)) {
+            return OAuthPurpose.CREATE_PASSWORD;
+        }
         if (OAuthPurpose.SIGN_IN.name().equals(purpose)) {
             return OAuthPurpose.SIGN_IN;
         }
@@ -198,6 +251,9 @@ public class GoogleOAuthSuccessHandler implements AuthenticationSuccessHandler {
         final Object purpose = session.getAttribute(OAuthSession.PURPOSE_ATTRIBUTE);
         if (OAuthPurpose.LINK_GOOGLE.name().equals(purpose)) {
             return OAuthPurpose.LINK_GOOGLE;
+        }
+        if (OAuthPurpose.CREATE_PASSWORD.name().equals(purpose)) {
+            return OAuthPurpose.CREATE_PASSWORD;
         }
         return OAuthPurpose.SIGN_IN;
     }

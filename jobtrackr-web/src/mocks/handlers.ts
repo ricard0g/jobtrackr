@@ -569,11 +569,30 @@ export const handlers = [
 		const body = await readJson<PasswordChangeRequest>(request);
 		const credentials = state.credentials.find((entry) => entry.userId === auth.user.userId);
 		if (!credentials) {
-			return errorJson(
-				403,
-				"PASSWORD_CREATION_GRANT_REQUIRED",
-				"A Password Creation Grant is required to create password sign-in",
-			);
+			const grantIndex = state.passwordCreationGrantUserIds.indexOf(auth.user.userId);
+			if (grantIndex < 0) {
+				return errorJson(
+					403,
+					"PASSWORD_CREATION_GRANT_REQUIRED",
+					"A Password Creation Grant is required to create password sign-in",
+				);
+			}
+			const policyError = passwordPolicyError(body.newPassword ?? "");
+			if (policyError) {
+				return validationError([toValidationField("newPassword", policyError)]);
+			}
+			state.passwordCreationGrantUserIds.splice(grantIndex, 1);
+			state.credentials.push({
+				userId: auth.user.userId,
+				email: auth.user.userEmail,
+				password: body.newPassword,
+			});
+			const timestamp = nowIso();
+			auth.user.userPasswordChangedAt = timestamp;
+			auth.user.userUpdatedAt = timestamp;
+			const response = createAuthResponse(state, auth.user);
+			saveState(state);
+			return HttpResponse.json(response);
 		}
 		if (!body.currentPassword) {
 			return errorJson(400, "CURRENT_PASSWORD_REQUIRED", "Current password is required");
@@ -613,6 +632,26 @@ export const handlers = [
 		}
 		if (state.googleIdentities.some((identity) => identity.userId === auth.user.userId)) {
 			return errorJson(409, "IDENTITY_ALREADY_LINKED", "Google is already connected");
+		}
+		return new HttpResponse(null, { status: 204 });
+	}),
+
+	http.post(`${API_BASE_URL}/user/password/google-reauth-intent`, ({ request }) => {
+		const state = loadState();
+		const auth = requireAuth(request, state);
+		if (auth instanceof Response) return auth;
+		const credentials = state.credentials.find((entry) => entry.userId === auth.user.userId);
+		const hasGoogle = state.googleIdentities.some((identity) => identity.userId === auth.user.userId);
+		if (credentials || !hasGoogle) {
+			return errorJson(
+				403,
+				"GOOGLE_PASSWORD_REAUTH_NOT_ALLOWED",
+				"Google password reauthentication is not available",
+			);
+		}
+		if (!state.passwordCreationGrantUserIds.includes(auth.user.userId)) {
+			state.passwordCreationGrantUserIds.push(auth.user.userId);
+			saveState(state);
 		}
 		return new HttpResponse(null, { status: 204 });
 	}),

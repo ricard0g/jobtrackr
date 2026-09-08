@@ -8,6 +8,8 @@ public final class OAuthSession {
     public static final String USER_ID_ATTRIBUTE = "jobtrackr.oauth.userId";
     public static final String RETURN_TO_ATTRIBUTE = "jobtrackr.oauth.returnTo";
     public static final String FAILURE_PATH_ATTRIBUTE = "jobtrackr.oauth.failurePath";
+    public static final String ISSUED_AT_ATTRIBUTE = "jobtrackr.oauth.issuedAt";
+    public static final String CONSUMED_ATTRIBUTE = "jobtrackr.oauth.consumed";
     public static final String DEFAULT_RETURN_TO = "/";
     public static final String LOGIN_FAILURE_PATH = "/auth/login";
     public static final String REGISTER_FAILURE_PATH = "/auth/register";

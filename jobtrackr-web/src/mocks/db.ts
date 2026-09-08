@@ -38,6 +38,7 @@ export const loadState = (): MockState => {
 			legacy.jobDescriptions ??= [];
 			legacy.aiConsents ??= [];
 			legacy.googleIdentities ??= [];
+			legacy.passwordCreationGrantUserIds ??= [];
 			legacy.counters.baseCvId ??= 1;
 			legacy.counters.cvGenerationId ??= 1;
 			legacy.counters.generatedCvId ??= legacy.counters.applicationCvId ?? 1;

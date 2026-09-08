@@ -6,13 +6,20 @@ import { ApiError, api, requireSession } from "@/lib/api";
 import { AUTH_BASE_URL } from "@/lib/api-config";
 import { passwordPolicyError } from "@/lib/password-policy";
 import {
+	consumeCreatePasswordParam,
 	consumeOAuthResultParam,
+	googleCreatePasswordAuthorizationHref,
 	googleLinkAuthorizationHref,
 	type OAuthResultCode,
 } from "@/lib/google-auth";
 import type { SignInMethods } from "@/types/sign-in-methods";
 
-export type AccountSettingsActionIntent = "profile" | "google-link" | "change-password";
+export type AccountSettingsActionIntent =
+	| "profile"
+	| "google-link"
+	| "google-reauth"
+	| "change-password"
+	| "create-password";
 
 export type AccountSettingsActionData = {
 	ok: boolean;
@@ -25,6 +32,7 @@ export type AccountSettingsActionData = {
 export type AccountSettingsLoaderData = {
 	signInMethods: SignInMethods;
 	oauthResult: OAuthResultCode | null;
+	createPasswordReady: boolean;
 };
 
 export async function accountSettingsLoader({
@@ -36,10 +44,15 @@ export async function accountSettingsLoader({
 	if (oauth.redirectHref) {
 		throw redirect(oauth.redirectHref);
 	}
+	const createPassword = consumeCreatePasswordParam(url);
+	if (createPassword.redirectHref) {
+		throw redirect(createPassword.redirectHref);
+	}
 
 	return {
 		signInMethods: await api.getSignInMethods(),
 		oauthResult: oauth.result,
+		createPasswordReady: createPassword.ready,
 	};
 }
 
@@ -52,8 +65,14 @@ export async function accountSettingsAction({
 	if (intent === "google-link") {
 		return beginGoogleLink(formData);
 	}
+	if (intent === "google-reauth") {
+		return beginGooglePasswordReauth();
+	}
 	if (intent === "change-password") {
 		return changePassword(formData);
+	}
+	if (intent === "create-password") {
+		return createPassword(formData);
 	}
 	return saveProfile(formData);
 }
@@ -144,6 +163,83 @@ async function beginGoogleLink(formData: FormData): Promise<AccountSettingsActio
 				error instanceof Error
 					? error.message
 					: "Could not connect Google. Check your connection and try again.",
+		};
+	}
+}
+
+async function beginGooglePasswordReauth(): Promise<AccountSettingsActionData> {
+	try {
+		await api.createGooglePasswordReauthIntent();
+		return {
+			ok: true,
+			intent: "google-reauth",
+			googleAuthorizationHref: googleCreatePasswordAuthorizationHref(
+				`${AUTH_BASE_URL}/oauth2/authorization/google`,
+			),
+		};
+	} catch (error) {
+		if (error instanceof ApiError) {
+			return {
+				ok: false,
+				intent: "google-reauth",
+				formError: error.message,
+				fieldErrors: error.fieldErrors,
+			};
+		}
+
+		return {
+			ok: false,
+			intent: "google-reauth",
+			formError:
+				error instanceof Error
+					? error.message
+					: "Could not continue to Google. Check your connection and try again.",
+		};
+	}
+}
+
+async function createPassword(formData: FormData): Promise<AccountSettingsActionData> {
+	const newPassword = String(formData.get("newPassword") ?? "");
+	const confirmPassword = String(formData.get("confirmPassword") ?? "");
+	const fieldErrors: Record<string, string> = {};
+
+	const policyError = passwordPolicyError(newPassword);
+	if (policyError) {
+		fieldErrors.newPassword = policyError;
+	}
+
+	if (newPassword !== confirmPassword) {
+		fieldErrors.confirmPassword = "New password and confirmation must match.";
+	}
+
+	if (Object.keys(fieldErrors).length > 0) {
+		return {
+			ok: false,
+			intent: "create-password",
+			fieldErrors,
+		};
+	}
+
+	try {
+		await api.changePassword({ newPassword });
+		return { ok: true, intent: "create-password" };
+	} catch (error) {
+		if (error instanceof ApiError) {
+			return {
+				ok: false,
+				intent: "create-password",
+				formError: error.message,
+				fieldErrors: error.fieldErrors,
+			};
+		}
+
+		return {
+			ok: false,
+			intent: "create-password",
+			formError:
+				error instanceof Error
+					? error.message
+					: "Could not create password. Check your connection and try again.",
 		};
 	}
 }

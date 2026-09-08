@@ -28,6 +28,7 @@ import com.ricard0g.jobtrackr_api.exception.GlobalExceptionHandler;
 import com.ricard0g.jobtrackr_api.exception.UserNotFoundException;
 import com.ricard0g.jobtrackr_api.security.ratelimit.AuthenticationRateLimiter;
 import com.ricard0g.jobtrackr_api.service.GoogleLinkIntentService;
+import com.ricard0g.jobtrackr_api.service.GooglePasswordReauthIntentService;
 import com.ricard0g.jobtrackr_api.service.UserPasswordService;
 import com.ricard0g.jobtrackr_api.service.UserService;
 
@@ -52,6 +53,9 @@ class UserControllerTest {
 
     @MockitoBean
     private GoogleLinkIntentService googleLinkIntentService;
+
+    @MockitoBean
+    private GooglePasswordReauthIntentService googlePasswordReauthIntentService;
 
     @MockitoBean
     private RefreshTokenCookieService refreshTokenCookieService;
@@ -111,6 +115,14 @@ class UserControllerTest {
                                   "currentPassword": "password123"
                                 }
                                 """))
+                .andExpect(status().isNoContent());
+    }
+
+    @Test
+    void createGooglePasswordReauthIntent_returns204() throws Exception {
+        // given / when / then
+        mockMvc.perform(post(BASE_PATH + "/password/google-reauth-intent")
+                        .principal(authenticatedUser()))
                 .andExpect(status().isNoContent());
     }
 

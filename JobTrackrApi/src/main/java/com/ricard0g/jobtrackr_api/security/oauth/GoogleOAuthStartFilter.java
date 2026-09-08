@@ -63,9 +63,9 @@ public class GoogleOAuthStartFilter extends OncePerRequestFilter {
             return;
         }
 
-        if (isLinkGoogleSession(request)) {
+        if (isProtectedHandshakeSession(request)) {
             if (!preserveProtectedOauthSession(request)) {
-                rejectExpiredLink(request, response);
+                rejectExpiredProtectedStart(request, response);
                 return;
             }
         } else {
@@ -74,22 +74,19 @@ public class GoogleOAuthStartFilter extends OncePerRequestFilter {
         filterChain.doFilter(request, response);
     }
 
-    private boolean isLinkGoogleSession(final HttpServletRequest request) {
+    private boolean isProtectedHandshakeSession(final HttpServletRequest request) {
         final HttpSession session = request.getSession(false);
-        if (session == null) {
+        final OAuthPurpose purpose = protectedPurpose(session);
+        if (purpose == null) {
             return false;
         }
-        return OAuthPurpose.LINK_GOOGLE.name().equals(session.getAttribute(OAuthSession.PURPOSE_ATTRIBUTE));
+        return session.getAttribute(OAuthSession.ISSUED_AT_ATTRIBUTE) == null;
     }
 
     private boolean preserveProtectedOauthSession(final HttpServletRequest request) {
         final HttpSession session = request.getSession(false);
-        if (session == null) {
-            return false;
-        }
-        final boolean linkGooglePurpose =
-                OAuthPurpose.LINK_GOOGLE.name().equals(session.getAttribute(OAuthSession.PURPOSE_ATTRIBUTE));
-        if (!linkGooglePurpose) {
+        final OAuthPurpose purpose = protectedPurpose(session);
+        if (purpose == null) {
             return false;
         }
         final Object boundUserId = session.getAttribute(OAuthSession.USER_ID_ATTRIBUTE);
@@ -109,18 +106,35 @@ public class GoogleOAuthStartFilter extends OncePerRequestFilter {
         return true;
     }
 
-    private void rejectExpiredLink(final HttpServletRequest request, final HttpServletResponse response)
+    private void rejectExpiredProtectedStart(final HttpServletRequest request, final HttpServletResponse response)
             throws IOException {
         final HttpSession session = request.getSession(false);
+        final OAuthPurpose purpose = protectedPurpose(session);
         if (session != null) {
             session.invalidate();
         }
         oauthSessionCookieService.clearOauthSessionCookie(response);
-        log.info("[GoogleSignIn] - START: outcome: expired, purpose: {}", OAuthPurpose.LINK_GOOGLE);
+        log.info(
+                "[GoogleSignIn] - START: outcome: expired, purpose: {}",
+                purpose == null ? OAuthPurpose.LINK_GOOGLE : purpose);
         response.sendRedirect(OAuthRedirects.failureLocation(
                 googleAuthProperties.normalizedPublicOrigin(),
                 OAuthSession.ACCOUNT_SETTINGS_PATH,
                 OAuthResultCode.EXPIRED));
+    }
+
+    private static OAuthPurpose protectedPurpose(final HttpSession session) {
+        if (session == null) {
+            return null;
+        }
+        final Object purposeValue = session.getAttribute(OAuthSession.PURPOSE_ATTRIBUTE);
+        if (OAuthPurpose.LINK_GOOGLE.name().equals(purposeValue)) {
+            return OAuthPurpose.LINK_GOOGLE;
+        }
+        if (OAuthPurpose.CREATE_PASSWORD.name().equals(purposeValue)) {
+            return OAuthPurpose.CREATE_PASSWORD;
+        }
+        return null;
     }
 
     private void replaceOauthSession(final HttpServletRequest request, final HttpServletResponse response) {

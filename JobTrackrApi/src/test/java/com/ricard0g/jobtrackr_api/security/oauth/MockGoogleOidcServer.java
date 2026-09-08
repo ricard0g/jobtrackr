@@ -7,6 +7,7 @@ import java.net.URLDecoder;
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
 import java.time.Instant;
+import java.time.temporal.ChronoUnit;
 import java.util.Date;
 import java.util.HashMap;
 import java.util.Map;
@@ -39,6 +40,7 @@ public final class MockGoogleOidcServer implements AutoCloseable {
             "linked@example.com",
             true);
     private volatile PlannedToken plannedToken = PlannedToken.VALID;
+    private volatile Map<String, String> lastAuthorizationQuery = Map.of();
 
     private MockGoogleOidcServer(final HttpServer httpServer, final RSAKey rsaKey) {
         this.httpServer = httpServer;
@@ -87,6 +89,25 @@ public final class MockGoogleOidcServer implements AutoCloseable {
         plannedToken = PlannedToken.VALID;
     }
 
+    public void planStaleAuthTime(final String subject, final String email) {
+        plannedAuthorization = PlannedAuthorization.success(
+                subject,
+                email,
+                true,
+                Instant.now().minus(6, ChronoUnit.MINUTES),
+                true);
+        plannedToken = PlannedToken.VALID;
+    }
+
+    public void planMissingAuthTime(final String subject, final String email) {
+        plannedAuthorization = PlannedAuthorization.success(subject, email, true, null, false);
+        plannedToken = PlannedToken.VALID;
+    }
+
+    public Map<String, String> lastAuthorizationQuery() {
+        return lastAuthorizationQuery;
+    }
+
     public void planAccessDenied() {
         plannedAuthorization = PlannedAuthorization.userDeniedConsent();
         plannedToken = PlannedToken.VALID;
@@ -129,6 +150,7 @@ public final class MockGoogleOidcServer implements AutoCloseable {
 
     private void handleAuthorize(final HttpExchange exchange) throws IOException {
         final Map<String, String> query = parseQuery(exchange.getRequestURI().getRawQuery());
+        lastAuthorizationQuery = Map.copyOf(query);
         final String redirectUri = query.get("redirect_uri");
         final String state = query.getOrDefault("state", "");
         if (plannedAuthorization.denied()) {
@@ -141,7 +163,9 @@ public final class MockGoogleOidcServer implements AutoCloseable {
                 query.get("nonce"),
                 plannedAuthorization.subject(),
                 plannedAuthorization.email(),
-                plannedAuthorization.emailVerified()));
+                plannedAuthorization.emailVerified(),
+                plannedAuthorization.authTime(),
+                plannedAuthorization.includeAuthTime()));
         redirect(exchange, redirectUri + querySeparator(redirectUri)
                 + "code=" + urlEncode(code)
                 + "&state=" + urlEncode(state));
@@ -185,6 +209,9 @@ public final class MockGoogleOidcServer implements AutoCloseable {
             claims.claim("email", pending.email());
         }
         claims.claim("email_verified", pending.emailVerified());
+        if (pending.includeAuthTime() && pending.authTime() != null) {
+            claims.claim("auth_time", pending.authTime().getEpochSecond());
+        }
         final SignedJWT jwt = new SignedJWT(
                 new JWSHeader.Builder(JWSAlgorithm.RS256).keyID(rsaKey.getKeyID()).build(),
                 claims.build());
@@ -243,24 +270,37 @@ public final class MockGoogleOidcServer implements AutoCloseable {
             String nonce,
             String subject,
             String email,
-            boolean emailVerified) {
+            boolean emailVerified,
+            Instant authTime,
+            boolean includeAuthTime) {
     }
 
     private record PlannedAuthorization(
             String subject,
             String email,
             boolean emailVerified,
+            Instant authTime,
+            boolean includeAuthTime,
             boolean denied) {
 
         static PlannedAuthorization success(
                 final String subject,
                 final String email,
                 final boolean emailVerified) {
-            return new PlannedAuthorization(subject, email, emailVerified, false);
+            return success(subject, email, emailVerified, Instant.now(), true);
+        }
+
+        static PlannedAuthorization success(
+                final String subject,
+                final String email,
+                final boolean emailVerified,
+                final Instant authTime,
+                final boolean includeAuthTime) {
+            return new PlannedAuthorization(subject, email, emailVerified, authTime, includeAuthTime, false);
         }
 
         static PlannedAuthorization userDeniedConsent() {
-            return new PlannedAuthorization(null, null, false, true);
+            return new PlannedAuthorization(null, null, false, null, false, true);
         }
     }
 

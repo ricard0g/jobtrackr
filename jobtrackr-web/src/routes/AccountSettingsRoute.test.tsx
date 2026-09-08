@@ -640,6 +640,79 @@ describe("Account Settings Sign-in Methods", () => {
 		expect(screen.getByRole("dialog", { name: "Account Settings" })).toBeTruthy();
 	});
 
+	it("leaves for Google after Create password reauth", async () => {
+		stubSignInMethods(googleOnlyMethods());
+		const redirect = vi.spyOn(googleAuth, "redirectToGoogleAuthorization").mockImplementation(() => undefined);
+		mswServer.use(
+			http.post(`${API_BASE_URL}/user/password/google-reauth-intent`, () => {
+				return new HttpResponse(null, { status: 204 });
+			}),
+		);
+		const dialog = await openSignInMethods();
+
+		fireEvent.click(within(dialog).getByRole("button", { name: "Create" }));
+
+		await waitFor(() => {
+			expect(redirect).toHaveBeenCalledWith(
+				`${AUTH_BASE_URL}/oauth2/authorization/google?returnTo=${encodeURIComponent(ACCOUNT_SETTINGS_PATH)}`,
+			);
+		});
+	});
+
+	it("expands the Create password form when the grant is ready", async () => {
+		stubSignInMethods(googleOnlyMethods());
+		await authenticateDemoUser();
+		const router = renderApp(["/"]);
+		await screen.findByText("Kanban page");
+
+		await router.navigate(`${ACCOUNT_SETTINGS_PATH}?createPassword=1`);
+
+		const dialog = await screen.findByRole("dialog", { name: "Account Settings" });
+		expect(await within(dialog).findByLabelText("New password")).toBeTruthy();
+		expect(within(dialog).getByLabelText("Confirm new password")).toBeTruthy();
+		expect(within(dialog).queryByLabelText("Current password")).toBeNull();
+		expect(within(dialog).getByRole("button", { name: "Save password" })).toBeTruthy();
+		await waitFor(() => {
+			expect(router.state.location.search).not.toContain("createPassword");
+		});
+	});
+
+	it("creates a password from the expanded form and shows it as enabled", async () => {
+		const { loadState, saveState } = await import("@/mocks/db");
+		await authenticateDemoUser();
+		const state = loadState();
+		const userId = state.users[0]?.userId;
+		state.credentials = state.credentials.filter((entry) => entry.userId !== userId);
+		state.googleIdentities = [
+			{
+				userId: userId ?? "",
+				subject: googleSubject,
+				providerEmail: "google-only@example.com",
+				linkedAt: googleLinkedAt,
+				lastUsedAt: googleLastUsedAt,
+			},
+		];
+		state.passwordCreationGrantUserIds = [userId ?? ""];
+		saveState(state);
+
+		const router = renderApp(["/"]);
+		await screen.findByText("Kanban page");
+		await router.navigate(`${ACCOUNT_SETTINGS_PATH}?createPassword=1`);
+		const dialog = await screen.findByRole("dialog", { name: "Account Settings" });
+
+		fireEvent.change(await within(dialog).findByLabelText("New password"), {
+			target: { value: "new-password-456" },
+		});
+		fireEvent.change(within(dialog).getByLabelText("Confirm new password"), {
+			target: { value: "new-password-456" },
+		});
+		fireEvent.click(within(dialog).getByRole("button", { name: "Save password" }));
+
+		expect(await within(dialog).findByText(/Changed/)).toBeTruthy();
+		expect(within(dialog).queryByLabelText("New password")).toBeNull();
+		expect(within(dialog).getByRole("button", { name: "Change" })).toBeTruthy();
+	});
+
 	it("shows a generic mismatch banner after a linking OAuth return", async () => {
 		stubSignInMethods(passwordOnlyMethods());
 		await authenticateDemoUser();

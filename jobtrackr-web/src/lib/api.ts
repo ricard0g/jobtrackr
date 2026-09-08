@@ -390,6 +390,11 @@ export const api = {
 			credentials: "include",
 			body: JSON.stringify({ currentPassword }),
 		}),
+	createGooglePasswordReauthIntent: () =>
+		apiRequest<void>("/user/password/google-reauth-intent", {
+			method: "POST",
+			credentials: "include",
+		}),
 	getBaseCvs: () => apiRequest<BaseCv[]>("/base-cvs"),
 	uploadBaseCv: (file: File) => {
 		const formData = new FormData();

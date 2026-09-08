@@ -10,13 +10,15 @@ import org.springframework.transaction.annotation.Transactional;
 
 import com.ricard0g.jobtrackr_api.dto.UserDto.UserPasswordRequestDto;
 import com.ricard0g.jobtrackr_api.exception.CurrentPasswordRequiredException;
-import com.ricard0g.jobtrackr_api.exception.PasswordCreationGrantRequiredException;
 import com.ricard0g.jobtrackr_api.exception.PasswordUnchangedException;
 import com.ricard0g.jobtrackr_api.exception.UserNotFoundException;
 import com.ricard0g.jobtrackr_api.model.User;
 import com.ricard0g.jobtrackr_api.repository.UserRepository;
+import com.ricard0g.jobtrackr_api.security.oauth.OAuthPurpose;
 import com.ricard0g.jobtrackr_api.service.AuthService.AuthTokenPair;
 
+import jakarta.servlet.http.HttpServletRequest;
+import jakarta.servlet.http.HttpServletResponse;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 
@@ -25,18 +27,29 @@ import lombok.extern.slf4j.Slf4j;
 @Slf4j
 public class UserPasswordService {
 
+    private static final String CHANGE_PASSWORD_ACTION = "CHANGE_PASSWORD";
+
     private final UserRepository userRepository;
     private final PasswordEncoder passwordEncoder;
     private final RefreshTokenService refreshTokenService;
     private final AuthService authService;
+    private final PasswordCreationGrantService passwordCreationGrantService;
 
     @Transactional
-    public AuthTokenPair changePassword(final UUID userId, final UserPasswordRequestDto request) {
+    public AuthTokenPair changePassword(
+            final UUID userId,
+            final UserPasswordRequestDto request,
+            final HttpServletRequest httpRequest,
+            final HttpServletResponse httpResponse) {
         final User user = userRepository.findByIdForUpdate(userId)
                 .orElseThrow(() -> new UserNotFoundException(userId));
 
         if (!user.hasPasswordSignIn()) {
-            throw new PasswordCreationGrantRequiredException();
+            passwordCreationGrantService.consume(httpRequest, userId);
+            final AuthTokenPair created =
+                    persistPassword(user, request.newPassword(), OAuthPurpose.CREATE_PASSWORD.name());
+            passwordCreationGrantService.discard(httpRequest, httpResponse);
+            return created;
         }
 
         final String currentPassword = request.currentPassword();
@@ -53,13 +66,20 @@ public class UserPasswordService {
             throw new PasswordUnchangedException();
         }
 
-        user.setUserPasswordHash(passwordEncoder.encode(request.newPassword()));
+        return persistPassword(user, request.newPassword(), CHANGE_PASSWORD_ACTION);
+    }
+
+    private AuthTokenPair persistPassword(
+            final User user,
+            final String newPassword,
+            final String action) {
+        user.setUserPasswordHash(passwordEncoder.encode(newPassword));
         user.setUserPasswordChangedAt(OffsetDateTime.now());
         user.advanceAuthenticationVersion();
         userRepository.save(user);
-        refreshTokenService.revokeAllForUser(userId);
+        refreshTokenService.revokeAllForUser(user.getUserId());
 
-        log.info("[UserPasswordService] - CHANGE_PASSWORD: outcome: succeeded, userId: {}", userId);
+        log.info("[UserPasswordService] - {}: outcome: succeeded, userId: {}", action, user.getUserId());
         return authService.issueReplacementSession(user);
     }
 }

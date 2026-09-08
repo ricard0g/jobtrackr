@@ -17,7 +17,7 @@ export interface RegisterRequest extends LoginRequest {
 }
 
 export interface PasswordChangeRequest {
-	currentPassword: string;
+	currentPassword?: string;
 	newPassword: string;
 }
 

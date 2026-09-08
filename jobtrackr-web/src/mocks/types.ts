@@ -79,6 +79,7 @@ export type MockState = {
 	users: User[];
 	credentials: MockCredentials[];
 	googleIdentities: MockGoogleIdentity[];
+	passwordCreationGrantUserIds: string[];
 	sessions: MockSession[];
 	companies: Company[];
 	tags: Tag[];

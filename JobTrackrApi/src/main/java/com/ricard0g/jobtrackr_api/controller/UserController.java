@@ -25,6 +25,7 @@ import com.ricard0g.jobtrackr_api.security.ratelimit.AuthenticationRateLimitKey;
 import com.ricard0g.jobtrackr_api.security.ratelimit.AuthenticationRateLimiter;
 import com.ricard0g.jobtrackr_api.service.AuthService.AuthTokenPair;
 import com.ricard0g.jobtrackr_api.service.GoogleLinkIntentService;
+import com.ricard0g.jobtrackr_api.service.GooglePasswordReauthIntentService;
 import com.ricard0g.jobtrackr_api.service.UserPasswordService;
 import com.ricard0g.jobtrackr_api.service.UserService;
 
@@ -44,6 +45,7 @@ public class UserController {
     private final UserService userService;
     private final UserPasswordService userPasswordService;
     private final GoogleLinkIntentService googleLinkIntentService;
+    private final GooglePasswordReauthIntentService googlePasswordReauthIntentService;
     private final RefreshTokenCookieService refreshTokenCookieService;
     private final AuthenticationRateLimiter authenticationRateLimiter;
 
@@ -77,10 +79,23 @@ public class UserController {
         authenticationRateLimiter.consume(
                 AuthenticationAction.PROTECTED_SECURITY,
                 AuthenticationRateLimitKey.userAndClientIp(userId, clientIp(httpRequest)));
-        final AuthTokenPair tokenPair = userPasswordService.changePassword(userId, request);
+        final AuthTokenPair tokenPair = userPasswordService.changePassword(userId, request, httpRequest, httpResponse);
         refreshTokenCookieService.writeRefreshTokenCookie(
                 httpResponse, tokenPair.refreshToken(), tokenPair.refreshExpiresAt());
         return ResponseEntity.ok(tokenPair.authResponse());
+    }
+
+    @PostMapping("/password/google-reauth-intent")
+    public ResponseEntity<Void> createGooglePasswordReauthIntent(
+            final Principal principal,
+            final HttpServletRequest httpRequest,
+            final HttpServletResponse httpResponse) {
+        final UUID userId = AuthenticatedUserId.from(principal);
+        authenticationRateLimiter.consume(
+                AuthenticationAction.PROTECTED_SECURITY,
+                AuthenticationRateLimitKey.userAndClientIp(userId, clientIp(httpRequest)));
+        googlePasswordReauthIntentService.beginReauth(userId, httpRequest, httpResponse);
+        return ResponseEntity.noContent().build();
     }
 
     @PostMapping("/sign-in-identities/google/link-intent")

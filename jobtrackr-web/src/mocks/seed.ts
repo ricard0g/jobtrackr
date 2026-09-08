@@ -289,6 +289,7 @@ export const createSeedState = (): MockState => {
 			},
 		],
 		googleIdentities: [],
+		passwordCreationGrantUserIds: [],
 		sessions: [],
 		companies: [
 			{

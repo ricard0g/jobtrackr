@@ -1,8 +1,10 @@
 import { describe, expect, it } from "vitest";
 
 import {
+	consumeCreatePasswordParam,
 	consumeOAuthResultParam,
 	googleAuthorizationHref,
+	googleCreatePasswordAuthorizationHref,
 	googleLinkAuthorizationHref,
 	oauthResultMessage,
 	parseOAuthResult,
@@ -87,5 +89,41 @@ describe("consumeOAuthResultParam", () => {
 		expect(flashed.redirectHref).toBeNull();
 		expect(flashed.result).toBe("failed");
 		expect(window.sessionStorage.getItem("jobtrackr.oauthResult")).toBeNull();
+	});
+});
+
+describe("googleCreatePasswordAuthorizationHref", () => {
+	it("returns to Account Settings without requesting the account chooser in the URL", () => {
+		const href = googleCreatePasswordAuthorizationHref("/api/v1/auth/oauth2/authorization/google");
+		expect(href).toBe(
+			"/api/v1/auth/oauth2/authorization/google?returnTo=%2Fsettings%2Faccount",
+		);
+		expect(href).not.toContain("prompt=");
+		expect(href).not.toContain("max_age=");
+	});
+});
+
+describe("consumeCreatePasswordParam", () => {
+	it("flashes the grant-ready signal and then expands on the cleaned URL", () => {
+		window.sessionStorage.clear();
+		const incoming = consumeCreatePasswordParam(
+			new URL("http://localhost/settings/account?createPassword=1"),
+		);
+		expect(incoming.redirectHref).toBe("/settings/account");
+		expect(incoming.ready).toBe(false);
+
+		const flashed = consumeCreatePasswordParam(new URL("http://localhost/settings/account"));
+		expect(flashed.redirectHref).toBeNull();
+		expect(flashed.ready).toBe(true);
+		expect(window.sessionStorage.getItem("jobtrackr.createPassword")).toBeNull();
+	});
+
+	it("ignores values other than 1", () => {
+		window.sessionStorage.clear();
+		const ignored = consumeCreatePasswordParam(
+			new URL("http://localhost/settings/account?createPassword=true"),
+		);
+		expect(ignored.ready).toBe(false);
+		expect(ignored.redirectHref).toBeNull();
 	});
 });

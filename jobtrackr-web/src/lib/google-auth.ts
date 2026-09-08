@@ -92,6 +92,34 @@ export function googleLinkAuthorizationHref(authorizationBaseUrl: string): strin
 	return googleAuthorizationHref("login", "/settings/account", authorizationBaseUrl);
 }
 
+export function googleCreatePasswordAuthorizationHref(authorizationBaseUrl: string): string {
+	return googleLinkAuthorizationHref(authorizationBaseUrl);
+}
+
+const CREATE_PASSWORD_FLASH_KEY = "jobtrackr.createPassword";
+
+export function consumeCreatePasswordParam(url: URL): {
+	ready: boolean;
+	redirectHref: string | null;
+} {
+	const incoming = url.searchParams.get("createPassword");
+	if (incoming === "1") {
+		sessionStorage.setItem(CREATE_PASSWORD_FLASH_KEY, "1");
+		url.searchParams.delete("createPassword");
+		return {
+			ready: false,
+			redirectHref: `${url.pathname}${url.search}${url.hash}`,
+		};
+	}
+
+	const flashed = sessionStorage.getItem(CREATE_PASSWORD_FLASH_KEY) === "1";
+	if (flashed) {
+		sessionStorage.removeItem(CREATE_PASSWORD_FLASH_KEY);
+	}
+
+	return { ready: flashed, redirectHref: null };
+}
+
 export function redirectToGoogleAuthorization(href: string) {
 	window.location.assign(href);
 }

@@ -5,6 +5,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.csrf;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -15,8 +16,10 @@ import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.nio.charset.StandardCharsets;
+import java.time.Instant;
 import java.time.OffsetDateTime;
 import java.time.temporal.ChronoUnit;
+import java.util.List;
 import java.util.UUID;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
@@ -43,6 +46,7 @@ import org.springframework.test.context.TestPropertySource;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.MvcResult;
+import org.springframework.test.web.servlet.ResultActions;
 import org.springframework.test.web.servlet.request.MockHttpServletRequestBuilder;
 import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
@@ -85,6 +89,10 @@ class GoogleSignInIntegrationTest {
     private static final String PASSWORD = "password123";
     private static final String PUBLIC_ORIGIN = "http://localhost:5173";
     private static final String LINK_INTENT_PATH = "/api/v1/user/sign-in-identities/google/link-intent";
+    private static final String REAUTH_INTENT_PATH = "/api/v1/user/password/google-reauth-intent";
+    private static final String PASSWORD_PATH = "/api/v1/user/password";
+    private static final String NEW_PASSWORD = "new-password-456";
+    private static final String ESSENTIAL_AUTH_TIME_CLAIMS = "{\"id_token\":{\"auth_time\":{\"essential\":true}}}";
     private static final int CONCURRENT_JIT_ATTEMPTS = 2;
     private static final int CONCURRENT_JIT_TIMEOUT_SECONDS = 10;
     private static final DockerImageName POSTGRES_IMAGE = DockerImageName.parse("postgres:16");
@@ -752,6 +760,364 @@ class GoogleSignInIntegrationTest {
     }
 
     @Test
+    void successfulGoogleReauthIntent_createsCreatePasswordSessionAndRequestsFreshAuth() throws Exception {
+        final GoogleOnlyUser googleOnly = googleOnlyUser("reauth-intent");
+
+        final MvcResult intent = beginGoogleReauthIntent(googleOnly);
+
+        assertThat(intent.getRequest().getSession(false).getMaxInactiveInterval())
+                .isEqualTo(OAuthSession.TIMEOUT_SECONDS);
+        assertThat(intent.getRequest().getSession(false).getAttribute(OAuthSession.PURPOSE_ATTRIBUTE))
+                .isEqualTo("CREATE_PASSWORD");
+        assertThat(intent.getRequest().getSession(false).getAttribute(OAuthSession.USER_ID_ATTRIBUTE))
+                .isEqualTo(googleOnly.userId().toString());
+        assertThat(intent.getRequest().getSession(false).getAttribute(OAuthSession.RETURN_TO_ATTRIBUTE))
+                .isEqualTo("/settings/account");
+        assertThat(intent.getRequest().getSession(false).getAttribute(OAuthSession.FAILURE_PATH_ATTRIBUTE))
+                .isEqualTo("/settings/account");
+
+        final MvcResult started = mockMvc.perform(get("/api/v1/auth/oauth2/authorization/google")
+                        .with(remoteAddr(nextGoogleStartIp()))
+                        .session((MockHttpSession) intent.getRequest().getSession(false))
+                        .cookie(intent.getResponse().getCookies())
+                        .cookie(googleOnly.refreshCookie()))
+                .andExpect(status().isFound())
+                .andReturn();
+
+        assertThat(started.getRequest().getSession(false).getAttribute(OAuthSession.PURPOSE_ATTRIBUTE))
+                .isEqualTo("CREATE_PASSWORD");
+        followGoogle(started.getResponse().getRedirectedUrl());
+        assertThat(GOOGLE.lastAuthorizationQuery().get("max_age")).isEqualTo("0");
+        assertThat(GOOGLE.lastAuthorizationQuery().get("claims")).isEqualTo(ESSENTIAL_AUTH_TIME_CLAIMS);
+        assertThat(started.getResponse().getRedirectedUrl()).contains("prompt=select_account");
+    }
+
+    @Test
+    void googleReauthStart_withoutRefreshCookie_returnsExpiredWithoutRewritingToSignIn() throws Exception {
+        final GoogleOnlyUser googleOnly = googleOnlyUser("reauth-start-expired");
+        final MvcResult intent = beginGoogleReauthIntent(googleOnly);
+        final MockHttpSession oauthSession = (MockHttpSession) intent.getRequest().getSession(false);
+
+        final MvcResult started = mockMvc.perform(get("/api/v1/auth/oauth2/authorization/google")
+                        .with(remoteAddr(nextGoogleStartIp()))
+                        .session(oauthSession)
+                        .cookie(intent.getResponse().getCookies()))
+                .andExpect(status().isFound())
+                .andReturn();
+
+        assertThat(started.getResponse().getRedirectedUrl())
+                .isEqualTo(PUBLIC_ORIGIN + "/settings/account?oauthResult=expired");
+        assertThat(started.getResponse().getRedirectedUrl()).doesNotContain("prompt=select_account");
+        assertThat(oauthSession.isInvalid()).isTrue();
+    }
+
+    @Test
+    void googleReauthIntent_whenPasswordAlreadyExists_isRejected() throws Exception {
+        final RegisteredUser registered = registerUser(uniqueEmail("reauth-has-password"));
+        final AuthenticatedSession session = loginSession(registered.email());
+        linkGoogleIdentity(
+                registered.userId(),
+                "google-subject",
+                registered.email(),
+                OffsetDateTime.now().minusDays(1));
+
+        mockMvc.perform(post(REAUTH_INTENT_PATH)
+                        .with(remoteAddr(registered.clientIp()))
+                        .header("Authorization", bearer(session.accessToken()))
+                        .cookie(session.refreshCookie()))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.code").value("GOOGLE_PASSWORD_REAUTH_NOT_ALLOWED"));
+    }
+
+    @Test
+    void googleReauthIntent_withoutGoogleIdentity_isRejected() throws Exception {
+        final GoogleOnlyUser googleOnly = googleOnlyUser("reauth-no-google");
+        userIdentityRepository.deleteAll();
+
+        mockMvc.perform(post(REAUTH_INTENT_PATH)
+                        .with(remoteAddr(uniqueReauthIp(googleOnly.email())))
+                        .header("Authorization", bearer(googleOnly.accessToken()))
+                        .cookie(googleOnly.refreshCookie()))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.code").value("GOOGLE_PASSWORD_REAUTH_NOT_ALLOWED"));
+    }
+
+    @Test
+    void googleReauthCallback_withoutRefreshCookie_returnsExpiredWithoutAGrant() throws Exception {
+        // given
+        final GoogleOnlyUser googleOnly = googleOnlyUser("reauth-callback-expired");
+        GOOGLE.planSuccess(googleOnly.subject(), googleOnly.email(), true);
+        final StartedFlow started = startGoogleReauth(googleOnly);
+
+        // when
+        final MvcResult callback = performCallback(
+                followGoogle(started.googleLocation()),
+                started.session(),
+                started.cookies());
+
+        // then
+        assertThat(callback.getResponse().getRedirectedUrl())
+                .isEqualTo(PUBLIC_ORIGIN + "/settings/account?oauthResult=expired");
+        assertThat(userRepository.findById(googleOnly.userId()).orElseThrow().hasPasswordSignIn()).isFalse();
+        createPassword(googleOnly, (MockHttpSession) callback.getRequest().getSession(false), NEW_PASSWORD)
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.code").value("PASSWORD_CREATION_GRANT_REQUIRED"));
+    }
+
+    @Test
+    void googleReauthCallback_withDifferentUserRefresh_returnsExpiredWithoutAGrant() throws Exception {
+        // given
+        final GoogleOnlyUser googleOnly = googleOnlyUser("reauth-callback-other");
+        final RegisteredUser other = registerUser(uniqueEmail("reauth-other"));
+        final AuthenticatedSession otherSession = loginSession(other.email());
+        GOOGLE.planSuccess(googleOnly.subject(), googleOnly.email(), true);
+        final StartedFlow started = startGoogleReauth(googleOnly);
+
+        // when
+        final MvcResult callback = performCallback(
+                followGoogle(started.googleLocation()),
+                started.session(),
+                started.cookies(),
+                otherSession.refreshCookie());
+
+        // then
+        assertThat(callback.getResponse().getRedirectedUrl())
+                .isEqualTo(PUBLIC_ORIGIN + "/settings/account?oauthResult=expired");
+        assertThat(userRepository.findById(googleOnly.userId()).orElseThrow().hasPasswordSignIn()).isFalse();
+        createPassword(googleOnly, (MockHttpSession) callback.getRequest().getSession(false), NEW_PASSWORD)
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.code").value("PASSWORD_CREATION_GRANT_REQUIRED"));
+    }
+
+    @Test
+    void googleReauthCallback_withMismatchedSubject_failsClosedWithoutAGrant() throws Exception {
+        final GoogleOnlyUser googleOnly = googleOnlyUser("reauth-mismatch");
+        GOOGLE.planSuccess("other-google-subject", googleOnly.email(), true);
+
+        final MvcResult callback = completeGoogleReauth(googleOnly);
+
+        assertCreatePasswordProofFailed(callback, googleOnly);
+    }
+
+    @Test
+    void googleReauthCallback_withStaleAuthTime_failsClosedWithoutAGrant() throws Exception {
+        final GoogleOnlyUser googleOnly = googleOnlyUser("reauth-stale");
+        GOOGLE.planStaleAuthTime(googleOnly.subject(), googleOnly.email());
+
+        final MvcResult callback = completeGoogleReauth(googleOnly);
+
+        assertCreatePasswordProofFailed(callback, googleOnly);
+    }
+
+    @Test
+    void googleReauthCallback_withMissingAuthTime_failsClosedWithoutAGrant() throws Exception {
+        final GoogleOnlyUser googleOnly = googleOnlyUser("reauth-missing-auth-time");
+        GOOGLE.planMissingAuthTime(googleOnly.subject(), googleOnly.email());
+
+        final MvcResult callback = completeGoogleReauth(googleOnly);
+
+        assertCreatePasswordProofFailed(callback, googleOnly);
+    }
+
+    @Test
+    void successfulGoogleReauth_issuesPasswordCreationGrantAndUpdatesLastUsedAt() throws Exception {
+        final GoogleOnlyUser googleOnly = googleOnlyUser("reauth-grant");
+        final OffsetDateTime lastUsedAt = userIdentityRepository
+                .findByProviderAndSubject(IdentityProvider.GOOGLE, googleOnly.subject())
+                .orElseThrow()
+                .getLastUsedAt();
+        GOOGLE.planSuccess(googleOnly.subject(), googleOnly.email(), true);
+
+        final StartedFlow started = startGoogleReauth(googleOnly);
+        final MockHttpSession handshake = started.session();
+        final MvcResult callback = performCallback(
+                followGoogle(started.googleLocation()),
+                handshake,
+                started.cookies(),
+                googleOnly.refreshCookie());
+
+        assertThat(callback.getResponse().getRedirectedUrl())
+                .isEqualTo(PUBLIC_ORIGIN + "/settings/account?createPassword=1");
+        assertThat(handshake.isInvalid()).isTrue();
+        final MockHttpSession grantSession = (MockHttpSession) callback.getRequest().getSession(false);
+        assertThat(grantSession).isNotSameAs(handshake);
+        assertThat(grantSession.isInvalid()).isFalse();
+        assertThat(grantSession.getMaxInactiveInterval()).isEqualTo(OAuthSession.TIMEOUT_SECONDS);
+        assertThat(grantSession.getAttribute(OAuthSession.PURPOSE_ATTRIBUTE)).isEqualTo("CREATE_PASSWORD");
+        assertThat(grantSession.getAttribute(OAuthSession.USER_ID_ATTRIBUTE))
+                .isEqualTo(googleOnly.userId().toString());
+        assertThat(grantSession.getAttribute(OAuthSession.ISSUED_AT_ATTRIBUTE)).isInstanceOf(String.class);
+        assertThat(grantSession.getAttribute(OAuthSession.CONSUMED_ATTRIBUTE)).isEqualTo(Boolean.FALSE);
+        assertThat(grantSession.getAttribute(OAuthSession.RETURN_TO_ATTRIBUTE)).isNull();
+        assertThat(grantSession.getAttribute(OAuthSession.FAILURE_PATH_ATTRIBUTE)).isNull();
+        assertThat(java.util.Collections.list(grantSession.getAttributeNames()))
+                .containsExactlyInAnyOrder(
+                        OAuthSession.PURPOSE_ATTRIBUTE,
+                        OAuthSession.USER_ID_ATTRIBUTE,
+                        OAuthSession.ISSUED_AT_ATTRIBUTE,
+                        OAuthSession.CONSUMED_ATTRIBUTE);
+        Instant.parse((String) grantSession.getAttribute(OAuthSession.ISSUED_AT_ATTRIBUTE));
+
+        final UserIdentity identity = userIdentityRepository
+                .findByProviderAndSubject(IdentityProvider.GOOGLE, googleOnly.subject())
+                .orElseThrow();
+        assertThat(identity.getLastUsedAt()).isAfter(lastUsedAt);
+    }
+
+    @Test
+    void consumedPasswordCreationGrant_cannotCreateAPassword() throws Exception {
+        final GoogleOnlyUser googleOnly = googleOnlyUser("reauth-consumed");
+        GOOGLE.planSuccess(googleOnly.subject(), googleOnly.email(), true);
+        final StartedFlow started = startGoogleReauth(googleOnly);
+        final MvcResult callback = performCallback(
+                followGoogle(started.googleLocation()),
+                started.session(),
+                started.cookies(),
+                googleOnly.refreshCookie());
+        final MockHttpSession grantSession = (MockHttpSession) callback.getRequest().getSession(false);
+        grantSession.setAttribute(OAuthSession.CONSUMED_ATTRIBUTE, Boolean.TRUE);
+
+        createPassword(googleOnly, grantSession, NEW_PASSWORD)
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.code").value("PASSWORD_CREATION_GRANT_REQUIRED"));
+        assertThat(userRepository.findById(googleOnly.userId()).orElseThrow().hasPasswordSignIn()).isFalse();
+    }
+
+    @Test
+    void passwordCreationGrant_isSingleUseAndReplacesEverySession() throws Exception {
+        final GoogleOnlyUser googleOnly = googleOnlyUser("reauth-create");
+        GOOGLE.planSuccess(googleOnly.subject(), googleOnly.email(), true);
+        final AuthenticatedSession otherDevice = returningGoogleSession(googleOnly);
+        GOOGLE.planSuccess(googleOnly.subject(), googleOnly.email(), true);
+        final StartedFlow started = startGoogleReauth(googleOnly);
+        final MvcResult callback = performCallback(
+                followGoogle(started.googleLocation()),
+                started.session(),
+                started.cookies(),
+                googleOnly.refreshCookie());
+        final MockHttpSession grantSession = (MockHttpSession) callback.getRequest().getSession(false);
+
+        final MvcResult created = createPassword(googleOnly, grantSession, NEW_PASSWORD)
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.accessToken").isNotEmpty())
+                .andExpect(jsonPath("$.user.userPasswordChangedAt").isNotEmpty())
+                .andReturn();
+        final String freshAccessToken = JsonPath.read(created.getResponse().getContentAsString(), "$.accessToken");
+        final Cookie freshRefresh = created.getResponse().getCookie("refresh_token");
+        assertThat(freshRefresh).isNotNull();
+        assertThat(freshAccessToken).isNotEqualTo(googleOnly.accessToken());
+        assertThat(freshRefresh.getValue()).isNotEqualTo(googleOnly.refreshCookie().getValue());
+
+        final GoogleOnlyUser afterCreate = new GoogleOnlyUser(
+                googleOnly.userId(),
+                googleOnly.email(),
+                googleOnly.subject(),
+                freshAccessToken,
+                freshRefresh);
+        createPassword(afterCreate, grantSession, "another-password-789")
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("CURRENT_PASSWORD_REQUIRED"));
+
+        mockMvc.perform(post("/api/v1/auth/login")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "email": "%s",
+                                  "password": "%s"
+                                }
+                                """.formatted(googleOnly.email(), NEW_PASSWORD)))
+                .andExpect(status().isOk());
+        mockMvc.perform(get("/api/v1/user").header("Authorization", bearer(googleOnly.accessToken())))
+                .andExpect(status().isUnauthorized());
+        mockMvc.perform(get("/api/v1/user").header("Authorization", bearer(otherDevice.accessToken())))
+                .andExpect(status().isUnauthorized());
+        mockMvc.perform(post("/api/v1/auth/refresh").with(csrf()).cookie(googleOnly.refreshCookie()))
+                .andExpect(status().isUnauthorized());
+        mockMvc.perform(post("/api/v1/auth/refresh").with(csrf()).cookie(freshRefresh))
+                .andExpect(status().isOk());
+    }
+
+    @Test
+    void concurrentPasswordCreation_consumesTheGrantOnce() throws Exception {
+        final GoogleOnlyUser googleOnly = googleOnlyUser("reauth-concurrent");
+        GOOGLE.planSuccess(googleOnly.subject(), googleOnly.email(), true);
+        final StartedFlow started = startGoogleReauth(googleOnly);
+        final MvcResult callback = performCallback(
+                followGoogle(started.googleLocation()),
+                started.session(),
+                started.cookies(),
+                googleOnly.refreshCookie());
+        final MockHttpSession grantSession = (MockHttpSession) callback.getRequest().getSession(false);
+        final ExecutorService executor = Executors.newFixedThreadPool(CONCURRENT_JIT_ATTEMPTS);
+        final CountDownLatch start = new CountDownLatch(1);
+
+        try {
+            final Future<MvcResult> first = executor.submit(() -> {
+                start.await();
+                return createPassword(googleOnly, grantSession, NEW_PASSWORD).andReturn();
+            });
+            final Future<MvcResult> second = executor.submit(() -> {
+                start.await();
+                return createPassword(googleOnly, grantSession, "other-password-789").andReturn();
+            });
+            start.countDown();
+            final MvcResult firstResult = first.get(CONCURRENT_JIT_TIMEOUT_SECONDS, TimeUnit.SECONDS);
+            final MvcResult secondResult = second.get(CONCURRENT_JIT_TIMEOUT_SECONDS, TimeUnit.SECONDS);
+
+            final List<Integer> statuses = List.of(
+                    firstResult.getResponse().getStatus(),
+                    secondResult.getResponse().getStatus());
+            assertThat(statuses).contains(200);
+            assertThat(statuses).filteredOn(status -> status != 200)
+                    .isNotEmpty()
+                    .allMatch(status -> status == 403 || status == 400);
+        } finally {
+            executor.shutdownNow();
+        }
+
+        final User user = userRepository.findById(googleOnly.userId()).orElseThrow();
+        assertThat(user.hasPasswordSignIn()).isTrue();
+    }
+
+    @Test
+    void expiredOrInterruptedPasswordCreationGrant_cannotCreateAPassword() throws Exception {
+        final GoogleOnlyUser googleOnly = googleOnlyUser("reauth-expired-grant");
+        GOOGLE.planSuccess(googleOnly.subject(), googleOnly.email(), true);
+        final StartedFlow started = startGoogleReauth(googleOnly);
+        final MvcResult callback = performCallback(
+                followGoogle(started.googleLocation()),
+                started.session(),
+                started.cookies(),
+                googleOnly.refreshCookie());
+        final MockHttpSession grantSession = (MockHttpSession) callback.getRequest().getSession(false);
+        grantSession.setAttribute(
+                OAuthSession.ISSUED_AT_ATTRIBUTE,
+                Instant.now().minus(6, ChronoUnit.MINUTES).toString());
+
+        createPassword(googleOnly, grantSession, NEW_PASSWORD)
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.code").value("PASSWORD_CREATION_GRANT_REQUIRED"));
+
+        final GoogleOnlyUser interrupted = googleOnlyUser("reauth-interrupted");
+        GOOGLE.planSuccess(interrupted.subject(), interrupted.email(), true);
+        final StartedFlow interruptedStart = startGoogleReauth(interrupted);
+        final MvcResult interruptedCallback = performCallback(
+                followGoogle(interruptedStart.googleLocation()),
+                interruptedStart.session(),
+                interruptedStart.cookies(),
+                interrupted.refreshCookie());
+        final MockHttpSession interruptedGrant =
+                (MockHttpSession) interruptedCallback.getRequest().getSession(false);
+        startGoogle("/api/v1/auth/oauth2/authorization/google", interruptedGrant, interruptedCallback.getResponse()
+                .getCookies());
+
+        createPassword(interrupted, interruptedGrant, NEW_PASSWORD)
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.code").value("PASSWORD_CREATION_GRANT_REQUIRED"));
+        assertThat(userRepository.findById(interrupted.userId()).orElseThrow().hasPasswordSignIn()).isFalse();
+    }
+
+    @Test
     void providerSubjectAndUserProviderConstraints_areEnforced() throws Exception {
         final RegisteredUser first = registerUser("one@example.com");
         final RegisteredUser second = registerUser("two@example.com");
@@ -975,6 +1341,105 @@ class GoogleSignInIntegrationTest {
                 .andReturn();
     }
 
+    private GoogleOnlyUser googleOnlyUser(final String emailPrefix) throws Exception {
+        final String email = uniqueEmail(emailPrefix);
+        final String subject = "create-password-subject-" + UUID.randomUUID();
+        GOOGLE.planSuccess(subject, email, true);
+        final MvcResult callback = completeGoogleSignIn("/api/v1/auth/oauth2/authorization/google");
+        final Cookie refreshCookie = callback.getResponse().getCookie("refresh_token");
+        assertThat(refreshCookie).isNotNull();
+        final MvcResult refreshed = mockMvc.perform(post("/api/v1/auth/refresh")
+                        .with(csrf())
+                        .cookie(refreshCookie))
+                .andExpect(status().isOk())
+                .andReturn();
+        final UUID userId = UUID.fromString(JsonPath.read(
+                refreshed.getResponse().getContentAsString(),
+                "$.user.userId"));
+        final String accessToken = JsonPath.read(refreshed.getResponse().getContentAsString(), "$.accessToken");
+        final Cookie rotatedRefresh = refreshed.getResponse().getCookie("refresh_token");
+        assertThat(rotatedRefresh).isNotNull();
+        return new GoogleOnlyUser(userId, email, subject, accessToken, rotatedRefresh);
+    }
+
+    private AuthenticatedSession returningGoogleSession(final GoogleOnlyUser googleOnly) throws Exception {
+        final MvcResult callback = completeGoogleSignIn("/api/v1/auth/oauth2/authorization/google");
+        final Cookie refreshCookie = callback.getResponse().getCookie("refresh_token");
+        assertThat(refreshCookie).isNotNull();
+        final MvcResult refreshed = mockMvc.perform(post("/api/v1/auth/refresh")
+                        .with(csrf())
+                        .cookie(refreshCookie))
+                .andExpect(status().isOk())
+                .andReturn();
+        return new AuthenticatedSession(
+                JsonPath.read(refreshed.getResponse().getContentAsString(), "$.accessToken"),
+                refreshed.getResponse().getCookie("refresh_token"));
+    }
+
+    private MvcResult beginGoogleReauthIntent(final GoogleOnlyUser googleOnly) throws Exception {
+        return mockMvc.perform(post(REAUTH_INTENT_PATH)
+                        .with(remoteAddr(uniqueReauthIp(googleOnly.email())))
+                        .header("Authorization", bearer(googleOnly.accessToken()))
+                        .cookie(googleOnly.refreshCookie()))
+                .andExpect(status().isNoContent())
+                .andReturn();
+    }
+
+    private StartedFlow startGoogleReauth(final GoogleOnlyUser googleOnly) throws Exception {
+        final MvcResult intent = beginGoogleReauthIntent(googleOnly);
+        return startGoogle(
+                "/api/v1/auth/oauth2/authorization/google?returnTo=/settings/account",
+                (MockHttpSession) intent.getRequest().getSession(false),
+                mergeCookies(intent.getResponse().getCookies(), googleOnly.refreshCookie()));
+    }
+
+    private MvcResult completeGoogleReauth(final GoogleOnlyUser googleOnly) throws Exception {
+        final StartedFlow started = startGoogleReauth(googleOnly);
+        return performCallback(
+                followGoogle(started.googleLocation()),
+                started.session(),
+                started.cookies(),
+                googleOnly.refreshCookie());
+    }
+
+    private void assertCreatePasswordProofFailed(
+            final MvcResult callback,
+            final GoogleOnlyUser googleOnly) throws Exception {
+        assertThat(callback.getResponse().getRedirectedUrl())
+                .isEqualTo(PUBLIC_ORIGIN + "/settings/account?oauthResult=failed");
+        final MockHttpSession session = (MockHttpSession) callback.getRequest().getSession(false);
+        final boolean grantMissing = session == null
+                || session.isInvalid()
+                || !Boolean.FALSE.equals(session.getAttribute(OAuthSession.CONSUMED_ATTRIBUTE));
+        assertThat(grantMissing).isTrue();
+        createPassword(googleOnly, session, NEW_PASSWORD)
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.code").value("PASSWORD_CREATION_GRANT_REQUIRED"));
+        assertThat(userRepository.findById(googleOnly.userId()).orElseThrow().hasPasswordSignIn()).isFalse();
+    }
+
+    private ResultActions createPassword(
+            final GoogleOnlyUser googleOnly,
+            final MockHttpSession grantSession,
+            final String newPassword) throws Exception {
+        MockHttpServletRequestBuilder request = put(PASSWORD_PATH)
+                .header("Authorization", bearer(googleOnly.accessToken()))
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("""
+                        {
+                          "newPassword": "%s"
+                        }
+                        """.formatted(newPassword));
+        if (grantSession != null) {
+            request = request.session(grantSession);
+        }
+        return mockMvc.perform(request);
+    }
+
+    private static String uniqueReauthIp(final String email) {
+        return "198.51.100." + (Math.floorMod(email.hashCode(), 200) + 1);
+    }
+
     private static Cookie[] mergeCookies(final Cookie[] cookies, final Cookie extra) {
         final Cookie[] merged = java.util.Arrays.copyOf(cookies, cookies.length + 1);
         merged[cookies.length] = extra;
@@ -1113,6 +1578,14 @@ class GoogleSignInIntegrationTest {
     }
 
     private record AuthenticatedSession(String accessToken, Cookie refreshCookie) {
+    }
+
+    private record GoogleOnlyUser(
+            UUID userId,
+            String email,
+            String subject,
+            String accessToken,
+            Cookie refreshCookie) {
     }
 
     private record StartedFlow(MockHttpSession session, Cookie[] cookies, String googleLocation) {
