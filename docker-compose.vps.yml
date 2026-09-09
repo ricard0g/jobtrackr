@@ -82,6 +82,7 @@ services:
       start_period: 10s
 
   backend:
+    # One replica. OAuth servlet sessions and auth rate limits are in-memory.
     image: ${JOBTRACKR_BACKEND_IMAGE:?Set JOBTRACKR_BACKEND_IMAGE to a GHCR sha- tag}
     restart: unless-stopped
     logging: *log-rotation

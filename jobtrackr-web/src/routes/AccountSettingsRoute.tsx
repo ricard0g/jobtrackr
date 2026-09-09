@@ -312,21 +312,26 @@ function SignInMethodsContent({
 	data: AccountSettingsLoaderData;
 	confirmIfProfileDirty: (proceed: () => void) => void;
 }) {
-	const { signInMethods, oauthResult, createPasswordReady } = data;
+	const { signInMethods, oauthResult, createPasswordReady, googleEnabled } = data;
 	const providerEmail = signInMethods.google.providerEmail;
 	const emailsDiffer =
 		signInMethods.google.connected &&
 		providerEmail !== null &&
 		providerEmail.toLowerCase() !== primaryEmail.toLowerCase();
+	const statusMessage = oauthResult
+		? oauthResultMessage(oauthResult)
+		: googleEnabled
+			? null
+			: oauthResultMessage("unavailable");
 
 	return (
 		<div className="grid gap-4">
-			{oauthResult ? (
+			{statusMessage ? (
 				<p
 					role="status"
 					className="rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive"
 				>
-					{oauthResultMessage(oauthResult)}
+					{statusMessage}
 				</p>
 			) : null}
 			<SignInMethodRow title="Password">
@@ -343,13 +348,13 @@ function SignInMethodsContent({
 						<PasswordChangeForm />
 					) : createPasswordReady ? (
 						<PasswordCreateForm />
-					) : (
+					) : googleEnabled ? (
 						<GoogleReauthStartButton
 							confirmIfProfileDirty={confirmIfProfileDirty}
 							label="Create"
 							variant="outline"
 						/>
-					)}
+					) : null}
 				</div>
 			</SignInMethodRow>
 			<SignInMethodRow title="Google">
@@ -383,7 +388,7 @@ function SignInMethodsContent({
 									<p className="text-sm text-medium-gray">
 										Create a password before disconnecting Google.
 									</p>
-									{createPasswordReady ? null : (
+									{createPasswordReady || !googleEnabled ? null : (
 										<GoogleReauthStartButton
 											confirmIfProfileDirty={confirmIfProfileDirty}
 											label="Create password"
@@ -392,9 +397,9 @@ function SignInMethodsContent({
 								</>
 							)}
 						</>
-					) : (
+					) : googleEnabled ? (
 						<GoogleConnectForm confirmIfProfileDirty={confirmIfProfileDirty} />
-					)}
+					) : null}
 				</div>
 			</SignInMethodRow>
 		</div>

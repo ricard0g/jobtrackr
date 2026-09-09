@@ -111,9 +111,11 @@ If refresh fails:
 
 ## Google Sign-In
 
-Google is hidden until `GET /api/v1/auth/providers` reports `{ google: true }`. The login and register screens then show a “Continue with Google” link to `${AUTH_BASE_URL}/oauth2/authorization/google`. The frontend never loads Google JavaScript; `prompt=select_account` is added by the backend.
+Google is hidden until `GET /api/v1/auth/providers` reports `{ google: true }`. The login and register screens then show a “Continue with Google” link to `${AUTH_BASE_URL}/oauth2/authorization/google`. The frontend never loads Google JavaScript; `prompt=select_account` is added by the backend. Account Settings hides Connect and Google password-creation actions when discovery reports disabled, while still showing an existing Identity Link and allowing password disconnect.
 
-Callback failures return only allowlisted `oauthResult` codes (`cancelled`, `expired`, `unavailable`, `failed`, and `conflict` reserved for linking). The auth loader consumes that query parameter and keeps a persistent banner. Success redirects to `/`, `/documents`, or `/settings/account` with no tokens in the URL.
+Callback failures return only allowlisted `oauthResult` codes (`cancelled`, `expired`, `unavailable`, `failed`, `conflict`, and `mismatch`). The auth loader consumes that query parameter and keeps a persistent banner. Success redirects to `/`, `/documents`, or `/settings/account` with no tokens in the URL.
+
+Operator setup, supported origins, and the production-dark rule are in [`docs/google-sign-in.md`](../../docs/google-sign-in.md).
 
 ## Auth Migration Notes
 

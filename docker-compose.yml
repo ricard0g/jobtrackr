@@ -66,6 +66,7 @@ services:
 
   backend:
     profiles: ["full"]
+    # One replica. OAuth servlet sessions and auth rate limits are in-memory.
     build:
       context: ./JobTrackrApi
     image: ${JOBTRACKR_BACKEND_IMAGE:-jobtrackr-backend:local}

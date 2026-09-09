@@ -81,6 +81,13 @@ public class GlobalExceptionHandler {
                 .body(ErrorResponse.of("PASSWORD_CREATION_GRANT_REQUIRED", exception.getMessage()));
     }
 
+    @ExceptionHandler(GoogleAuthUnavailableException.class)
+    public ResponseEntity<ErrorResponse> handleGoogleAuthUnavailable(
+            final GoogleAuthUnavailableException exception) {
+        return ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE)
+                .body(ErrorResponse.of("GOOGLE_AUTH_UNAVAILABLE", exception.getMessage()));
+    }
+
     @ExceptionHandler(GooglePasswordReauthNotAllowedException.class)
     public ResponseEntity<ErrorResponse> handleGooglePasswordReauthNotAllowed(
             final GooglePasswordReauthNotAllowedException exception) {

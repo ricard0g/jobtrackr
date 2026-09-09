@@ -22,6 +22,7 @@ import java.time.temporal.ChronoUnit;
 import java.util.List;
 import java.util.UUID;
 import java.util.concurrent.CountDownLatch;
+import java.util.stream.Collectors;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
@@ -31,6 +32,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
@@ -53,6 +55,9 @@ import org.testcontainers.junit.jupiter.Testcontainers;
 import org.testcontainers.postgresql.PostgreSQLContainer;
 import org.testcontainers.utility.DockerImageName;
 
+import ch.qos.logback.classic.Logger;
+import ch.qos.logback.classic.spi.ILoggingEvent;
+import ch.qos.logback.core.read.ListAppender;
 import com.jayway.jsonpath.JsonPath;
 import com.ricard0g.jobtrackr_api.model.User;
 import com.ricard0g.jobtrackr_api.model.UserIdentity;
@@ -731,6 +736,44 @@ class GoogleSignInIntegrationTest {
     @Test
     void softDeletedLinkedUser_isRejectedWithoutMovingTheIdentity() throws Exception {
         assertUnavailableUserIsRejected(user -> user.setUserDeletedAt(OffsetDateTime.now()));
+    }
+
+    @Test
+    void googleCallback_doesNotLogAuthorizationCodesProviderErrorsOrSecrets() throws Exception {
+        final RegisteredUser registered = registerUser(uniqueEmail("callback-logs"));
+        linkGoogleIdentity(
+                registered.userId(),
+                "google-subject",
+                registered.email(),
+                OffsetDateTime.now().minusDays(1));
+        GOOGLE.planSuccess("google-subject", registered.email(), true);
+
+        final ListAppender<ILoggingEvent> appender = attachRootListAppender();
+        try {
+            final StartedFlow started = startGoogle("/api/v1/auth/oauth2/authorization/google");
+            final String callbackUrl = followGoogle(started.googleLocation());
+            final String query = URI.create(callbackUrl).getRawQuery();
+            assertThat(query).contains("code=");
+            final String authorizationCode = authorizationCodeFromQuery(query);
+
+            final MvcResult callback = performCallback(callbackUrl, started.session(), started.cookies());
+            assertThat(callback.getResponse().getRedirectedUrl()).isEqualTo(PUBLIC_ORIGIN + "/");
+
+            GOOGLE.planAccessDenied();
+            final MvcResult cancelled = completeGoogleSignIn(
+                    "/api/v1/auth/oauth2/authorization/google?screen=register");
+            assertThat(cancelled.getResponse().getRedirectedUrl())
+                    .isEqualTo(PUBLIC_ORIGIN + "/auth/register?oauthResult=cancelled");
+
+            final String logs = formattedLogMessages(appender);
+            assertThat(logs).doesNotContain(authorizationCode);
+            assertThat(logs).doesNotContain("test-google-secret");
+            assertThat(logs).doesNotContain("access_denied");
+            assertThat(logs).doesNotContain("id_token");
+            assertThat(logs).doesNotContain(registered.email());
+        } finally {
+            detachRootListAppender(appender);
+        }
     }
 
     @Test
@@ -1535,6 +1578,43 @@ class GoogleSignInIntegrationTest {
                 HttpRequest.newBuilder(URI.create(googleLocation)).GET().build(),
                 HttpResponse.BodyHandlers.discarding());
         return response.headers().firstValue("location").orElseThrow();
+    }
+
+    private static ListAppender<ILoggingEvent> attachRootListAppender() {
+        final Logger root = (Logger) LoggerFactory.getLogger(Logger.ROOT_LOGGER_NAME);
+        final ListAppender<ILoggingEvent> appender = new ListAppender<>();
+        appender.start();
+        root.addAppender(appender);
+        return appender;
+    }
+
+    private static void detachRootListAppender(final ListAppender<ILoggingEvent> appender) {
+        final Logger root = (Logger) LoggerFactory.getLogger(Logger.ROOT_LOGGER_NAME);
+        root.detachAppender(appender);
+        appender.stop();
+    }
+
+    private static String formattedLogMessages(final ListAppender<ILoggingEvent> appender) {
+        return appender.list.stream()
+                .map(GoogleSignInIntegrationTest::eventText)
+                .collect(Collectors.joining("\n"));
+    }
+
+    private static String eventText(final ILoggingEvent event) {
+        final StringBuilder text = new StringBuilder(event.getFormattedMessage());
+        if (event.getThrowableProxy() != null) {
+            text.append('\n').append(event.getThrowableProxy().getMessage());
+        }
+        return text.toString();
+    }
+
+    private static String authorizationCodeFromQuery(final String query) {
+        for (final String pair : query.split("&")) {
+            if (pair.startsWith("code=")) {
+                return urlDecode(pair.substring("code=".length()));
+            }
+        }
+        throw new IllegalStateException("Google callback query did not contain an authorization code");
     }
 
     private static String uniqueEmail(final String prefix) {

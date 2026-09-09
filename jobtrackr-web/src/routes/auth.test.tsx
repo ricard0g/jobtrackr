@@ -87,4 +87,11 @@ describe("Google sign-in on auth screens", () => {
 		});
 		expect(router.state.location.search).toContain("returnTo=%2Fsettings%2Faccount");
 	});
+
+	it("shows the unavailable banner when Google is disabled", async () => {
+		renderAuth("/auth/login?oauthResult=unavailable");
+
+		await screen.findByText("Google sign-in is currently unavailable.");
+		expect(screen.queryByRole("link", { name: "Continue with Google" })).toBeNull();
+	});
 });

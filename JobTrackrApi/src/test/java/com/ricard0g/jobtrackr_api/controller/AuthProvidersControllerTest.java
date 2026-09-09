@@ -1,5 +1,7 @@
 package com.ricard0g.jobtrackr_api.controller;
 
+import static org.hamcrest.Matchers.containsString;
+import static org.hamcrest.Matchers.not;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
@@ -43,5 +45,20 @@ class AuthProvidersControllerTest {
                         "http://localhost:5173/auth/login?oauthResult=unavailable"))
                 .andExpect(header().string("Cache-Control", "no-store"))
                 .andExpect(header().string("Referrer-Policy", "no-referrer"));
+    }
+
+    @Test
+    void googleCallback_whenDisabled_redirectsToUnavailableWithoutEchoingTheQuery() throws Exception {
+        mockMvc.perform(get("/api/v1/auth/oauth2/callback/google")
+                        .param("code", "leaked-authorization-code")
+                        .param("error", "access_denied"))
+                .andExpect(status().isFound())
+                .andExpect(header().string(
+                        "Location",
+                        "http://localhost:5173/auth/login?oauthResult=unavailable"))
+                .andExpect(header().string("Cache-Control", "no-store"))
+                .andExpect(header().string("Referrer-Policy", "no-referrer"))
+                .andExpect(header().string("Location", not(containsString("leaked-authorization-code"))))
+                .andExpect(header().string("Location", not(containsString("access_denied"))));
     }
 }

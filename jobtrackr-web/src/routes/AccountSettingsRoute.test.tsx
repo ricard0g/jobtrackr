@@ -315,6 +315,14 @@ function stubSignInMethods(methods: SignInMethods) {
 	);
 }
 
+function enableGoogle() {
+	mswServer.use(
+		http.get(`${AUTH_BASE_URL}/providers`, () => {
+			return HttpResponse.json({ google: true });
+		}),
+	);
+}
+
 async function seedLinkedGoogle(providerEmail = "linked-google@example.com") {
 	await authenticateDemoUser();
 	const { loadState, saveState } = await import("@/mocks/db");
@@ -332,7 +340,10 @@ async function seedLinkedGoogle(providerEmail = "linked-google@example.com") {
 	saveState(state);
 }
 
-async function openSignInMethods(authenticate = true) {
+async function openSignInMethods(authenticate = true, googleEnabled = true) {
+	if (googleEnabled) {
+		enableGoogle();
+	}
 	if (authenticate) {
 		await authenticateDemoUser();
 	}
@@ -363,6 +374,29 @@ describe("Account Settings Sign-in Methods", () => {
 		expect(within(dialog).queryByText(/Changed/)).toBeNull();
 		expect(within(dialog).queryByText(/Last used/)).toBeNull();
 		expect(dialog.textContent).not.toContain(googleSubject);
+	});
+
+	it("hides Google actions when the provider is disabled and keeps the Identity Link", async () => {
+		stubSignInMethods(bothMethods("linked-google@example.com"));
+		const dialog = await openSignInMethods(true, false);
+
+		expect(within(dialog).getByRole("button", { name: "Change" })).toBeTruthy();
+		expect(within(dialog).queryByRole("button", { name: "Connect" })).toBeNull();
+		expect(within(dialog).getByRole("button", { name: "Disconnect" })).toBeTruthy();
+		expect(within(dialog).getByText("Connected")).toBeTruthy();
+		expect(within(dialog).getByText("linked-google@example.com")).toBeTruthy();
+		expect(within(dialog).getByText("Google sign-in is currently unavailable.")).toBeTruthy();
+	});
+
+	it("hides Create password through Google when the provider is disabled", async () => {
+		stubSignInMethods(googleOnlyMethods("google-only@example.com"));
+		const dialog = await openSignInMethods(true, false);
+
+		expect(within(dialog).queryByRole("button", { name: "Create" })).toBeNull();
+		expect(within(dialog).queryByRole("button", { name: "Create password" })).toBeNull();
+		expect(within(dialog).getByRole("button", { name: "Disconnect" })).toBeTruthy();
+		expect(within(dialog).getByText("Connected")).toBeTruthy();
+		expect(within(dialog).getByText("Google sign-in is currently unavailable.")).toBeTruthy();
 	});
 
 	it("shows password changedAt when the timestamp has a value", async () => {
@@ -543,6 +577,7 @@ describe("Account Settings Sign-in Methods", () => {
 		);
 
 		await authenticateDemoUser();
+		enableGoogle();
 		const router = renderApp(["/"]);
 		await screen.findByText("Kanban page");
 		const firstDialog = await openAccountSettings();

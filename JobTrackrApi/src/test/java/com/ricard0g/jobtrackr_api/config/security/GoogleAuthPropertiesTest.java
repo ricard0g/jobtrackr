@@ -33,6 +33,41 @@ class GoogleAuthPropertiesTest {
                 .hasMessageContaining("JOBTRACKR_PUBLIC_ORIGIN");
     }
 
+    @Test
+    void enabledConfiguration_failsWhenClientSecretIsBlank() {
+        final GoogleAuthProperties properties = validEnabledProperties();
+        properties.setClientSecret(" ");
+
+        assertThatThrownBy(properties::validateWhenEnabled)
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("GOOGLE_AUTH_ENABLED");
+    }
+
+    @Test
+    void enabledConfiguration_failsWhenPublicOriginHasAPath() {
+        final GoogleAuthProperties properties = validEnabledProperties();
+        properties.setPublicOrigin("http://localhost:5173/app");
+
+        assertThatThrownBy(properties::validateWhenEnabled)
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("JOBTRACKR_PUBLIC_ORIGIN");
+    }
+
+    @Test
+    void enabledConfiguration_failsWhenRedirectUriIsNotTheCallback() {
+        final GoogleAuthProperties properties = validEnabledProperties();
+        properties.setRedirectUri("http://localhost:8080/login/oauth2/code/google");
+
+        assertThatThrownBy(properties::validateWhenEnabled)
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("GOOGLE_OAUTH_REDIRECT_URI");
+    }
+
+    @Test
+    void enabledConfiguration_acceptsDocumentedLocalhostSplitOrigin() {
+        validEnabledProperties().validateWhenEnabled();
+    }
+
     private static GoogleAuthProperties validEnabledProperties() {
         final GoogleAuthProperties properties = new GoogleAuthProperties();
         properties.setEnabled(true);

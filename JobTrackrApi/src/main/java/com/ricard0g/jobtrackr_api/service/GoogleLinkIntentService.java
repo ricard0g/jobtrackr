@@ -7,6 +7,7 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import com.ricard0g.jobtrackr_api.config.security.GoogleAuthProperties;
 import com.ricard0g.jobtrackr_api.config.security.OauthSessionCookieService;
 import com.ricard0g.jobtrackr_api.exception.UserNotFoundException;
 import com.ricard0g.jobtrackr_api.model.User;
@@ -26,6 +27,7 @@ public class GoogleLinkIntentService {
     private final UserRepository userRepository;
     private final PasswordEncoder passwordEncoder;
     private final OauthSessionCookieService oauthSessionCookieService;
+    private final GoogleAuthProperties googleAuthProperties;
 
     @Transactional(readOnly = true)
     public void beginLink(
@@ -33,6 +35,7 @@ public class GoogleLinkIntentService {
             final String currentPassword,
             final HttpServletRequest request,
             final HttpServletResponse response) {
+        googleAuthProperties.requireEnabled();
         final User user = userRepository.findById(userId)
                 .orElseThrow(() -> new UserNotFoundException(userId));
         final boolean invalidPassword = !user.hasPasswordSignIn()

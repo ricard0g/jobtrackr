@@ -1,11 +1,13 @@
 package com.ricard0g.jobtrackr_api.controller;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.hamcrest.Matchers.containsString;
 import static org.hamcrest.Matchers.not;
 import static org.hamcrest.Matchers.nullValue;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -34,6 +36,7 @@ import org.testcontainers.utility.DockerImageName;
 import com.jayway.jsonpath.JsonPath;
 import com.ricard0g.jobtrackr_api.model.User;
 import com.ricard0g.jobtrackr_api.model.UserIdentity;
+import com.ricard0g.jobtrackr_api.model.enums.IdentityProvider;
 import com.ricard0g.jobtrackr_api.repository.UserIdentityRepository;
 import com.ricard0g.jobtrackr_api.repository.UserRepository;
 import com.ricard0g.jobtrackr_api.service.AuthService;
@@ -165,6 +168,73 @@ class SignInMethodsIntegrationTest {
                 .andExpect(jsonPath("$.google.connected").value(true))
                 .andExpect(jsonPath("$.google.providerEmail").value(providerEmail))
                 .andExpect(jsonPath("$.google.providerEmail").value(not(session.email())));
+    }
+
+    @Test
+    void disablingGoogle_preservesIdentityLinksAndPasswordSignIn() throws Exception {
+        // given
+        final IssuedSession session = registerPasswordUser();
+        linkGoogleIdentity(session.userId(), uniqueEmail("kept-google"));
+
+        // when / then
+        mockMvc.perform(post("/api/v1/auth/login")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "email": "%s",
+                                  "password": "%s"
+                                }
+                                """.formatted(session.email(), PASSWORD)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.user.userId").value(session.userId().toString()));
+        expectNoSensitiveFields(getSignInMethods(session.accessToken()))
+                .andExpect(jsonPath("$.password.enabled").value(true))
+                .andExpect(jsonPath("$.google.connected").value(true));
+        mockMvc.perform(get("/api/v1/auth/oauth2/authorization/google"))
+                .andExpect(status().isFound())
+                .andExpect(header().string("Location", containsString("oauthResult=unavailable")))
+                .andExpect(header().string("Cache-Control", "no-store"))
+                .andExpect(header().string("Referrer-Policy", "no-referrer"));
+        mockMvc.perform(post("/api/v1/user/sign-in-identities/google/link-intent")
+                        .header("Authorization", bearer(session.accessToken()))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "currentPassword": "%s"
+                                }
+                                """.formatted(PASSWORD)))
+                .andExpect(status().isServiceUnavailable())
+                .andExpect(jsonPath("$.code").value("GOOGLE_AUTH_UNAVAILABLE"));
+        assertThat(userIdentityRepository.findByUser_UserIdAndProvider(
+                session.userId(), IdentityProvider.GOOGLE)).isPresent();
+    }
+
+    @Test
+    void disablingGoogle_returnsUnavailableForGoogleOnlyUsersAndGoogleReauth() throws Exception {
+        // given
+        final String providerEmail = uniqueEmail("google-only-disabled");
+        final IssuedSession session = googleOnlySession(providerEmail, providerEmail);
+
+        // when / then
+        mockMvc.perform(post("/api/v1/auth/login")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "email": "%s",
+                                  "password": "%s"
+                                }
+                                """.formatted(providerEmail, PASSWORD)))
+                .andExpect(status().isUnauthorized());
+        mockMvc.perform(get("/api/v1/auth/oauth2/authorization/google"))
+                .andExpect(status().isFound())
+                .andExpect(header().string("Location", containsString("oauthResult=unavailable")));
+        mockMvc.perform(post("/api/v1/user/password/google-reauth-intent")
+                        .header("Authorization", bearer(session.accessToken())))
+                .andExpect(status().isServiceUnavailable())
+                .andExpect(jsonPath("$.code").value("GOOGLE_AUTH_UNAVAILABLE"));
+        expectNoSensitiveFields(getSignInMethods(session.accessToken()))
+                .andExpect(jsonPath("$.password.enabled").value(false))
+                .andExpect(jsonPath("$.google.connected").value(true));
     }
 
     private ResultActions getSignInMethods(final String accessToken) throws Exception {

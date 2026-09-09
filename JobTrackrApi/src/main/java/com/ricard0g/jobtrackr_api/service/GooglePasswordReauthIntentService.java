@@ -5,6 +5,7 @@ import java.util.UUID;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import com.ricard0g.jobtrackr_api.config.security.GoogleAuthProperties;
 import com.ricard0g.jobtrackr_api.config.security.OauthSessionCookieService;
 import com.ricard0g.jobtrackr_api.exception.GooglePasswordReauthNotAllowedException;
 import com.ricard0g.jobtrackr_api.exception.UserNotFoundException;
@@ -27,12 +28,14 @@ public class GooglePasswordReauthIntentService {
     private final UserRepository userRepository;
     private final UserIdentityRepository userIdentityRepository;
     private final OauthSessionCookieService oauthSessionCookieService;
+    private final GoogleAuthProperties googleAuthProperties;
 
     @Transactional(readOnly = true)
     public void beginReauth(
             final UUID userId,
             final HttpServletRequest request,
             final HttpServletResponse response) {
+        googleAuthProperties.requireEnabled();
         final User user = userRepository.findById(userId)
                 .orElseThrow(() -> new UserNotFoundException(userId));
         final boolean alreadyHasPassword = user.hasPasswordSignIn();

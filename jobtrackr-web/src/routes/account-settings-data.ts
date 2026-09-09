@@ -2,7 +2,7 @@ import type { ActionFunctionArgs, LoaderFunctionArgs } from "react-router";
 import { redirect } from "react-router";
 
 import { DISPLAY_NAME_MAX_LENGTH } from "@/lib/account-settings";
-import { ApiError, api, requireSession } from "@/lib/api";
+import { ApiError, api, getAuthProviders, requireSession } from "@/lib/api";
 import { AUTH_BASE_URL } from "@/lib/api-config";
 import { passwordPolicyError } from "@/lib/password-policy";
 import {
@@ -34,6 +34,7 @@ export type AccountSettingsLoaderData = {
 	signInMethods: SignInMethods;
 	oauthResult: OAuthResultCode | null;
 	createPasswordReady: boolean;
+	googleEnabled: boolean;
 };
 
 export async function accountSettingsLoader({
@@ -50,10 +51,15 @@ export async function accountSettingsLoader({
 		throw redirect(createPassword.redirectHref);
 	}
 
+	const [signInMethods, providers] = await Promise.all([
+		api.getSignInMethods(),
+		getAuthProviders(),
+	]);
 	return {
-		signInMethods: await api.getSignInMethods(),
+		signInMethods,
 		oauthResult: oauth.result,
 		createPasswordReady: createPassword.ready,
+		googleEnabled: providers.google === true,
 	};
 }
 
