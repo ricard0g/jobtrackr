@@ -16,6 +16,9 @@ import jakarta.persistence.LockModeType;
 
 public interface RefreshTokenRepository extends JpaRepository<RefreshToken, UUID> {
 
+    @Query("SELECT token FROM RefreshToken token JOIN FETCH token.user WHERE token.tokenHash = :tokenHash")
+    Optional<RefreshToken> findByTokenHash(@Param("tokenHash") String tokenHash);
+
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("SELECT rt FROM RefreshToken rt WHERE rt.tokenHash = :tokenHash")
     Optional<RefreshToken> findByTokenHashForUpdate(@Param("tokenHash") String tokenHash);
@@ -23,4 +26,8 @@ public interface RefreshTokenRepository extends JpaRepository<RefreshToken, UUID
     @Modifying
     @Query("UPDATE RefreshToken rt SET rt.revokedAt = :revokedAt WHERE rt.familyId = :familyId AND rt.revokedAt IS NULL")
     int revokeAllByFamilyId(@Param("familyId") UUID familyId, @Param("revokedAt") OffsetDateTime revokedAt);
+
+    @Modifying
+    @Query("UPDATE RefreshToken rt SET rt.revokedAt = :revokedAt WHERE rt.user.userId = :userId AND rt.revokedAt IS NULL")
+    int revokeAllByUserId(@Param("userId") UUID userId, @Param("revokedAt") OffsetDateTime revokedAt);
 }

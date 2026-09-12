@@ -27,6 +27,7 @@ import com.ricard0g.jobtrackr_api.dto.AuthDto.AuthResponse;
 import com.ricard0g.jobtrackr_api.dto.UserDto.UserResponseDto;
 import com.ricard0g.jobtrackr_api.exception.GlobalExceptionHandler;
 import com.ricard0g.jobtrackr_api.exception.InvalidRefreshTokenException;
+import com.ricard0g.jobtrackr_api.security.ratelimit.AuthenticationRateLimiter;
 import com.ricard0g.jobtrackr_api.service.AuthService;
 import com.ricard0g.jobtrackr_api.service.AuthService.AuthTokenPair;
 
@@ -42,6 +43,9 @@ class AuthControllerTest {
 
     @MockitoBean
     private AuthService authService;
+
+    @MockitoBean
+    private AuthenticationRateLimiter authenticationRateLimiter;
 
     @Test
     void register_shouldReturnAuthResponseAndSetRefreshCookie() throws Exception {

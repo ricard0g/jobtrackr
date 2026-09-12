@@ -1,11 +1,33 @@
-import type { ActionFunctionArgs } from "react-router";
+import type { ActionFunctionArgs, LoaderFunctionArgs } from "react-router";
 import { redirect } from "react-router";
 
-import { ApiError, login, register } from "@/lib/api";
+import { ApiError, getAuthProviders, login, register } from "@/lib/api";
+import { redirectPathAfterAuth } from "@/lib/account-settings";
+import { passwordPolicyError } from "@/lib/password-policy";
+import {
+	consumeOAuthResultParam,
+	type OAuthResultCode,
+} from "@/lib/google-auth";
 import type { AuthActionData, LoginRequest, RegisterRequest } from "@/types/auth";
 
-export function publicAuthLoader() {
-	return null;
+export type PublicAuthLoaderData = {
+	google: boolean;
+	oauthResult: OAuthResultCode | null;
+};
+
+export async function publicAuthLoader({
+	request,
+}: LoaderFunctionArgs): Promise<PublicAuthLoaderData> {
+	const url = new URL(request.url);
+	const oauth = consumeOAuthResultParam(url);
+	if (oauth.redirectHref) {
+		throw redirect(oauth.redirectHref);
+	}
+
+	return {
+		google: (await getAuthProviders()).google,
+		oauthResult: oauth.result,
+	};
 }
 
 export async function loginAction({ request }: ActionFunctionArgs) {
@@ -23,7 +45,7 @@ export async function loginAction({ request }: ActionFunctionArgs) {
 
 	try {
 		await login({ email, password } satisfies LoginRequest);
-		return redirect("/");
+		return redirect(redirectPathAfterAuth(request));
 	} catch (error) {
 		if (error instanceof ApiError) {
 			return {
@@ -51,8 +73,9 @@ export async function registerAction({ request }: ActionFunctionArgs) {
 	const fieldErrors: Record<string, string> = {};
 
 	if (!email) fieldErrors.email = "Email is required.";
-	if (password.length < 8) {
-		fieldErrors.password = "Password must be at least 8 characters.";
+	const policyError = passwordPolicyError(password);
+	if (policyError) {
+		fieldErrors.password = policyError;
 	}
 
 	if (Object.keys(fieldErrors).length > 0) {
@@ -68,7 +91,7 @@ export async function registerAction({ request }: ActionFunctionArgs) {
 			password,
 			displayName: displayName || undefined,
 		} satisfies RegisterRequest);
-		return redirect("/");
+		return redirect(redirectPathAfterAuth(request));
 	} catch (error) {
 		if (error instanceof ApiError) {
 			return {

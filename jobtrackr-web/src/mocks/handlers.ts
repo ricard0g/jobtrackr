@@ -1,6 +1,8 @@
 import { HttpResponse, http } from "msw";
 
 import { API_BASE_URL, AUTH_BASE_URL } from "@/lib/api-config";
+import { DISPLAY_NAME_MAX_LENGTH } from "@/lib/account-settings";
+import { passwordPolicyError } from "@/lib/password-policy";
 import {
 	createOwnedTag,
 	findAccessibleCompany,
@@ -40,11 +42,12 @@ import type {
 	ApplicationStatus,
 	ApplicationStatusPatchRequest,
 } from "@/types/application";
-import type { AuthResponse, LoginRequest, RegisterRequest } from "@/types/auth";
+import type { AuthResponse, LoginRequest, PasswordChangeRequest, RegisterRequest } from "@/types/auth";
 import type { CompanyWriteRequest } from "@/types/company";
 import type { InterviewCreateRequest, InterviewOutcomePatchRequest, InterviewPutRequest } from "@/types/interview";
 import type { TagWriteRequest } from "@/types/tag";
 import type { User } from "@/types/user";
+import type { SignInMethods } from "@/types/sign-in-methods";
 import type { BaseCv, BaseCvFormat } from "@/types/base-cv";
 import type {
 	CreateCvGenerationRequest,
@@ -376,6 +379,30 @@ const ensureTagLimit = (tagIds: number[]) =>
 			)
 		: null;
 
+const toPublicSignInMethods = (state: MockState, user: User): SignInMethods => {
+	const credentials = state.credentials.find((entry) => entry.userId === user.userId);
+	const identity = state.googleIdentities.find((entry) => entry.userId === user.userId);
+	return {
+		password: {
+			enabled: Boolean(credentials?.password),
+			changedAt: user.userPasswordChangedAt,
+		},
+		google: identity
+			? {
+					connected: true,
+					providerEmail: identity.providerEmail,
+					linkedAt: identity.linkedAt,
+					lastUsedAt: identity.lastUsedAt,
+				}
+			: {
+					connected: false,
+					providerEmail: null,
+					linkedAt: null,
+					lastUsedAt: null,
+				},
+	};
+};
+
 const patchNullable = <T>(
 	value: T | null | undefined,
 	apply: (value: T) => void,
@@ -384,6 +411,10 @@ const patchNullable = <T>(
 };
 
 export const handlers = [
+	http.get(`${AUTH_BASE_URL}/providers`, () => {
+		return HttpResponse.json({ google: false });
+	}),
+
 	http.get(`${AUTH_BASE_URL}/csrf`, () => {
 		const state = loadState();
 		return HttpResponse.json({
@@ -398,11 +429,11 @@ export const handlers = [
 		const body = await readJson<RegisterRequest>(request);
 		const email = normalizeEmail(body.email ?? "");
 
-		if (!email || !body.password || body.password.length < 8) {
+		if (!email || !body.password || passwordPolicyError(body.password)) {
 			return validationError([
 				...(!email ? [toValidationField("email", "must be a well-formed email address")] : []),
-				...(!body.password || body.password.length < 8
-					? [toValidationField("password", "size must be between 8 and 72")]
+				...(passwordPolicyError(body.password ?? "")
+					? [toValidationField("password", passwordPolicyError(body.password ?? "") ?? "")]
 					: []),
 			]);
 		}
@@ -493,6 +524,168 @@ export const handlers = [
 		const auth = requireAuth(request, state);
 		if (auth instanceof Response) return auth;
 		return HttpResponse.json(auth.user);
+	}),
+
+	http.patch(`${API_BASE_URL}/user`, async ({ request }) => {
+		const state = loadState();
+		const auth = requireAuth(request, state);
+		if (auth instanceof Response) return auth;
+		const body = await readJson<{
+			displayName?: string | null;
+			userEmail?: string;
+			email?: string;
+		}>(request);
+		const emailMutationAttempted =
+			body.userEmail !== undefined || body.email !== undefined;
+		if (emailMutationAttempted) {
+			return errorJson(400, "EMAIL_NOT_MUTABLE", "Primary Email cannot be changed");
+		}
+
+		const displayName = normalizeOptional(body.displayName);
+		if (displayName && displayName.length > DISPLAY_NAME_MAX_LENGTH) {
+			return validationError([
+				toValidationField("displayName", "size must be between 0 and 160"),
+			]);
+		}
+
+		const timestamp = nowIso();
+		auth.user.userDisplayName = displayName;
+		auth.user.userUpdatedAt = timestamp;
+		saveState(state);
+		return HttpResponse.json(auth.user);
+	}),
+
+	http.get(`${API_BASE_URL}/user/sign-in-methods`, ({ request }) => {
+		const state = loadState();
+		const auth = requireAuth(request, state);
+		if (auth instanceof Response) return auth;
+		return HttpResponse.json(toPublicSignInMethods(state, auth.user));
+	}),
+
+	http.put(`${API_BASE_URL}/user/password`, async ({ request }) => {
+		const state = loadState();
+		const auth = requireAuth(request, state);
+		if (auth instanceof Response) return auth;
+		const body = await readJson<PasswordChangeRequest>(request);
+		const credentials = state.credentials.find((entry) => entry.userId === auth.user.userId);
+		if (!credentials) {
+			const grantIndex = state.passwordCreationGrantUserIds.indexOf(auth.user.userId);
+			if (grantIndex < 0) {
+				return errorJson(
+					403,
+					"PASSWORD_CREATION_GRANT_REQUIRED",
+					"A Password Creation Grant is required to create password sign-in",
+				);
+			}
+			const policyError = passwordPolicyError(body.newPassword ?? "");
+			if (policyError) {
+				return validationError([toValidationField("newPassword", policyError)]);
+			}
+			state.passwordCreationGrantUserIds.splice(grantIndex, 1);
+			state.credentials.push({
+				userId: auth.user.userId,
+				email: auth.user.userEmail,
+				password: body.newPassword,
+			});
+			const timestamp = nowIso();
+			auth.user.userPasswordChangedAt = timestamp;
+			auth.user.userUpdatedAt = timestamp;
+			const response = createAuthResponse(state, auth.user);
+			saveState(state);
+			return HttpResponse.json(response);
+		}
+		if (!body.currentPassword) {
+			return errorJson(400, "CURRENT_PASSWORD_REQUIRED", "Current password is required");
+		}
+		if (credentials.password !== body.currentPassword) {
+			return errorJson(401, "INVALID_CREDENTIALS", "Invalid email or password");
+		}
+		const policyError = passwordPolicyError(body.newPassword ?? "");
+		if (policyError) {
+			return validationError([toValidationField("newPassword", policyError)]);
+		}
+		if (body.newPassword === credentials.password) {
+			return errorJson(
+				400,
+				"PASSWORD_UNCHANGED",
+				"New password must be different from the current password",
+			);
+		}
+
+		const timestamp = nowIso();
+		credentials.password = body.newPassword;
+		auth.user.userPasswordChangedAt = timestamp;
+		auth.user.userUpdatedAt = timestamp;
+		const response = createAuthResponse(state, auth.user);
+		saveState(state);
+		return HttpResponse.json(response);
+	}),
+
+	http.post(`${API_BASE_URL}/user/sign-in-identities/google/link-intent`, async ({ request }) => {
+		const state = loadState();
+		const auth = requireAuth(request, state);
+		if (auth instanceof Response) return auth;
+		const body = await readJson<{ currentPassword?: string }>(request);
+		const credentials = state.credentials.find((entry) => entry.userId === auth.user.userId);
+		if (!credentials || credentials.password !== body.currentPassword) {
+			return errorJson(401, "INVALID_CREDENTIALS", "Invalid email or password");
+		}
+		if (state.googleIdentities.some((identity) => identity.userId === auth.user.userId)) {
+			return errorJson(409, "IDENTITY_ALREADY_LINKED", "Google is already connected");
+		}
+		return new HttpResponse(null, { status: 204 });
+	}),
+
+	http.post(`${API_BASE_URL}/user/sign-in-identities/google/disconnect`, async ({ request }) => {
+		const state = loadState();
+		const auth = requireAuth(request, state);
+		if (auth instanceof Response) return auth;
+		const body = await readJson<{ currentPassword?: string }>(request);
+		const credentials = state.credentials.find((entry) => entry.userId === auth.user.userId);
+		if (!credentials) {
+			return errorJson(
+				403,
+				"GOOGLE_DISCONNECT_NOT_ALLOWED",
+				"Create a password before disconnecting Google",
+			);
+		}
+		if (!body.currentPassword) {
+			return errorJson(400, "CURRENT_PASSWORD_REQUIRED", "Current password is required");
+		}
+		if (credentials.password !== body.currentPassword) {
+			return errorJson(401, "INVALID_CREDENTIALS", "Invalid email or password");
+		}
+		const identityIndex = state.googleIdentities.findIndex(
+			(identity) => identity.userId === auth.user.userId,
+		);
+		if (identityIndex < 0) {
+			return errorJson(409, "GOOGLE_IDENTITY_NOT_CONNECTED", "Google is not connected");
+		}
+
+		state.googleIdentities.splice(identityIndex, 1);
+		const response = createAuthResponse(state, auth.user);
+		saveState(state);
+		return HttpResponse.json(response);
+	}),
+
+	http.post(`${API_BASE_URL}/user/password/google-reauth-intent`, ({ request }) => {
+		const state = loadState();
+		const auth = requireAuth(request, state);
+		if (auth instanceof Response) return auth;
+		const credentials = state.credentials.find((entry) => entry.userId === auth.user.userId);
+		const hasGoogle = state.googleIdentities.some((identity) => identity.userId === auth.user.userId);
+		if (credentials || !hasGoogle) {
+			return errorJson(
+				403,
+				"GOOGLE_PASSWORD_REAUTH_NOT_ALLOWED",
+				"Google password reauthentication is not available",
+			);
+		}
+		if (!state.passwordCreationGrantUserIds.includes(auth.user.userId)) {
+			state.passwordCreationGrantUserIds.push(auth.user.userId);
+			saveState(state);
+		}
+		return new HttpResponse(null, { status: 204 });
 	}),
 
 	http.get(`${API_BASE_URL}/base-cvs`, ({ request }) => {

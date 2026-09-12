@@ -2,6 +2,7 @@ package com.ricard0g.jobtrackr_api.exception;
 
 import java.util.List;
 
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.MethodArgumentNotValidException;
@@ -52,6 +53,60 @@ public class GlobalExceptionHandler {
     public ResponseEntity<ErrorResponse> handleUserNotFound(final UserNotFoundException exception) {
         return ResponseEntity.status(HttpStatus.NOT_FOUND)
                 .body(ErrorResponse.of("USER_NOT_FOUND", exception.getMessage()));
+    }
+
+    @ExceptionHandler(EmailNotMutableException.class)
+    public ResponseEntity<ErrorResponse> handleEmailNotMutable(final EmailNotMutableException exception) {
+        return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                .body(ErrorResponse.of("EMAIL_NOT_MUTABLE", exception.getMessage()));
+    }
+
+    @ExceptionHandler(CurrentPasswordRequiredException.class)
+    public ResponseEntity<ErrorResponse> handleCurrentPasswordRequired(
+            final CurrentPasswordRequiredException exception) {
+        return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                .body(ErrorResponse.of("CURRENT_PASSWORD_REQUIRED", exception.getMessage()));
+    }
+
+    @ExceptionHandler(PasswordUnchangedException.class)
+    public ResponseEntity<ErrorResponse> handlePasswordUnchanged(final PasswordUnchangedException exception) {
+        return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                .body(ErrorResponse.of("PASSWORD_UNCHANGED", exception.getMessage()));
+    }
+
+    @ExceptionHandler(PasswordCreationGrantRequiredException.class)
+    public ResponseEntity<ErrorResponse> handlePasswordCreationGrantRequired(
+            final PasswordCreationGrantRequiredException exception) {
+        return ResponseEntity.status(HttpStatus.FORBIDDEN)
+                .body(ErrorResponse.of("PASSWORD_CREATION_GRANT_REQUIRED", exception.getMessage()));
+    }
+
+    @ExceptionHandler(GoogleAuthUnavailableException.class)
+    public ResponseEntity<ErrorResponse> handleGoogleAuthUnavailable(
+            final GoogleAuthUnavailableException exception) {
+        return ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE)
+                .body(ErrorResponse.of("GOOGLE_AUTH_UNAVAILABLE", exception.getMessage()));
+    }
+
+    @ExceptionHandler(GooglePasswordReauthNotAllowedException.class)
+    public ResponseEntity<ErrorResponse> handleGooglePasswordReauthNotAllowed(
+            final GooglePasswordReauthNotAllowedException exception) {
+        return ResponseEntity.status(HttpStatus.FORBIDDEN)
+                .body(ErrorResponse.of("GOOGLE_PASSWORD_REAUTH_NOT_ALLOWED", exception.getMessage()));
+    }
+
+    @ExceptionHandler(GoogleDisconnectNotAllowedException.class)
+    public ResponseEntity<ErrorResponse> handleGoogleDisconnectNotAllowed(
+            final GoogleDisconnectNotAllowedException exception) {
+        return ResponseEntity.status(HttpStatus.FORBIDDEN)
+                .body(ErrorResponse.of("GOOGLE_DISCONNECT_NOT_ALLOWED", exception.getMessage()));
+    }
+
+    @ExceptionHandler(GoogleIdentityNotConnectedException.class)
+    public ResponseEntity<ErrorResponse> handleGoogleIdentityNotConnected(
+            final GoogleIdentityNotConnectedException exception) {
+        return ResponseEntity.status(HttpStatus.CONFLICT)
+                .body(ErrorResponse.of("GOOGLE_IDENTITY_NOT_CONNECTED", exception.getMessage()));
     }
 
     @ExceptionHandler(CompanyNotFoundException.class)
@@ -165,5 +220,12 @@ public class GlobalExceptionHandler {
             final org.springframework.security.authentication.BadCredentialsException exception) {
         return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
                 .body(ErrorResponse.of("INVALID_CREDENTIALS", "Invalid email or password"));
+    }
+
+    @ExceptionHandler(RateLimitedException.class)
+    public ResponseEntity<ErrorResponse> handleRateLimited(final RateLimitedException exception) {
+        return ResponseEntity.status(HttpStatus.TOO_MANY_REQUESTS)
+                .header(HttpHeaders.RETRY_AFTER, Long.toString(exception.retryAfterSeconds()))
+                .body(ErrorResponse.of("RATE_LIMITED", exception.getMessage()));
     }
 }
