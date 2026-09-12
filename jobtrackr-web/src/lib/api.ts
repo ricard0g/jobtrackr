@@ -26,7 +26,7 @@ import type {
 	InterviewPutRequest,
 } from "@/types/interview";
 import { API_BASE_URL, AUTH_BASE_URL } from "@/lib/api-config";
-import type { AuthProviders } from "@/lib/google-auth";
+import { clearCreatePasswordReady, type AuthProviders } from "@/lib/google-auth";
 import type { Tag, TagWriteRequest } from "@/types/tag";
 import type { SignInMethods } from "@/types/sign-in-methods";
 import type { User, UserPatchRequest } from "@/types/user";
@@ -279,6 +279,7 @@ export async function logout() {
 		);
 	} finally {
 		clearAccessToken();
+		clearCreatePasswordReady();
 	}
 }
 

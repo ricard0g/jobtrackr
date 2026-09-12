@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import {
+	clearCreatePasswordReady,
 	consumeCreatePasswordParam,
 	consumeOAuthResultParam,
 	googleAuthorizationHref,
@@ -115,7 +116,25 @@ describe("consumeCreatePasswordParam", () => {
 		const flashed = consumeCreatePasswordParam(new URL("http://localhost/settings/account"));
 		expect(flashed.redirectHref).toBeNull();
 		expect(flashed.ready).toBe(true);
-		expect(window.sessionStorage.getItem("jobtrackr.createPassword")).toBeNull();
+		expect(window.sessionStorage.getItem("jobtrackr.createPassword")).toBe("1");
+	});
+
+	it("keeps the grant-ready signal across later loads until it is cleared", () => {
+		window.sessionStorage.clear();
+		consumeCreatePasswordParam(
+			new URL("http://localhost/settings/account?createPassword=1"),
+		);
+		expect(consumeCreatePasswordParam(new URL("http://localhost/settings/account")).ready).toBe(
+			true,
+		);
+		expect(consumeCreatePasswordParam(new URL("http://localhost/settings/account")).ready).toBe(
+			true,
+		);
+
+		clearCreatePasswordReady();
+		expect(consumeCreatePasswordParam(new URL("http://localhost/settings/account")).ready).toBe(
+			false,
+		);
 	});
 
 	it("ignores values other than 1", () => {

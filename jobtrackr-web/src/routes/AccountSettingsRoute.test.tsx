@@ -801,6 +801,26 @@ describe("Account Settings Sign-in Methods", () => {
 		});
 	});
 
+	it("keeps the Create password form after the grant-ready loader runs again", async () => {
+		stubSignInMethods(googleOnlyMethods());
+		enableGoogle();
+		await authenticateDemoUser();
+		const router = renderApp(["/"]);
+		await screen.findByText("Kanban page");
+
+		await router.navigate(`${ACCOUNT_SETTINGS_PATH}?createPassword=1`);
+		const dialog = await screen.findByRole("dialog", { name: "Account Settings" });
+		expect(await within(dialog).findByLabelText("New password")).toBeTruthy();
+
+		await router.revalidate();
+
+		await waitFor(() => {
+			expect(within(dialog).queryByRole("button", { name: "Create" })).toBeNull();
+		});
+		expect(within(dialog).getByLabelText("New password")).toBeTruthy();
+		expect(within(dialog).queryByRole("button", { name: "Create password" })).toBeNull();
+	});
+
 	it("creates a password from the expanded form and shows it as enabled", async () => {
 		const { loadState, saveState } = await import("@/mocks/db");
 		await authenticateDemoUser();

@@ -113,11 +113,11 @@ export function consumeCreatePasswordParam(url: URL): {
 	}
 
 	const flashed = sessionStorage.getItem(CREATE_PASSWORD_FLASH_KEY) === "1";
-	if (flashed) {
-		sessionStorage.removeItem(CREATE_PASSWORD_FLASH_KEY);
-	}
-
 	return { ready: flashed, redirectHref: null };
+}
+
+export function clearCreatePasswordReady() {
+	sessionStorage.removeItem(CREATE_PASSWORD_FLASH_KEY);
 }
 
 export function redirectToGoogleAuthorization(href: string) {

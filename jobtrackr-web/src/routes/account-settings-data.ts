@@ -6,6 +6,7 @@ import { ApiError, api, getAuthProviders, requireSession } from "@/lib/api";
 import { AUTH_BASE_URL } from "@/lib/api-config";
 import { passwordPolicyError } from "@/lib/password-policy";
 import {
+	clearCreatePasswordReady,
 	consumeCreatePasswordParam,
 	consumeOAuthResultParam,
 	googleCreatePasswordAuthorizationHref,
@@ -277,6 +278,7 @@ async function createPassword(formData: FormData): Promise<AccountSettingsAction
 
 	try {
 		await api.changePassword({ newPassword });
+		clearCreatePasswordReady();
 		return { ok: true, intent: "create-password" };
 	} catch (error) {
 		if (error instanceof ApiError) {
