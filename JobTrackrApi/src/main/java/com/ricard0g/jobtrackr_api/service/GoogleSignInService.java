@@ -80,7 +80,7 @@ public class GoogleSignInService {
 
     private User createGoogleUserIfEmailUnused(final String subject, final String verifiedEmail) {
         if (userRepository.existsByUserEmail(verifiedEmail)) {
-            throw new GoogleSignInRejectedException(OAuthResultCode.CONFLICT);
+            return recoverFromCreationRace(subject, verifiedEmail);
         }
         try {
             return transactionTemplate.execute(status -> createGoogleUser(subject, verifiedEmail));
