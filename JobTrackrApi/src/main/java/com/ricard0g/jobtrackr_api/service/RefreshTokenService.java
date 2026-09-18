@@ -7,6 +7,7 @@ import java.time.Duration;
 import java.time.OffsetDateTime;
 import java.util.Base64;
 import java.util.HexFormat;
+import java.util.Optional;
 import java.util.UUID;
 
 import org.springframework.stereotype.Service;
@@ -82,6 +83,17 @@ public class RefreshTokenService {
         return new RotationResult(currentToken.getUser(), newRawToken, expiresAt);
     }
 
+    @Transactional(readOnly = true)
+    public Optional<User> findActiveUser(final String rawRefreshToken) {
+        if (rawRefreshToken == null || rawRefreshToken.isBlank()) {
+            return Optional.empty();
+        }
+        final OffsetDateTime now = OffsetDateTime.now();
+        return refreshTokenRepository.findByTokenHash(hashToken(rawRefreshToken))
+                .filter(token -> token.isActive(now))
+                .map(RefreshToken::getUser);
+    }
+
     @Transactional
     public void revokeRefreshToken(final String rawToken) {
         final OffsetDateTime now = OffsetDateTime.now();
@@ -98,6 +110,11 @@ public class RefreshTokenService {
     @Transactional
     public void revokeFamily(final UUID familyId, final OffsetDateTime revokedAt) {
         refreshTokenRepository.revokeAllByFamilyId(familyId, revokedAt);
+    }
+
+    @Transactional
+    public void revokeAllForUser(final UUID userId) {
+        refreshTokenRepository.revokeAllByUserId(userId, OffsetDateTime.now());
     }
 
     private String generateOpaqueToken() {

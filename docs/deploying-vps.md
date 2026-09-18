@@ -25,6 +25,7 @@ Supported workflows in this runbook:
 - [Recovery](#recovery)
 - [Operator acceptance: Generated CV](#operator-acceptance-generated-cv)
 - [Troubleshooting](#troubleshooting)
+- [Google Sign-In](#google-sign-in)
 - [Later direct HTTPS](#later-direct-https)
 - [Teardown](#teardown)
 
@@ -215,7 +216,7 @@ The example listens on `127.0.0.1:18081` and proxies the complete hostname to `h
 
 The example sets `Host`, `X-Forwarded-Host`, `X-Forwarded-For`, and `X-Forwarded-Proto https`. The hop from cloudflared to system Nginx is HTTP, so `$scheme` would be wrong. Frontend Nginx already passes those headers through to Spring. Together they preserve the public hostname, the client chain, and the external HTTPS scheme so secure refresh and CSRF cookies are issued for `https://jobtrackr.example.test`.
 
-`JOBTRACKR_PUBLIC_ORIGIN` and `CORS_ALLOWED_ORIGINS` in `.env.vps` must be that same `https://` origin. Spring already uses `server.forward-headers-strategy=framework`.
+`JOBTRACKR_PUBLIC_ORIGIN` and `CORS_ALLOWED_ORIGINS` in `.env.vps` must be that same `https://` origin. Spring uses `server.forward-headers-strategy=native` so Tomcat only rewrites the client IP from `X-Forwarded-For` when the immediate peer is a trusted proxy, walking the chain from the right.
 
 ## Cloudflare Tunnel
 
@@ -425,6 +426,16 @@ docker compose -f docker-compose.vps.yml --env-file .env.vps logs --tail=200 fro
 **Volume mistakes.** `jobtrackr_pgdata` is external and is created before first start. Compose will not create it. `compose down` keeps it. `compose down -v` does not remove that external volume, but `docker volume rm jobtrackr_pgdata` does. Recreating containers is safe; renaming or deleting the volume is not.
 
 **Log inspection.** Log rotation is `json-file` with a 10 MB cap and three files. Use `docker compose logs --tail`. Do not `cat .env.vps` into a ticket.
+
+**Google Sign-In.** Production stays disabled (`GOOGLE_AUTH_ENABLED=false`) until the production Google Cloud project, hostname, and consent-screen metadata are ready. Enabling with missing client values or a non-exact callback URI fails startup. Backend OAuth sessions and authentication rate limits are in-memory; do not scale the backend replica count. Callback query strings must not appear in `logs backend` or host Nginx access logs.
+
+## Google Sign-In
+
+Keep Google Sign-In dark on a production hostname. The development Google Cloud Web client may be enabled on the stable tunnel at `https://test.ricardoguzdev.com` using that exact origin and `https://test.ricardoguzdev.com/api/v1/auth/oauth2/callback/google`. Use a separate production project later. Cloudflare Access does not replace JobTrackr sign-in.
+
+The backend is a single replica. In-memory OAuth sessions and rate-limit buckets are not shared across processes. Host Nginx turns access logging off for the Google callback path so authorization codes never enter system logs.
+
+See [Google Sign-In](google-sign-in.md) and the [smoke checklist](acceptance/google-sign-in-smoke.md).
 
 ## Later direct HTTPS
 

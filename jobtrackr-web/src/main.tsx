@@ -34,6 +34,10 @@ import {
 	recentGeneratedCvsResourceLoader,
 	recentGeneratedCvsShouldRevalidate,
 } from "@/routes/documents-data";
+import { accountSettingsAction, accountSettingsLoader } from "@/routes/account-settings-data";
+import {
+	AccountSettingsFallbackRoute,
+} from "@/routes/AccountSettingsRoute";
 import { generateHubRedirectLoader } from "@/routes/generate-hub-redirect";
 
 const router = createBrowserRouter([
@@ -105,6 +109,13 @@ const router = createBrowserRouter([
 						shouldRevalidate: documentsShouldRevalidate,
 					},
 				],
+			},
+			{
+				id: "account-settings",
+				path: "settings/account",
+				Component: AccountSettingsFallbackRoute,
+				loader: accountSettingsLoader,
+				action: accountSettingsAction,
 			},
 			{
 				path: "resources/documents/recent",

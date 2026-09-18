@@ -1,11 +1,12 @@
-import type { ActionFunctionArgs, ShouldRevalidateFunctionArgs } from "react-router";
+import type { ActionFunctionArgs, LoaderFunctionArgs, ShouldRevalidateFunctionArgs } from "react-router";
 import { redirect } from "react-router";
 
+import { ACCOUNT_SETTINGS_PATH } from "@/lib/account-settings";
 import { api, logout, requireSession, type AccountLoaderData, type KanbanLoaderData } from "@/lib/api";
 import { buildBoardGenerationReminders } from "@/lib/board-generation-reminders";
 
-export async function appLoader(): Promise<AccountLoaderData> {
-	await requireSession();
+export async function appLoader({ request }: LoaderFunctionArgs): Promise<AccountLoaderData> {
+	await requireSession(request);
 	return { user: await api.getCurrentUser() };
 }
 
@@ -60,6 +61,19 @@ export function appShouldRevalidate({
 
 	if (formAction?.startsWith("/applications/")) {
 		return false;
+	}
+
+	if (formAction) {
+		let settingsAction = false;
+		try {
+			settingsAction =
+				new URL(formAction, "http://localhost").pathname === ACCOUNT_SETTINGS_PATH;
+		} catch {
+			settingsAction = false;
+		}
+		if (settingsAction) {
+			return true;
+		}
 	}
 
 	const isCurrentBoardRoute =

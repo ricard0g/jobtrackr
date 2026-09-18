@@ -60,6 +60,9 @@ public class User {
     @Column(name = "user_last_login_at", columnDefinition = "TIMESTAMPTZ")
     private OffsetDateTime userLastLoginAt;
 
+    @Column(name = "user_auth_version", nullable = false)
+    private int userAuthVersion = 0;
+
     @Column(name = "user_ai_consent_version", length = 32)
     private String userAiConsentVersion;
 
@@ -83,5 +86,20 @@ public class User {
         user.setUserPasswordHash(passwordHash);
         user.setUserDisplayName(displayName);
         return user;
+    }
+
+    public static User googleJustInTime(final String verifiedEmail) {
+        final User user = new User();
+        user.setUserEmail(verifiedEmail);
+        user.setUserEmailVerified(true);
+        return user;
+    }
+
+    public void advanceAuthenticationVersion() {
+        userAuthVersion = userAuthVersion + 1;
+    }
+
+    public boolean hasPasswordSignIn() {
+        return userPasswordHash != null && !userPasswordHash.isBlank();
     }
 }

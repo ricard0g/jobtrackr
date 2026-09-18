@@ -4,6 +4,18 @@ Backend controllers are under `../../JobTrackrApi/src/main/java/com/ricard0g/job
 
 All `/api/v1/**` endpoints require `Authorization: Bearer <accessToken>`. Auth endpoints use refresh cookies as described in [auth-and-session.md](./auth-and-session.md).
 
+## Auth
+
+Base path: `/api/v1/auth`
+
+| Method | Path | Response | Frontend status |
+| --- | --- | --- | --- |
+| GET | `/providers` | `{ google: boolean }` | Implemented |
+| GET | `/oauth2/authorization/google` | `302` | Implemented (backend-owned OIDC start) |
+| GET | `/oauth2/callback/google` | `302` | Implemented (backend-owned OIDC callback) |
+
+`GET /providers` is public and does not expose client credentials. `google` is true only when Google Sign-In is enabled with valid configuration.
+
 ## Current User
 
 Base path: `/api/v1/user`

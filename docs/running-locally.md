@@ -268,6 +268,12 @@ Open:
 http://127.0.0.1:18080
 ```
 
+## Google Sign-In
+
+Google Sign-In stays disabled until you set `GOOGLE_AUTH_ENABLED=true` plus a development Web client. Host-run uses `http://localhost:5173` as the SPA origin and `http://localhost:8080/api/v1/auth/oauth2/callback/google` as the callback. Full Compose uses `http://127.0.0.1:18080` for both. The stable tunnel at `https://test.ricardoguzdev.com` is documented in [Google Sign-In](google-sign-in.md). Do not put real client secrets in Git. Random quick-tunnel hostnames are not supported.
+
+OAuth handshake sessions and authentication rate limits are in-memory. Run one backend process. See [Google Sign-In](google-sign-in.md) for production-dark rules and the [smoke checklist](acceptance/google-sign-in-smoke.md).
+
 ## Reset The Local Database
 
 This destroys the local Compose Postgres volume:

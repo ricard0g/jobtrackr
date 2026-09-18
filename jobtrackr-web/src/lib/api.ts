@@ -1,5 +1,7 @@
 import { redirect } from "react-router";
 
+import { loginPathForRequest } from "@/lib/account-settings";
+
 import type {
 	Application,
 	ApplicationPatchRequest,
@@ -9,7 +11,7 @@ import type {
 	ApplicationCreateRequest,
 	StatusHistory,
 } from "@/types/application";
-import type { AuthResponse, LoginRequest, RegisterRequest } from "@/types/auth";
+import type { AuthResponse, LoginRequest, PasswordChangeRequest, RegisterRequest } from "@/types/auth";
 import type {
 	Company,
 	CompanyPage,
@@ -24,8 +26,10 @@ import type {
 	InterviewPutRequest,
 } from "@/types/interview";
 import { API_BASE_URL, AUTH_BASE_URL } from "@/lib/api-config";
+import { clearCreatePasswordReady, type AuthProviders } from "@/lib/google-auth";
 import type { Tag, TagWriteRequest } from "@/types/tag";
-import type { User } from "@/types/user";
+import type { SignInMethods } from "@/types/sign-in-methods";
+import type { User, UserPatchRequest } from "@/types/user";
 import type { BaseCv, BaseCvDownload } from "@/types/base-cv";
 import type {
 	GeneratedCv,
@@ -218,6 +222,15 @@ async function authRequest<T>(
 	return readJson<T>(response);
 }
 
+export async function getAuthProviders(): Promise<AuthProviders> {
+	try {
+		const providers = await authRequest<AuthProviders>("/providers");
+		return { google: providers.google === true };
+	} catch {
+		return { google: false };
+	}
+}
+
 export async function login(request: LoginRequest) {
 	const response = await authRequest<AuthResponse>("/login", {
 		method: "POST",
@@ -266,6 +279,7 @@ export async function logout() {
 		);
 	} finally {
 		clearAccessToken();
+		clearCreatePasswordReady();
 	}
 }
 
@@ -289,16 +303,19 @@ async function apiRequest<T>(
 		headers,
 	});
 
-	if (response.status === 401 && retry) {
-		await refreshSession();
-		return apiRequest<T>(path, init, false);
-	}
-
 	if (!response.ok) {
-		throw await parseApiError(
+		const error = await parseApiError(
 			response,
 			"No se pudo completar la solicitud.",
 		);
+		const expiredAccessToken =
+			response.status === 401 && retry && error.code !== "INVALID_CREDENTIALS";
+		if (expiredAccessToken) {
+			await refreshSession();
+			return apiRequest<T>(path, init, false);
+		}
+
+		throw error;
 	}
 
 	return readJson<T>(response);
@@ -321,19 +338,22 @@ async function apiRequestBlob(
 		headers,
 	});
 
-	if (response.status === 401 && retry) {
-		await refreshSession();
-		return apiRequestBlob(path, init, false);
-	}
-
 	if (!response.ok) {
-		throw await parseApiError(response, "Preview could not be loaded.");
+		const error = await parseApiError(response, "Preview could not be loaded.");
+		const expiredAccessToken =
+			response.status === 401 && retry && error.code !== "INVALID_CREDENTIALS";
+		if (expiredAccessToken) {
+			await refreshSession();
+			return apiRequestBlob(path, init, false);
+		}
+
+		throw error;
 	}
 
 	return response.blob();
 }
 
-export async function requireSession() {
+export async function requireSession(request?: Request) {
 	if (accessToken) {
 		return;
 	}
@@ -341,12 +361,54 @@ export async function requireSession() {
 	try {
 		await refreshSession();
 	} catch {
-		throw redirect("/auth/login");
+		throw redirect(request ? loginPathForRequest(request) : "/auth/login");
 	}
 }
 
 export const api = {
 	getCurrentUser: () => apiRequest<User>("/user"),
+	patchUser: (request: UserPatchRequest) =>
+		apiRequest<User>("/user", {
+			method: "PATCH",
+			headers: jsonHeaders,
+			body: JSON.stringify(request),
+		}),
+	getSignInMethods: () => apiRequest<SignInMethods>("/user/sign-in-methods"),
+	changePassword: async (request: PasswordChangeRequest) => {
+		const response = await apiRequest<AuthResponse>("/user/password", {
+			method: "PUT",
+			headers: jsonHeaders,
+			credentials: "include",
+			body: JSON.stringify(request),
+		});
+		setAccessToken(response.accessToken);
+		return response;
+	},
+	disconnectGoogle: async (currentPassword: string) => {
+		const response = await apiRequest<AuthResponse>(
+			"/user/sign-in-identities/google/disconnect",
+			{
+				method: "POST",
+				headers: jsonHeaders,
+				credentials: "include",
+				body: JSON.stringify({ currentPassword }),
+			},
+		);
+		setAccessToken(response.accessToken);
+		return response;
+	},
+	createGoogleLinkIntent: (currentPassword: string) =>
+		apiRequest<void>("/user/sign-in-identities/google/link-intent", {
+			method: "POST",
+			headers: jsonHeaders,
+			credentials: "include",
+			body: JSON.stringify({ currentPassword }),
+		}),
+	createGooglePasswordReauthIntent: () =>
+		apiRequest<void>("/user/password/google-reauth-intent", {
+			method: "POST",
+			credentials: "include",
+		}),
 	getBaseCvs: () => apiRequest<BaseCv[]>("/base-cvs"),
 	uploadBaseCv: (file: File) => {
 		const formData = new FormData();

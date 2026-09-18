@@ -9,7 +9,6 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import java.time.OffsetDateTime;
-import java.util.List;
 import java.util.UUID;
 
 import org.junit.jupiter.api.BeforeEach;
@@ -19,8 +18,6 @@ import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.boot.webmvc.test.autoconfigure.WebMvcTest;
 import org.springframework.context.annotation.Import;
 import org.springframework.http.MediaType;
-import org.springframework.security.core.authority.SimpleGrantedAuthority;
-import org.springframework.security.core.userdetails.User;
 import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.test.context.TestPropertySource;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
@@ -33,6 +30,7 @@ import com.ricard0g.jobtrackr_api.exception.GlobalExceptionHandler;
 import com.ricard0g.jobtrackr_api.exception.InvalidRefreshTokenException;
 import com.ricard0g.jobtrackr_api.exception.RestAccessDeniedHandler;
 import com.ricard0g.jobtrackr_api.exception.RestAuthenticationEntryPoint;
+import com.ricard0g.jobtrackr_api.security.ratelimit.AuthenticationRateLimiter;
 import com.ricard0g.jobtrackr_api.service.AuthService;
 import com.ricard0g.jobtrackr_api.service.CompanyService;
 
@@ -64,6 +62,9 @@ class SecurityCsrfIntegrationTest {
     private AuthService authService;
 
     @MockitoBean
+    private AuthenticationRateLimiter authenticationRateLimiter;
+
+    @MockitoBean
     private CompanyService companyService;
 
     @MockitoBean
@@ -71,14 +72,12 @@ class SecurityCsrfIntegrationTest {
 
     @BeforeEach
     void setUp() {
-        final UserDetails userDetails = new User(
-                USER_ID.toString(),
+        final UserDetails userDetails = new JobTrackrUserDetails(
+                USER_ID,
                 "password-hash",
                 true,
-                true,
-                true,
-                true,
-                List.of(new SimpleGrantedAuthority("ROLE_USER")));
+                false,
+                JwtService.LEGACY_AUTHENTICATION_VERSION);
         when(customUserDetailsService.loadUserByUsername(USER_ID.toString())).thenReturn(userDetails);
         when(authService.refresh(any())).thenThrow(new InvalidRefreshTokenException("Refresh token is invalid"));
         when(companyService.createCompany(any(), any())).thenReturn(new CompanyResponseDto(
@@ -129,7 +128,7 @@ class SecurityCsrfIntegrationTest {
 
     @Test
     void authenticatedPost_withBearerToken_shouldBypassCsrfValidation() throws Exception {
-        final String accessToken = jwtService.generateAccessToken(USER_ID);
+        final String accessToken = jwtService.generateAccessToken(USER_ID, JwtService.LEGACY_AUTHENTICATION_VERSION);
 
         mockMvc.perform(post("/api/v1/companies")
                         .header("Authorization", "Bearer " + accessToken)

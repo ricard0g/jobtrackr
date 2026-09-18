@@ -2,6 +2,7 @@ package com.ricard0g.jobtrackr_api.controller;
 
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -14,12 +15,24 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.boot.webmvc.test.autoconfigure.WebMvcTest;
 import org.springframework.context.annotation.Import;
+import org.springframework.http.MediaType;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 
+import com.ricard0g.jobtrackr_api.config.security.RefreshTokenCookieService;
+import com.ricard0g.jobtrackr_api.dto.AuthDto.AuthResponse;
+import com.ricard0g.jobtrackr_api.dto.UserDto.SignInMethodsResponseDto;
+import com.ricard0g.jobtrackr_api.dto.UserDto.SignInMethodsResponseDto.GoogleSignInMethodDto;
+import com.ricard0g.jobtrackr_api.dto.UserDto.SignInMethodsResponseDto.PasswordSignInMethodDto;
 import com.ricard0g.jobtrackr_api.dto.UserDto.UserResponseDto;
 import com.ricard0g.jobtrackr_api.exception.GlobalExceptionHandler;
 import com.ricard0g.jobtrackr_api.exception.UserNotFoundException;
+import com.ricard0g.jobtrackr_api.security.ratelimit.AuthenticationRateLimiter;
+import com.ricard0g.jobtrackr_api.service.AuthService.AuthTokenPair;
+import com.ricard0g.jobtrackr_api.service.GoogleDisconnectService;
+import com.ricard0g.jobtrackr_api.service.GoogleLinkIntentService;
+import com.ricard0g.jobtrackr_api.service.GooglePasswordReauthIntentService;
+import com.ricard0g.jobtrackr_api.service.UserPasswordService;
 import com.ricard0g.jobtrackr_api.service.UserService;
 
 @WebMvcTest(controllers = UserController.class)
@@ -37,6 +50,24 @@ class UserControllerTest {
 
     @MockitoBean
     private UserService userService;
+
+    @MockitoBean
+    private UserPasswordService userPasswordService;
+
+    @MockitoBean
+    private GoogleLinkIntentService googleLinkIntentService;
+
+    @MockitoBean
+    private GooglePasswordReauthIntentService googlePasswordReauthIntentService;
+
+    @MockitoBean
+    private GoogleDisconnectService googleDisconnectService;
+
+    @MockitoBean
+    private RefreshTokenCookieService refreshTokenCookieService;
+
+    @MockitoBean
+    private AuthenticationRateLimiter authenticationRateLimiter;
 
     @Test
     void getAuthenticatedUser_returns200() throws Exception {
@@ -62,6 +93,69 @@ class UserControllerTest {
                 .andExpect(jsonPath("$.code").value("USER_NOT_FOUND"));
     }
 
+    @Test
+    void getSignInMethods_returnsPasswordAndGoogleStatusWithoutSubject() throws Exception {
+        // given
+        when(userService.getSignInMethods(USER_ID)).thenReturn(sampleSignInMethods());
+
+        // when / then
+        mockMvc.perform(get(BASE_PATH + "/sign-in-methods").principal(authenticatedUser()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.password.enabled").value(true))
+                .andExpect(jsonPath("$.password.changedAt").value("2026-06-04T12:00:00Z"))
+                .andExpect(jsonPath("$.google.connected").value(true))
+                .andExpect(jsonPath("$.google.providerEmail").value("google@example.com"))
+                .andExpect(jsonPath("$.google.subject").doesNotExist());
+    }
+
+    @Test
+    void createGoogleLinkIntent_returns204() throws Exception {
+        // given
+
+        // when / then
+        mockMvc.perform(post(BASE_PATH + "/sign-in-identities/google/link-intent")
+                        .principal(authenticatedUser())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "currentPassword": "password123"
+                                }
+                                """))
+                .andExpect(status().isNoContent());
+    }
+
+    @Test
+    void createGooglePasswordReauthIntent_returns204() throws Exception {
+        // given / when / then
+        mockMvc.perform(post(BASE_PATH + "/password/google-reauth-intent")
+                        .principal(authenticatedUser()))
+                .andExpect(status().isNoContent());
+    }
+
+    @Test
+    void disconnectGoogle_returnsAuthResponse() throws Exception {
+        // given
+        final AuthTokenPair tokenPair = new AuthTokenPair(
+                AuthResponse.of("fresh-access-token", 900, sampleUser()),
+                "fresh-refresh-token",
+                TIMESTAMP);
+        when(googleDisconnectService.disconnect(USER_ID, "password123")).thenReturn(tokenPair);
+
+        // when / then
+        mockMvc.perform(post(BASE_PATH + "/sign-in-identities/google/disconnect")
+                        .principal(authenticatedUser())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "currentPassword": "password123"
+                                }
+                                """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.accessToken").value("fresh-access-token"))
+                .andExpect(jsonPath("$.tokenType").value("Bearer"))
+                .andExpect(jsonPath("$.user.userId").value(USER_ID_VALUE));
+    }
+
     private static UserResponseDto sampleUser() {
         return new UserResponseDto(
                 USER_ID,
@@ -75,6 +169,12 @@ class UserControllerTest {
                 null,
                 TIMESTAMP,
                 TIMESTAMP);
+    }
+
+    private static SignInMethodsResponseDto sampleSignInMethods() {
+        return new SignInMethodsResponseDto(
+                new PasswordSignInMethodDto(true, TIMESTAMP),
+                new GoogleSignInMethodDto(true, "google@example.com", TIMESTAMP, TIMESTAMP));
     }
 
     private static Principal authenticatedUser() {

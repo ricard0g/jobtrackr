@@ -3,6 +3,7 @@ import { useState } from "react";
 import { Form as RouterForm, Link, useLocation } from "react-router";
 
 import { Button } from "@/components/ui/button";
+import { ACCOUNT_MENU_BUTTON_LABEL, ACCOUNT_SETTINGS_PATH, isAccountSettingsLocation } from "@/lib/account-settings";
 import type { User } from "@/types/user";
 import { cn } from "@/lib/utils";
 
@@ -18,20 +19,34 @@ export function Navbar({ user }: NavbarProps) {
 	const location = useLocation();
 	const isKanban = location.pathname === "/" || location.pathname.startsWith("/applications/");
 	const displayName = user.userDisplayName ?? user.userEmail;
+	const settingsAlreadyOpen = isAccountSettingsLocation(location);
+	const settingsTo = settingsAlreadyOpen
+		? ACCOUNT_SETTINGS_PATH
+		: { pathname: location.pathname, search: location.search, hash: location.hash };
 
 	return (
 		<header className="mx-auto my-2 w-full max-w-5xl px-3 sm:my-3 sm:px-4">
 			<nav aria-label="Main navigation" className="mx-auto flex w-fit max-w-full items-center gap-1 rounded-xl border border-light-gray bg-off-white p-2 shadow-cool-light">
 				<div className="relative">
-					<Button type="button" size="icon-sm" onClick={() => setOpenUserData(!openUserData)} variant="ghost" className="text-medium-gray hover:bg-light-accent hover:text-darkest-accent" aria-label="Open account menu" aria-expanded={openUserData}>
+					<Button type="button" size="icon-sm" onClick={() => setOpenUserData(!openUserData)} variant="ghost" className="text-medium-gray hover:bg-light-accent hover:text-darkest-accent" aria-label={ACCOUNT_MENU_BUTTON_LABEL} aria-expanded={openUserData}>
 						<UserIcon />
 					</Button>
 					{openUserData && (
-						<dl className="fixed left-4 top-14 z-30 flex w-80 max-w-[calc(100vw-2rem)] flex-col gap-y-3 rounded-lg border border-light-gray bg-off-white px-4 py-3 shadow-cool-light sm:absolute sm:left-0 sm:top-10">
+						<div className="fixed left-4 top-14 z-30 flex w-80 max-w-[calc(100vw-2rem)] flex-col gap-y-3 rounded-lg border border-light-gray bg-off-white px-4 py-3 shadow-cool-light sm:absolute sm:left-0 sm:top-10">
 							<Button type="button" onClick={() => setOpenUserData(false)} variant="ghost" className="absolute right-2 top-2 h-7 w-7 rounded-lg p-1" aria-label="Close account menu"><X size={16} /></Button>
-							<div className="pr-8"><dt className="text-sm text-medium-gray">Name</dt><dd className="truncate font-medium">{displayName}</dd></div>
-							<div><dt className="text-sm text-medium-gray">Email</dt><dd className="truncate font-medium">{user.userEmail}</dd></div>
-						</dl>
+							<dl className="flex flex-col gap-y-3">
+								<div className="pr-8"><dt className="text-sm text-medium-gray">Name</dt><dd className="truncate font-medium">{displayName}</dd></div>
+								<div><dt className="text-sm text-medium-gray">Primary Email</dt><dd className="truncate font-medium">{user.userEmail}</dd></div>
+							</dl>
+							<Link
+								to={settingsTo}
+								mask={settingsAlreadyOpen ? undefined : ACCOUNT_SETTINGS_PATH}
+								onClick={() => setOpenUserData(false)}
+								className="text-sm font-medium text-darkest-accent underline"
+							>
+								Settings
+							</Link>
+						</div>
 					)}
 				</div>
 

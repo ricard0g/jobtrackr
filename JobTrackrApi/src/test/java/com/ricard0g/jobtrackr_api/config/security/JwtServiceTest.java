@@ -34,19 +34,25 @@ class JwtServiceTest {
     void generateAccessToken_shouldEmbedUserIdAsSubject() {
         final UUID userId = UUID.fromString("11111111-1111-1111-1111-111111111111");
 
-        final String token = jwtService.generateAccessToken(userId);
+        final String token = jwtService.generateAccessToken(userId, JwtService.LEGACY_AUTHENTICATION_VERSION);
 
         assertThat(jwtService.extractUserId(token)).isEqualTo(userId);
     }
 
     @Test
+    void generateAccessToken_shouldEmbedAuthenticationVersion() {
+        final UUID userId = UUID.fromString("11111111-1111-1111-1111-111111111111");
+
+        final String token = jwtService.generateAccessToken(userId, 3);
+
+        assertThat(parseAuthenticationVersion(token)).isEqualTo(3);
+    }
+
+    @Test
     void isValid_shouldReturnTrueForMatchingUserDetails() {
         final UUID userId = UUID.fromString("22222222-2222-2222-2222-222222222222");
-        final String token = jwtService.generateAccessToken(userId);
-        final UserDetails userDetails = User.withUsername(userId.toString())
-                .password("password")
-                .roles("USER")
-                .build();
+        final String token = jwtService.generateAccessToken(userId, JwtService.LEGACY_AUTHENTICATION_VERSION);
+        final UserDetails userDetails = jobTrackrUser(userId);
 
         assertThat(jwtService.isValid(token, userDetails)).isTrue();
     }
@@ -54,11 +60,9 @@ class JwtServiceTest {
     @Test
     void isValid_shouldReturnFalseForDifferentUser() {
         final UUID userId = UUID.fromString("33333333-3333-3333-3333-333333333333");
-        final String token = jwtService.generateAccessToken(userId);
-        final UserDetails userDetails = User.withUsername("44444444-4444-4444-4444-444444444444")
-                .password("password")
-                .roles("USER")
-                .build();
+        final String token = jwtService.generateAccessToken(userId, JwtService.LEGACY_AUTHENTICATION_VERSION);
+        final UserDetails userDetails = jobTrackrUser(
+                UUID.fromString("44444444-4444-4444-4444-444444444444"));
 
         assertThat(jwtService.isValid(token, userDetails)).isFalse();
     }
@@ -67,10 +71,7 @@ class JwtServiceTest {
     void isValid_shouldReturnFalseForExpiredToken() {
         final UUID userId = UUID.fromString("55555555-5555-5555-5555-555555555555");
         final String token = createToken(userId.toString(), -1_000L);
-        final UserDetails userDetails = User.withUsername(userId.toString())
-                .password("password")
-                .roles("USER")
-                .build();
+        final UserDetails userDetails = jobTrackrUser(userId);
 
         assertThat(jwtService.isValid(token, userDetails)).isFalse();
     }
@@ -78,10 +79,7 @@ class JwtServiceTest {
     @Test
     void isValid_shouldReturnFalseForMalformedToken() {
         final UUID userId = UUID.fromString("66666666-6666-6666-6666-666666666666");
-        final UserDetails userDetails = User.withUsername(userId.toString())
-                .password("password")
-                .roles("USER")
-                .build();
+        final UserDetails userDetails = jobTrackrUser(userId);
 
         assertThat(jwtService.isValid("not-a-jwt", userDetails)).isFalse();
     }
@@ -89,12 +87,13 @@ class JwtServiceTest {
     @Test
     void isValid_shouldReturnFalseForDisabledUser() {
         final UUID userId = UUID.fromString("77777777-7777-7777-7777-777777777777");
-        final String token = jwtService.generateAccessToken(userId);
-        final UserDetails userDetails = User.withUsername(userId.toString())
-                .password("password")
-                .disabled(true)
-                .roles("USER")
-                .build();
+        final String token = jwtService.generateAccessToken(userId, JwtService.LEGACY_AUTHENTICATION_VERSION);
+        final UserDetails userDetails = new JobTrackrUserDetails(
+                userId,
+                "password",
+                false,
+                false,
+                JwtService.LEGACY_AUTHENTICATION_VERSION);
 
         assertThat(jwtService.isValid(token, userDetails)).isFalse();
     }
@@ -102,12 +101,13 @@ class JwtServiceTest {
     @Test
     void isValid_shouldReturnFalseForLockedUser() {
         final UUID userId = UUID.fromString("88888888-8888-8888-8888-888888888888");
-        final String token = jwtService.generateAccessToken(userId);
-        final UserDetails userDetails = User.withUsername(userId.toString())
-                .password("password")
-                .accountLocked(true)
-                .roles("USER")
-                .build();
+        final String token = jwtService.generateAccessToken(userId, JwtService.LEGACY_AUTHENTICATION_VERSION);
+        final UserDetails userDetails = new JobTrackrUserDetails(
+                userId,
+                "password",
+                true,
+                true,
+                JwtService.LEGACY_AUTHENTICATION_VERSION);
 
         assertThat(jwtService.isValid(token, userDetails)).isFalse();
     }
@@ -120,6 +120,44 @@ class JwtServiceTest {
                 .isInstanceOf(IllegalArgumentException.class);
     }
 
+    @Test
+    void isValid_shouldAcceptLegacyTokenWhenPersistedVersionIsZero() {
+        final UUID userId = UUID.fromString("99999999-9999-9999-9999-999999999999");
+        final String token = createToken(userId.toString(), 900_000L);
+        final UserDetails userDetails = jobTrackrUser(userId, JwtService.LEGACY_AUTHENTICATION_VERSION);
+
+        assertThat(jwtService.isValid(token, userDetails)).isTrue();
+    }
+
+    @Test
+    void isValid_shouldReturnFalseWhenAuthenticationVersionDoesNotMatch() {
+        final UUID userId = UUID.fromString("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa");
+        final String token = jwtService.generateAccessToken(userId, JwtService.LEGACY_AUTHENTICATION_VERSION);
+        final UserDetails userDetails = jobTrackrUser(userId, 1);
+
+        assertThat(jwtService.isValid(token, userDetails)).isFalse();
+    }
+
+    @Test
+    void isValid_shouldReturnFalseWhenPrincipalLacksAuthenticationVersion() {
+        final UUID userId = UUID.fromString("bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb");
+        final String token = jwtService.generateAccessToken(userId, JwtService.LEGACY_AUTHENTICATION_VERSION);
+        final UserDetails userDetails = User.withUsername(userId.toString())
+                .password("password")
+                .roles("USER")
+                .build();
+
+        assertThat(jwtService.isValid(token, userDetails)).isFalse();
+    }
+
+    private static JobTrackrUserDetails jobTrackrUser(final UUID userId) {
+        return jobTrackrUser(userId, JwtService.LEGACY_AUTHENTICATION_VERSION);
+    }
+
+    private static JobTrackrUserDetails jobTrackrUser(final UUID userId, final int authenticationVersion) {
+        return new JobTrackrUserDetails(userId, "password", true, false, authenticationVersion);
+    }
+
     private static String createToken(final String subject, final long expirationOffsetMs) {
         final SecretKey signingKey = Keys.hmacShaKeyFor(SIGNING_KEY.getBytes());
         final Date now = new Date();
@@ -129,5 +167,15 @@ class JwtServiceTest {
                 .expiration(new Date(now.getTime() + expirationOffsetMs))
                 .signWith(signingKey)
                 .compact();
+    }
+
+    private static int parseAuthenticationVersion(final String token) {
+        final SecretKey signingKey = Keys.hmacShaKeyFor(SIGNING_KEY.getBytes());
+        return Jwts.parser()
+                .verifyWith(signingKey)
+                .build()
+                .parseSignedClaims(token)
+                .getPayload()
+                .get(JwtService.AUTHENTICATION_VERSION_CLAIM, Integer.class);
     }
 }
