@@ -5,6 +5,13 @@ test("landing carries the supplied visual structure and assets", async ({
 }) => {
   await page.goto("/");
   await expect(page.locator('link[href^="/styles/"]')).toHaveCount(0);
+  await expect(page.locator(".hero__container")).toHaveClass(/\bflex\b/);
+  await expect(page.locator(".hero__image-wrapper figure")).toHaveClass(
+    /\bhero-background\b/,
+  );
+  await expect(page.locator(".pricing-card__article")).toHaveClass(
+    /\bpricing-background\b/,
+  );
   const theme = await page.locator("html").evaluate((html) => {
     const styles = getComputedStyle(html);
     return {

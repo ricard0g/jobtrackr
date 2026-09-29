@@ -11,21 +11,29 @@ const { title, description, pending } = Astro.props;
 ---
 
 <SiteLayout title={`${title} | JobTrackr`} description={description}>
-  <main class="policy-main section-wrap">
+  <main class="policy-main section-wrap [max-width:760px] [width:calc(100%_-_2rem)] [min-height:55vh] [margin:11rem_auto_7rem]">
     <span class="eyebrow">POLICIES</span>
-    <h1>{title}</h1>
+    <h1 class="font-display [font-size:clamp(2rem,_5vw,_3rem)] [font-weight:600] [margin:1rem_0]">
+      {title}
+    </h1>
     <slot />
-    <div class="policy-notice">
+    <div class="policy-notice [background:var(--color-off-white)] [border:1px_solid_var(--color-light-gray)] rounded-card [padding:1.25rem] [margin:1.5rem_0]">
       <strong>Launch content pending</strong>
-      <p>
+      <p class="text-medium-gray [line-height:1.7] [margin:1rem_0] [margin-bottom:0]">
         {pending} This page must be completed before accepting live customers.
       </p>
     </div>
-    <p>
+    <p class="text-medium-gray [line-height:1.7] [margin:1rem_0]">
       For questions, contact{" "}
-      <a href="mailto:support@jobtrakcr.com">support@jobtrakcr.com</a>.
+      <a href="mailto:support@jobtrakcr.com" class="text-accent-darkest">
+        support@jobtrakcr.com
+      </a>
+      .
     </p>
-    <a class="text-button" href="/">
+    <a
+      class="text-button text-accent-darkest inline-block [margin-top:1rem]"
+      href="/"
+    >
       ← Back to JobTrackr
     </a>
   </main>
