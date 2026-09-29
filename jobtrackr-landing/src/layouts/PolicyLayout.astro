@@ -1,0 +1,32 @@
+---
+import SiteLayout from "./SiteLayout.astro";
+
+interface Props {
+  title: string;
+  description: string;
+  pending: string;
+}
+
+const { title, description, pending } = Astro.props;
+---
+
+<SiteLayout title={`${title} | JobTrackr`} description={description}>
+  <main class="policy-main section-wrap">
+    <span class="eyebrow">POLICIES</span>
+    <h1>{title}</h1>
+    <slot />
+    <div class="policy-notice">
+      <strong>Launch content pending</strong>
+      <p>
+        {pending} This page must be completed before accepting live customers.
+      </p>
+    </div>
+    <p>
+      For questions, contact{" "}
+      <a href="mailto:support@jobtrakcr.com">support@jobtrakcr.com</a>.
+    </p>
+    <a class="text-button" href="/">
+      ← Back to JobTrackr
+    </a>
+  </main>
+</SiteLayout>

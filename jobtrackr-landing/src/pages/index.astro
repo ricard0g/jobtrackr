@@ -1,0 +1,461 @@
+---
+import SiteLayout from "../layouts/SiteLayout.astro";
+
+const problems = [
+  {
+    title: "Spreadsheets get messy fast.",
+    description:
+      "Scattered tabs and notes make it harder to see what each Application needs next.",
+    visual: "spreadsheet",
+    points: [
+      "Information across tabs",
+      "Status updates to remember",
+      "No single view of progress",
+    ],
+  },
+  {
+    title: "Every company has a different timeline.",
+    description:
+      "An Application can move from first contact to interview while another is still waiting for a reply.",
+    visual: "timeline",
+    points: ["Different stages", "Interviews to track", "Follow-ups to plan"],
+  },
+  {
+    title: "Small updates can get lost.",
+    description:
+      "Keep the status and interview details for each Application in view while you search.",
+    visual: "reminders",
+    points: [
+      "Messages to follow up",
+      "Interviews to prepare for",
+      "Decisions to record",
+    ],
+  },
+];
+
+const features = [
+  {
+    number: "01",
+    title: "See every Application at a glance.",
+    description:
+      "Use a Kanban board to see where each role stands and move a card as the process changes.",
+    visual: "board",
+  },
+  {
+    number: "02",
+    title: "Keep the details together.",
+    description:
+      "Track the role, company, notes, and Interviews inside each Application.",
+    visual: "detail",
+  },
+  {
+    number: "03",
+    title: "Tailor your CV from your own experience.",
+    description:
+      "Start CV Generation from a Base CV and keep your saved Generated CVs with their Application.",
+    visual: "document",
+  },
+];
+
+const faqs = [
+  {
+    question: "Do I need to pay before creating a User?",
+    answer:
+      "Yes. A first-time buyer purchases a weekly JobTrackr Subscription, then registers using the verified email from Checkout.",
+  },
+  {
+    question: "When does my paid week start?",
+    answer:
+      "Your paid week begins when Stripe first bills the subscription, even if you register later. The subscription renews weekly until canceled.",
+  },
+  {
+    question: "Is CV Generation limited to 20 per week?",
+    answer:
+      "No. CV Generation is unlimited during paid access. You can keep up to 20 saved Generated CVs per Application at a time; deleting one frees a saved slot.",
+  },
+  {
+    question: "What happens if I cancel?",
+    answer:
+      "Canceling renewal keeps paid features available through the end of your already paid week. After that, you can still sign in and work with existing Applications, but new Applications, Base CV uploads, and CV Generation require paid access.",
+  },
+  {
+    question: "Can I use JobTrackr on my phone?",
+    answer:
+      "Yes. The customer app works in a mobile browser as well as on desktop.",
+  },
+];
+---
+
+<SiteLayout
+  title="JobTrackr — Your job search, organized"
+  description="Track Applications, manage documents, and create role-tailored CVs with a weekly JobTrackr Subscription."
+>
+  <main>
+    <section id="home-section" class="hero section-wrap">
+      <div class="hero-copy">
+        <span class="eyebrow">ONE PLACE FOR YOUR JOB SEARCH</span>
+        <h1>
+          Your job search. <br />
+          <span>Organized.</span>
+        </h1>
+        <p>
+          Track every Application from first contact to final decision. Keep the
+          details and documents you need close to each role.
+        </p>
+        <div class="button-row">
+          <a class="button" href="#pricing-section">
+            See the weekly plan <span aria-hidden="true">↗</span>
+          </a>
+          <a class="text-button" href="#demo-section">
+            Explore the preview <span aria-hidden="true">↓</span>
+          </a>
+        </div>
+        <p class="hero-proof">
+          Applications, Interviews, and Generated CVs in one workspace.
+        </p>
+      </div>
+      <div
+        class="hero-art"
+        role="img"
+        aria-label="Illustration of an Applications board"
+      >
+        <div class="art-window">
+          <div class="art-bar">
+            <span class="window-dots">
+              <i></i>
+              <i></i>
+              <i></i>
+            </span>
+            <span>Applications</span>
+            <span>⌕</span>
+          </div>
+          <div class="art-board">
+            <div class="art-column">
+              <b>Applied</b>
+              <div class="art-card">
+                <strong>Product Designer</strong>
+                <small>Northstar Studio</small>
+                <em>Application sent</em>
+              </div>
+              <div class="art-card muted-card">
+                <strong>Frontend Engineer</strong>
+                <small>Willow Labs</small>
+              </div>
+            </div>
+            <div class="art-column">
+              <b>Interview</b>
+              <div class="art-card">
+                <strong>UX Researcher</strong>
+                <small>Atlas Works</small>
+                <em>Interview scheduled</em>
+              </div>
+            </div>
+            <div class="art-column">
+              <b>Offer</b>
+              <div class="art-card">
+                <strong>Content Strategist</strong>
+                <small>Harbor Team</small>
+                <em>Offer received</em>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section
+      id="demo-section"
+      class="demo-reservation section-wrap"
+      aria-labelledby="demo-heading"
+    >
+      <div class="section-intro compact">
+        <span class="eyebrow">PUBLIC DEMO</span>
+        <h2 id="demo-heading">Take a closer look.</h2>
+        <p>
+          An interactive preview of Applications and Documents is being prepared
+          for this space.
+        </p>
+      </div>
+      <div
+        class="browser-shell"
+        aria-label="Reserved browser frame for the Public Demo"
+      >
+        <div class="browser-bar" aria-hidden="true">
+          <span class="window-dots">
+            <i></i>
+            <i></i>
+            <i></i>
+          </span>
+          <span class="address">jobtrakcr.com/demo</span>
+          <span class="browser-refresh">↻</span>
+        </div>
+        <div class="demo-empty">
+          <span>JobTrackr</span>
+          <strong>Public Demo coming soon</strong>
+          <p>Explore a fictional workspace here when the preview is ready.</p>
+        </div>
+      </div>
+    </section>
+
+    <section
+      id="problem-section"
+      class="problem-section section-wrap"
+      aria-labelledby="problem-heading"
+    >
+      <div class="section-intro">
+        <span class="eyebrow">THE PROBLEM</span>
+        <h2 id="problem-heading">Where did that Application go?</h2>
+        <p>
+          Job searching has enough moving parts. The details should be easy to
+          find.
+        </p>
+      </div>
+      <div class="problem-grid">
+        {problems.map((problem) => (
+          <article class="problem-card">
+            <div class="problem-visual">
+              {problem.visual === "spreadsheet" && (
+                <div class="problem-mock mock-spreadsheet" aria-hidden="true">
+                  <div class="mock-topbar">
+                    Application tracker.xlsx <span>•••</span>
+                  </div>
+                  <div class="mock-row mock-heading">
+                    <span>Company</span>
+                    <span>Role</span>
+                    <span>Status</span>
+                  </div>
+                  <div class="mock-row">
+                    <span>Northstar</span>
+                    <span>Designer</span>
+                    <span>Applied</span>
+                  </div>
+                  <div class="mock-row">
+                    <span>Atlas Works</span>
+                    <span>Researcher</span>
+                    <span>Interview?</span>
+                  </div>
+                  <div class="mock-row">
+                    <span>Willow Labs</span>
+                    <span>Engineer</span>
+                    <span>Follow up</span>
+                  </div>
+                  <div class="mock-row">
+                    <span>Harbor Team</span>
+                    <span>Strategist</span>
+                    <span>Offer?</span>
+                  </div>
+                </div>
+              )}
+              {problem.visual === "timeline" && (
+                <div class="problem-mock mock-timeline" aria-hidden="true">
+                  <strong>Four Applications, four stages</strong>
+                  <div>
+                    <span>Northstar Studio</span>
+                    <b>Applied</b>
+                  </div>
+                  <div>
+                    <span>Willow Labs</span>
+                    <b>In review</b>
+                  </div>
+                  <div>
+                    <span>Atlas Works</span>
+                    <b>Interview</b>
+                  </div>
+                  <div>
+                    <span>Harbor Team</span>
+                    <b>Offer</b>
+                  </div>
+                </div>
+              )}
+              {problem.visual === "reminders" && (
+                <div class="problem-mock mock-reminders" aria-hidden="true">
+                  <strong>Things to remember</strong>
+                  <div>
+                    <span>↗</span>
+                    <p>
+                      Reply to Atlas Works<small>Interview details</small>
+                    </p>
+                  </div>
+                  <div>
+                    <span>○</span>
+                    <p>
+                      Follow up with Willow Labs
+                      <small>Application update</small>
+                    </p>
+                  </div>
+                  <div>
+                    <span>▤</span>
+                    <p>
+                      Review Northstar notes<small>Before your call</small>
+                    </p>
+                  </div>
+                </div>
+              )}
+            </div>
+            <div class="problem-content">
+              <span class="eyebrow">A FAMILIAR CHALLENGE</span>
+              <h3>{problem.title}</h3>
+              <p>{problem.description}</p>
+              <ul>
+                {problem.points.map((point) => (
+                  <li>
+                    <span aria-hidden="true">✕</span>
+                    {point}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          </article>
+        ))}
+      </div>
+    </section>
+
+    <section
+      id="features-section"
+      class="features-section section-wrap"
+      aria-labelledby="features-heading"
+    >
+      <div class="section-intro">
+        <span class="eyebrow">FEATURES</span>
+        <h2 id="features-heading">
+          Less searching.
+          <br />
+          More clarity.
+        </h2>
+        <p>
+          JobTrackr gives every Application a place, from the Kanban board to
+          its documents and history.
+        </p>
+      </div>
+      <div class="feature-grid">
+        {features.map((feature) => (
+          <article class="feature-card">
+            <div
+              class={`feature-visual feature-visual-${feature.visual}`}
+              aria-hidden="true"
+            >
+              {feature.visual === "board" && (
+                <div class="mini-board">
+                  <div>
+                    <b>Applied</b>
+                    <span>Product Designer</span>
+                    <span>Frontend Engineer</span>
+                  </div>
+                  <div>
+                    <b>Interview</b>
+                    <span>UX Researcher</span>
+                  </div>
+                  <div>
+                    <b>Offer</b>
+                    <span>Content Strategist</span>
+                  </div>
+                </div>
+              )}
+              {feature.visual === "detail" && (
+                <div class="mini-detail">
+                  <b>UX Researcher</b>
+                  <small>Atlas Works · Interview</small>
+                  <hr />
+                  <span>Application details</span>
+                  <p>Interview with hiring team</p>
+                  <span>Notes</span>
+                  <p>Prepare portfolio examples</p>
+                </div>
+              )}
+              {feature.visual === "document" && (
+                <div class="mini-document">
+                  <div class="mini-document-line">
+                    <span>≡</span>
+                    <b>Generated CV</b>
+                    <small>UX Researcher</small>
+                  </div>
+                  <div class="mini-document-line">
+                    <span>≡</span>
+                    <b>Generated CV</b>
+                    <small>Product Designer</small>
+                  </div>
+                  <div class="mini-document-line">
+                    <span>≡</span>
+                    <b>Base CV</b>
+                    <small>Candidate source</small>
+                  </div>
+                </div>
+              )}
+            </div>
+            <span class="feature-number">{feature.number} / 03</span>
+            <h3>{feature.title}</h3>
+            <p>{feature.description}</p>
+          </article>
+        ))}
+      </div>
+    </section>
+
+    <section
+      id="pricing-section"
+      class="pricing-section"
+      aria-labelledby="pricing-heading"
+    >
+      <div class="section-wrap pricing-layout">
+        <div class="pricing-copy">
+          <span class="eyebrow">PRICING</span>
+          <h2 id="pricing-heading">One clear weekly plan.</h2>
+          <p>
+            Keep your Applications organized and create role-tailored CVs during
+            paid access.
+          </p>
+        </div>
+        <article class="pricing-card">
+          <span class="eyebrow">JOBTRACKR SUBSCRIPTION</span>
+          <h3>Everything you need to keep moving.</h3>
+          <p class="price">
+            €10.99 <span>per week</span>
+          </p>
+          <p class="billing-note">
+            Weekly recurring billing; applicable tax included.
+          </p>
+          <ul>
+            <li>Unlimited CV Generation during paid access</li>
+            <li>20 saved Generated CVs per Application</li>
+            <li>Applications, Kanban, Interviews, and Documents</li>
+          </ul>
+          <a
+            class="button pricing-button"
+            href="https://app.jobtrakcr.com/subscribe"
+          >
+            Subscribe <span aria-hidden="true">↗</span>
+          </a>
+          <p class="pricing-footnote">
+            Already have a User?{" "}
+            <a href="https://app.jobtrakcr.com/auth/login">Sign in</a>
+          </p>
+        </article>
+      </div>
+    </section>
+
+    <section
+      id="faq-section"
+      class="faq-section section-wrap"
+      aria-labelledby="faq-heading"
+    >
+      <div class="section-intro compact">
+        <span class="eyebrow">FAQ</span>
+        <h2 id="faq-heading">Frequently asked questions.</h2>
+        <p>
+          For anything else, email{" "}
+          <a href="mailto:support@jobtrakcr.com">support@jobtrakcr.com</a>.
+        </p>
+      </div>
+      <div class="faq-list">
+        {faqs.map((faq) => (
+          <details>
+            <summary>
+              {faq.question}
+              <span aria-hidden="true">+</span>
+            </summary>
+            <p>{faq.answer}</p>
+          </details>
+        ))}
+      </div>
+    </section>
+  </main>
+</SiteLayout>
