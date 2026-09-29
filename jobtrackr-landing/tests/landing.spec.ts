@@ -5,14 +5,17 @@ test("landing carries the supplied visual structure and assets", async ({
 }) => {
   await page.goto("/");
   await expect(page.locator('link[href="/styles/styles.css"]')).toHaveCount(1);
+  const demoFigure = page.locator(".hero__image-wrapper figure#demo-section");
+  await expect(demoFigure.locator(".demo__browser-shell")).toBeVisible();
+  await expect(demoFigure.locator(".demo__placeholder")).toContainText(
+    "Public Demo coming soon",
+  );
   await expect(
-    page.locator(".hero__container .hero__image-wrapper img"),
-  ).toHaveAttribute("src", "/assets/jobtrackr-hero-picture.webp");
+    page.locator('img[src="/assets/jobtrackr-hero-picture.webp"]'),
+  ).toHaveCount(0);
   expect(
-    await page
-      .locator(".hero__image-wrapper img")
-      .evaluate((image: HTMLImageElement) => image.naturalWidth),
-  ).toBeGreaterThan(0);
+    await demoFigure.evaluate((figure) => getComputedStyle(figure).backgroundImage),
+  ).toContain("background-hero-2.webp");
   expect(
     await page
       .locator(".hero__heading")
@@ -88,13 +91,15 @@ test("visitor sees the weekly offer and can reach support and policy pages", asy
   }
 });
 
-test("public demo region follows the hero and navigation works on mobile", async ({
+test("public demo stays inside the hero and navigation works on mobile", async ({
   page,
 }) => {
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto("/");
 
-  await expect(page.locator("#home-section + #demo-section")).toBeVisible();
+  await expect(page.locator("#home-section .hero__image-wrapper #demo-section"))
+    .toBeVisible();
+  await expect(page.locator("main > #demo-section")).toHaveCount(0);
   await page.getByRole("button", { name: "Open menu" }).click();
   await page
     .getByRole("navigation", { name: "Mobile" })

@@ -20,6 +20,6 @@ On Vercel, set the root directory to `jobtrackr-landing`. Astro builds to `dist/
 ## Launch dependencies
 
 - The pricing Subscribe link targets `https://app.jobtrakcr.com/subscribe`. The paid Checkout route is implemented in the billing sub-issue; it must exist before the link is used for live sales.
-- Replace the reserved browser frame below the hero with the same-origin `/demo` iframe when the Public Demo sub-issue is merged. Keep the decorative browser bar outside the iframe.
+- Replace the reserved browser frame inside the hero's image figure with the same-origin `/demo` iframe when the Public Demo sub-issue is merged. Keep the decorative browser bar outside the iframe and the figure's supplied background image in place.
 - Complete Terms, Privacy, and Cancellation/Refund wording with seller details and final refund conditions. The current pages explicitly identify missing content.
 - Route `support@jobtrakcr.com` to the owner's inbox.
