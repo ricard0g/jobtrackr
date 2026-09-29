@@ -1,0 +1,274 @@
+/* The supplied reset and stylesheets remain unchanged. These rules cover the
+   demo slot, removed contact form, required navigation, and readable canvas. */
+body {
+  background-color: var(--bg-color);
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+#demo-section {
+  scroll-margin-top: 9rem;
+}
+
+.header__navbar .header__outer-list > li:last-child {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+}
+
+.header__sign-in {
+  color: var(--dark-gray);
+  font-size: 0.875rem;
+  font-weight: 600;
+  text-decoration: none;
+}
+
+.header__sign-in:hover,
+.footer__policies a:hover {
+  text-decoration: underline;
+}
+
+.header__navbar .logo__link {
+  display: flex;
+  align-items: center;
+  color: var(--black);
+  text-decoration: none;
+}
+
+.demo__container {
+  display: flex;
+  flex-flow: column nowrap;
+  justify-content: center;
+  align-items: center;
+  row-gap: 70px;
+  max-width: 1100px;
+  width: 100%;
+  margin: 0 auto 8rem;
+  padding-bottom: 8rem;
+  border-bottom: 1px solid var(--light-gray);
+}
+
+.demo__content-wrapper {
+  display: flex;
+  flex-flow: column nowrap;
+  align-items: center;
+}
+
+.demo__browser-shell {
+  width: 100%;
+  border: 1px solid var(--light-gray);
+  border-radius: 20px;
+  overflow: hidden;
+  box-shadow: var(--cool-strong-shadow);
+}
+
+.demo__browser-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  height: 48px;
+  padding: 0 1.25rem;
+  background: var(--off-white);
+  border-bottom: 1px solid var(--light-gray);
+  color: var(--medium-gray);
+}
+
+.demo__dots {
+  display: flex;
+  gap: 5px;
+}
+
+.demo__dots i {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: #ef7774;
+}
+
+.demo__dots i:nth-child(2) {
+  background: #f6c15d;
+}
+
+.demo__dots i:nth-child(3) {
+  background: #58c67a;
+}
+
+.demo__address {
+  padding: 0.3rem 1rem;
+  background: #fff;
+  border: 1px solid var(--light-gray);
+  border-radius: var(--border-radius);
+  font-size: 0.8rem;
+}
+
+.demo__placeholder {
+  display: flex;
+  flex-flow: column nowrap;
+  align-items: center;
+  justify-content: center;
+  min-height: 400px;
+  padding: 2rem;
+  background: linear-gradient(
+    125deg,
+    var(--off-white) 70%,
+    var(--light-accent)
+  );
+  text-align: center;
+}
+
+.demo__placeholder img {
+  width: 76px;
+  height: 76px;
+}
+
+.demo__placeholder strong {
+  font-family: var(--display-font);
+  font-size: 1.75rem;
+}
+
+.demo__placeholder p {
+  color: var(--medium-gray);
+}
+
+.pricing-card__signin {
+  align-self: center;
+  color: var(--off-white);
+  font-size: 0.85rem;
+}
+
+.pricing-card__signin a {
+  color: var(--main-accent);
+  font-weight: 700;
+}
+
+.contact-faq__container .faq__wrapper {
+  width: 100%;
+  max-width: 760px;
+}
+
+.faq__list dt {
+  cursor: pointer;
+}
+
+.faq__list dt:focus-visible,
+.header__sign-in:focus-visible,
+.footer__policies a:focus-visible {
+  outline: 2px solid var(--dark-accent);
+  outline-offset: 3px;
+}
+
+.faq__question-group.is-open > dd {
+  height: fit-content;
+  padding: 0.5rem 0;
+}
+
+.faq__question-group.is-open > dt > span {
+  transform: rotate(45deg);
+}
+
+footer {
+  flex-wrap: wrap;
+  row-gap: 0.75rem;
+}
+
+.footer__made-by-wrapper {
+  position: static;
+  transform: none;
+}
+
+.footer__policies {
+  display: flex;
+  flex-basis: 100%;
+  justify-content: center;
+  flex-wrap: wrap;
+  gap: 0.5rem 1.25rem;
+  padding-top: 0.5rem;
+  border-top: 1px solid var(--light-gray);
+}
+
+.footer__policies a {
+  color: var(--dark-gray);
+  font-size: 0.8rem;
+  text-decoration: none;
+}
+
+.policy-main {
+  max-width: 760px;
+  width: calc(100% - 2rem);
+  min-height: 55vh;
+  margin: 11rem auto 7rem;
+}
+
+.policy-main h1 {
+  font-family: var(--display-font);
+  font-size: clamp(2rem, 5vw, 3rem);
+  font-weight: 600;
+  margin: 1rem 0;
+}
+
+.policy-main p {
+  color: var(--medium-gray);
+  line-height: 1.7;
+  margin: 1rem 0;
+}
+
+.policy-notice {
+  background: var(--off-white);
+  border: 1px solid var(--light-gray);
+  border-radius: var(--border-radius);
+  padding: 1.25rem;
+  margin: 1.5rem 0;
+}
+
+.policy-notice p {
+  margin-bottom: 0;
+}
+
+.policy-main a {
+  color: var(--darkest-accent);
+}
+
+.policy-main .text-button {
+  display: inline-block;
+  margin-top: 1rem;
+}
+
+@media only screen and (max-width: 1100px) {
+  .demo__container {
+    max-width: 90%;
+  }
+}
+
+@media only screen and (max-width: 768px) {
+  #demo-section {
+    scroll-margin-top: 5rem;
+  }
+
+  .demo__container {
+    row-gap: 2rem;
+  }
+
+  .demo__placeholder {
+    min-height: 260px;
+  }
+
+  .header__navbar-mobile .header__inner-list-mobile {
+    max-height: calc(100vh - 100px);
+    overflow-y: auto;
+  }
+}
+
+@media only screen and (max-width: 600px) {
+  .footer__policies {
+    flex-direction: column;
+    align-items: center;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
+}

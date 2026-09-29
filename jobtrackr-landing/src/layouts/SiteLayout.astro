@@ -1,6 +1,4 @@
 ---
-import "../styles/site.css";
-
 interface Props {
   title: string;
   description: string;
@@ -22,98 +20,137 @@ const links = [
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <meta name="description" content={description} />
-    <link rel="icon" href="/assets/jobtrackr-favicon.png" />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link
-      href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Nunito:wght@500;600;700;800;900&display=swap"
+      href="https://fonts.googleapis.com/css2?family=Inter:ital,opsz,wght@0,14..32,100..900;1,14..32,100..900&family=Nunito:ital,wght@0,200..1000;1,200..1000&display=swap"
       rel="stylesheet"
     />
+    <link rel="stylesheet" href="/styles/reset.css" />
+    <link rel="stylesheet" href="/styles/styles.css" />
+    <link rel="stylesheet" href="/styles/landing-additions.css" />
+    <link rel="icon" href="/assets/jobtrackr-favicon.png" />
     <title>{title}</title>
+    <script is:inline src="/scripts/landing.js" defer></script>
   </head>
   <body>
-    <header class="site-header">
-      <nav class="nav-shell" aria-label="Primary">
-        <a class="brand" href="/#home-section" aria-label="JobTrackr home">
-          <img
-            src="/assets/jobtrackr-logo.webp"
-            width="48"
-            height="48"
-            alt=""
-          />
-          <span>JobTrackr</span>
-        </a>
-        <div class="desktop-links">
-          {links.map((link) => (
-            <a href={link.href}>{link.label}</a>
-          ))}
-        </div>
-        <div class="nav-actions">
-          <a class="sign-in" href="https://app.jobtrakcr.com/auth/login">
-            Sign in
-          </a>
-          <a class="button button-small" href="/#pricing-section">
-            Subscribe
-          </a>
-        </div>
-        <button
-          class="menu-toggle"
-          type="button"
-          aria-label="Open menu"
-          aria-expanded="false"
-          aria-controls="mobile-links"
-        >
-          <span></span>
-          <span></span>
-          <span></span>
-        </button>
+    <header class="header__container">
+      <nav class="header__navbar" aria-label="Primary">
+        <ul class="header__outer-list">
+          <li class="logo">
+            <a class="logo__link" href="/">
+              <img
+                src="/assets/jobtrackr-logo.webp"
+                alt="JobTrackr logo"
+                class="logo-image"
+              />
+              <span>JobTrackr</span>
+            </a>
+          </li>
+          <li class="header__inner-list-container">
+            <ul class="header__inner-list">
+              {links.map((link) => (
+                <li>
+                  <a href={link.href}>{link.label}</a>
+                </li>
+              ))}
+            </ul>
+          </li>
+          <li>
+            <a
+              class="header__sign-in"
+              href="https://app.jobtrakcr.com/auth/login"
+            >
+              Sign in
+            </a>
+            <a class="cta-btn" href="/#pricing-section">
+              Subscribe
+            </a>
+          </li>
+        </ul>
       </nav>
-      <nav id="mobile-links" class="mobile-links" aria-label="Mobile" hidden>
-        {links.map((link) => (
-          <a href={link.href}>{link.label}</a>
-        ))}
-        <a href="https://app.jobtrakcr.com/auth/login">Sign in</a>
-        <a href="/#pricing-section">Subscribe</a>
+      <nav class="header__navbar-mobile" aria-label="Mobile">
+        <ul class="header__outer-list">
+          <li class="logo">
+            <a class="logo__link" href="/">
+              <img
+                src="/assets/jobtrackr-logo.webp"
+                alt="JobTrackr logo"
+                class="logo-image"
+              />
+              <span>JobTrackr</span>
+            </a>
+          </li>
+          <li class="header__button-mobile">
+            <button
+              id="mobile-button"
+              type="button"
+              aria-label="Open menu"
+              aria-expanded="false"
+            >
+              <svg
+                xmlns="http://www.w3.org/2000/svg"
+                width="28"
+                height="28"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="#000"
+                stroke-width="2"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+              >
+                <path d="M4 5h16" />
+                <path d="M4 12h16" />
+                <path d="M4 19h16" />
+              </svg>
+            </button>
+            <ul class="header__inner-list-mobile">
+              {links.map((link) => (
+                <li>
+                  <a href={link.href}>{link.label}</a>
+                </li>
+              ))}
+              <li>
+                <a href="https://app.jobtrakcr.com/auth/login">Sign in</a>
+              </li>
+              <li>
+                <a class="cta-btn" href="/#pricing-section">
+                  Subscribe
+                </a>
+              </li>
+            </ul>
+          </li>
+        </ul>
       </nav>
     </header>
     <slot />
-    <footer class="site-footer">
-      <div class="footer-inner">
-        <div class="footer-identity">
-          <img
-            src="/assets/jobtrackr-logo.webp"
-            width="40"
-            height="40"
-            alt=""
-          />
-          <span>JobTrackr</span>
-        </div>
-        <p>Keep your job search in one place.</p>
-        <div class="footer-links">
-          <a href="mailto:support@jobtrakcr.com">support@jobtrakcr.com</a>
-          <a href="/terms/">Terms</a>
-          <a href="/privacy/">Privacy</a>
-          <a href="/cancellation-refund/">Cancellation and Refund</a>
-        </div>
-        <small>© {new Date().getFullYear()} JobTrackr</small>
+    <footer>
+      <div class="footer__year-date-wrapper">
+        <p class="footer__year-date">
+          © <span id="year-date">2026</span> JobTrackr
+        </p>
       </div>
+      <div class="footer__made-by-wrapper">
+        <p class="footer__made-by-text">
+          By Ricardo Guzman -{" "}
+          <a
+            href="https://github.com/ricard0g"
+            target="_blank"
+            rel="noopener noreferrer"
+          >
+            Github
+          </a>
+        </p>
+      </div>
+      <div class="footer__logo-wrapper">
+        <img src="/assets/jobtrackr-logo.webp" alt="" class="logo-image" />
+      </div>
+      <nav class="footer__policies" aria-label="Support and policies">
+        <a href="mailto:support@jobtrakcr.com">support@jobtrakcr.com</a>
+        <a href="/terms/">Terms</a>
+        <a href="/privacy/">Privacy</a>
+        <a href="/cancellation-refund/">Cancellation and Refund</a>
+      </nav>
     </footer>
-    <script>
-      const toggle = document.querySelector<HTMLButtonElement>(".menu-toggle");
-      const menu = document.querySelector<HTMLElement>(".mobile-links");
-      toggle?.addEventListener("click", () => {
-        const isOpen = toggle.getAttribute("aria-expanded") === "true";
-        toggle.setAttribute("aria-expanded", String(!isOpen));
-        toggle.setAttribute("aria-label", isOpen ? "Open menu" : "Close menu");
-        if (menu) menu.hidden = isOpen;
-      });
-      menu?.addEventListener("click", (event) => {
-        if ((event.target as HTMLElement).closest("a")) {
-          menu.hidden = true;
-          toggle?.setAttribute("aria-expanded", "false");
-          toggle?.setAttribute("aria-label", "Open menu");
-        }
-      });
-    </script>
   </body>
 </html>

@@ -13,6 +13,10 @@ npm test
 
 On Vercel, set the root directory to `jobtrackr-landing`. Astro builds to `dist/`.
 
+## Design source
+
+`public/styles/reset.css`, `public/styles/styles.css`, and `public/assets/` are direct copies of `tmp/landing/`. The landing page keeps the source's section markup, classes, Inter/Nunito font link, and visual assets. `public/styles/landing-additions.css` contains only the new demo space, policy navigation, FAQ interaction, and small adjustments required after removing the contact form. Some supplied image and video assets contain Spanish text as part of the original visual.
+
 ## Launch dependencies
 
 - The pricing Subscribe link targets `https://app.jobtrakcr.com/subscribe`. The paid Checkout route is implemented in the billing sub-issue; it must exist before the link is used for live sales.

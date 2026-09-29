@@ -1,461 +1,989 @@
----
-import SiteLayout from "../layouts/SiteLayout.astro";
+<!doctype html>
 
-const problems = [
-  {
-    title: "Spreadsheets get messy fast.",
-    description:
-      "Scattered tabs and notes make it harder to see what each Application needs next.",
-    visual: "spreadsheet",
-    points: [
-      "Information across tabs",
-      "Status updates to remember",
-      "No single view of progress",
-    ],
-  },
-  {
-    title: "Every company has a different timeline.",
-    description:
-      "An Application can move from first contact to interview while another is still waiting for a reply.",
-    visual: "timeline",
-    points: ["Different stages", "Interviews to track", "Follow-ups to plan"],
-  },
-  {
-    title: "Small updates can get lost.",
-    description:
-      "Keep the status and interview details for each Application in view while you search.",
-    visual: "reminders",
-    points: [
-      "Messages to follow up",
-      "Interviews to prepare for",
-      "Decisions to record",
-    ],
-  },
-];
-
-const features = [
-  {
-    number: "01",
-    title: "See every Application at a glance.",
-    description:
-      "Use a Kanban board to see where each role stands and move a card as the process changes.",
-    visual: "board",
-  },
-  {
-    number: "02",
-    title: "Keep the details together.",
-    description:
-      "Track the role, company, notes, and Interviews inside each Application.",
-    visual: "detail",
-  },
-  {
-    number: "03",
-    title: "Tailor your CV from your own experience.",
-    description:
-      "Start CV Generation from a Base CV and keep your saved Generated CVs with their Application.",
-    visual: "document",
-  },
-];
-
-const faqs = [
-  {
-    question: "Do I need to pay before creating a User?",
-    answer:
-      "Yes. A first-time buyer purchases a weekly JobTrackr Subscription, then registers using the verified email from Checkout.",
-  },
-  {
-    question: "When does my paid week start?",
-    answer:
-      "Your paid week begins when Stripe first bills the subscription, even if you register later. The subscription renews weekly until canceled.",
-  },
-  {
-    question: "Is CV Generation limited to 20 per week?",
-    answer:
-      "No. CV Generation is unlimited during paid access. You can keep up to 20 saved Generated CVs per Application at a time; deleting one frees a saved slot.",
-  },
-  {
-    question: "What happens if I cancel?",
-    answer:
-      "Canceling renewal keeps paid features available through the end of your already paid week. After that, you can still sign in and work with existing Applications, but new Applications, Base CV uploads, and CV Generation require paid access.",
-  },
-  {
-    question: "Can I use JobTrackr on my phone?",
-    answer:
-      "Yes. The customer app works in a mobile browser as well as on desktop.",
-  },
-];
----
-
-<SiteLayout
-  title="JobTrackr — Your job search, organized"
-  description="Track Applications, manage documents, and create role-tailored CVs with a weekly JobTrackr Subscription."
->
-  <main>
-    <section id="home-section" class="hero section-wrap">
-      <div class="hero-copy">
-        <span class="eyebrow">ONE PLACE FOR YOUR JOB SEARCH</span>
-        <h1>
-          Your job search. <br />
-          <span>Organized.</span>
-        </h1>
-        <p>
-          Track every Application from first contact to final decision. Keep the
-          details and documents you need close to each role.
-        </p>
-        <div class="button-row">
-          <a class="button" href="#pricing-section">
-            See the weekly plan <span aria-hidden="true">↗</span>
-          </a>
-          <a class="text-button" href="#demo-section">
-            Explore the preview <span aria-hidden="true">↓</span>
-          </a>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta content="width=device-width, initial-scale=1.0" name="viewport" />
+    <link href="https://fonts.googleapis.com" rel="preconnect" />
+    <link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect" />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Inter:ital,opsz,wght@0,14..32,100..900;1,14..32,100..900&amp;family=Nunito:ital,wght@0,200..1000;1,200..1000&amp;display=swap"
+      rel="stylesheet"
+    />
+    <link href="/styles/reset.css" rel="stylesheet" />
+    <link href="/styles/styles.css" rel="stylesheet" />
+    <link href="/assets/jobtrackr-favicon.png" rel="icon" />
+    <title>JobTrackr &mdash; Your job search, organized</title>
+    <script defer="" is:inline src="/scripts/landing.js"></script>
+    <meta
+      content="Track Applications and create role-tailored CVs with a weekly JobTrackr Subscription."
+      name="description"
+    />
+    <link href="/styles/landing-additions.css" rel="stylesheet" />
+  </head>
+  <body>
+    <header class="header__container">
+      <!-- Desktop Navbar -->
+      <nav class="header__navbar">
+        <ul class="header__outer-list">
+          <li class="logo">
+            <img
+              alt="JobTrackr logo"
+              class="logo-image"
+              src="/assets/jobtrackr-logo.webp"
+            />
+            <span>JobTrackr</span>
+          </li>
+          <li class="header__inner-list-container">
+            <ul class="header__inner-list">
+              <li>
+                <a href="#home-section">Home</a>
+              </li>
+              <li>
+                <a href="#problem-section">Problem</a>
+              </li>
+              <li>
+                <a href="#features-section">Features</a>
+              </li>
+              <li>
+                <a href="#pricing-section">Pricing</a>
+              </li>
+              <li>
+                <a href="#faq-section">FAQ</a>
+              </li>
+            </ul>
+          </li>
+          <li>
+            <a
+              class="header__sign-in"
+              href="https://app.jobtrakcr.com/auth/login"
+            >
+              Sign in
+            </a>
+            <a class="cta-btn" href="#pricing-section">
+              Subscribe
+            </a>
+          </li>
+        </ul>
+      </nav>
+      <!-- Mobile Navbar -->
+      <nav aria-label="Mobile" class="header__navbar-mobile">
+        <ul class="header__outer-list">
+          <li class="logo">
+            <a class="logo__link" href="#home-section">
+              <img
+                alt="JobTrackr logo"
+                class="logo-image"
+                src="/assets/jobtrackr-logo.webp"
+              />
+              <span>JobTrackr</span>
+            </a>
+          </li>
+          <li class="header__button-mobile">
+            <button
+              aria-expanded="false"
+              aria-label="Open menu"
+              id="mobile-button"
+            >
+              <svg
+                class="lucide lucide-menu-icon lucide-menu"
+                fill="none"
+                height="28"
+                stroke="#000"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                stroke-width="2"
+                viewBox="0 0 24 24"
+                width="28"
+                xmlns="http://www.w3.org/2000/svg"
+              >
+                <path d="M4 5h16"></path>
+                <path d="M4 12h16"></path>
+                <path d="M4 19h16"></path>
+              </svg>
+            </button>
+            <ul class="header__inner-list-mobile">
+              <li>
+                <a href="#home-section">Home</a>
+              </li>
+              <li>
+                <a href="#problem-section">Problem</a>
+              </li>
+              <li>
+                <a href="#features-section">Features</a>
+              </li>
+              <li>
+                <a href="#pricing-section">Pricing</a>
+              </li>
+              <li>
+                <a href="#faq-section">FAQ</a>
+              </li>
+              <li>
+                <a class="cta-btn" href="#pricing-section">
+                  Subscribe
+                </a>
+              </li>
+              <li>
+                <a href="https://app.jobtrakcr.com/auth/login">Sign in</a>
+              </li>
+            </ul>
+          </li>
+        </ul>
+      </nav>
+    </header>
+    <main>
+      <!-- Hero Section -->
+      <section class="hero__container" id="home-section">
+        <div class="hero__content-wrapper">
+          <span class="badge">SIMPLE AND CLEAR</span>
+          <h1 class="hero__heading">
+            Your job search. <br />
+            Organized.
+          </h1>
+          <p class="hero__subheading">
+            Keep every Application in view, from your first submission to the
+            final decision. Track your progress and the details that matter in
+            one place.
+          </p>
+          <div class="hero__btn-wrapper">
+            <a class="cta-btn hero-cta" href="#pricing-section">
+              Subscribe
+            </a>
+            <a class="secondary-btn" href="#features-section">
+              <span>How it works</span>
+              <span class="secondary-btn-svg">
+                <svg
+                  class="lucide lucide-chevron-down-icon lucide-chevron-down"
+                  fill="none"
+                  height="16"
+                  stroke="currentColor"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                  stroke-width="2"
+                  viewBox="0 0 24 24"
+                  width="16"
+                  xmlns="http://www.w3.org/2000/svg"
+                >
+                  <path d="m6 9 6 6 6-6"></path>
+                </svg>{" "}
+              </span>
+            </a>
+          </div>
+          <div class="hero__social-proof-wrapper">
+            <span>&checkmark;</span>
+            <span>
+              Applications, Interviews, and Generated CVs in one place.
+            </span>
+          </div>
         </div>
-        <p class="hero-proof">
-          Applications, Interviews, and Generated CVs in one workspace.
-        </p>
-      </div>
-      <div
-        class="hero-art"
-        role="img"
-        aria-label="Illustration of an Applications board"
+        <div class="hero__image-wrapper">
+          <figure>
+            <img
+              alt="Illustrative browser view from the supplied JobTrackr landing"
+              src="/assets/jobtrackr-hero-picture.webp"
+            />
+          </figure>
+        </div>
+      </section>
+      <section
+        aria-labelledby="demo-heading"
+        class="demo__container"
+        id="demo-section"
       >
-        <div class="art-window">
-          <div class="art-bar">
-            <span class="window-dots">
+        <div class="demo__content-wrapper">
+          <span class="badge">Public Demo</span>
+          <h2 class="section__heading" id="demo-heading">
+            Take a closer look.
+          </h2>
+          <p class="section__description">
+            An interactive preview of Applications and Documents is being
+            prepared for this space.
+          </p>
+        </div>
+        <div
+          aria-label="Reserved browser frame for the Public Demo"
+          class="demo__browser-shell"
+        >
+          <div aria-hidden="true" class="demo__browser-bar">
+            <span class="demo__dots">
               <i></i>
               <i></i>
               <i></i>
             </span>
-            <span>Applications</span>
-            <span>⌕</span>
+            <span class="demo__address">jobtrakcr.com/demo</span>
+            <span>&orarr;</span>
           </div>
-          <div class="art-board">
-            <div class="art-column">
-              <b>Applied</b>
-              <div class="art-card">
-                <strong>Product Designer</strong>
-                <small>Northstar Studio</small>
-                <em>Application sent</em>
-              </div>
-              <div class="art-card muted-card">
-                <strong>Frontend Engineer</strong>
-                <small>Willow Labs</small>
-              </div>
-            </div>
-            <div class="art-column">
-              <b>Interview</b>
-              <div class="art-card">
-                <strong>UX Researcher</strong>
-                <small>Atlas Works</small>
-                <em>Interview scheduled</em>
-              </div>
-            </div>
-            <div class="art-column">
-              <b>Offer</b>
-              <div class="art-card">
-                <strong>Content Strategist</strong>
-                <small>Harbor Team</small>
-                <em>Offer received</em>
-              </div>
-            </div>
+          <div class="demo__placeholder">
+            <img alt="" src="/assets/jobtrackr-logo.webp" />
+            <strong>Public Demo coming soon</strong>
+            <p>
+              A fictional workspace will appear here when the preview is ready.
+            </p>
           </div>
         </div>
-      </div>
-    </section>
-
-    <section
-      id="demo-section"
-      class="demo-reservation section-wrap"
-      aria-labelledby="demo-heading"
-    >
-      <div class="section-intro compact">
-        <span class="eyebrow">PUBLIC DEMO</span>
-        <h2 id="demo-heading">Take a closer look.</h2>
-        <p>
-          An interactive preview of Applications and Documents is being prepared
-          for this space.
-        </p>
-      </div>
-      <div
-        class="browser-shell"
-        aria-label="Reserved browser frame for the Public Demo"
-      >
-        <div class="browser-bar" aria-hidden="true">
-          <span class="window-dots">
-            <i></i>
-            <i></i>
-            <i></i>
-          </span>
-          <span class="address">jobtrakcr.com/demo</span>
-          <span class="browser-refresh">↻</span>
+      </section>
+      <!-- Problem Explanation Section -->
+      <section class="problem__container" id="problem-section">
+        <div class="problem__content-wrapper">
+          <span class="badge">The problem</span>
+          <h2 class="section__heading">
+            How many Applications did you send this week? <br />
+            And last week?
+          </h2>
         </div>
-        <div class="demo-empty">
-          <span>JobTrackr</span>
-          <strong>Public Demo coming soon</strong>
-          <p>Explore a fictional workspace here when the preview is ready.</p>
-        </div>
-      </div>
-    </section>
-
-    <section
-      id="problem-section"
-      class="problem-section section-wrap"
-      aria-labelledby="problem-heading"
-    >
-      <div class="section-intro">
-        <span class="eyebrow">THE PROBLEM</span>
-        <h2 id="problem-heading">Where did that Application go?</h2>
-        <p>
-          Job searching has enough moving parts. The details should be easy to
-          find.
-        </p>
-      </div>
-      <div class="problem-grid">
-        {problems.map((problem) => (
-          <article class="problem-card">
-            <div class="problem-visual">
-              {problem.visual === "spreadsheet" && (
-                <div class="problem-mock mock-spreadsheet" aria-hidden="true">
-                  <div class="mock-topbar">
-                    Application tracker.xlsx <span>•••</span>
-                  </div>
-                  <div class="mock-row mock-heading">
-                    <span>Company</span>
-                    <span>Role</span>
-                    <span>Status</span>
-                  </div>
-                  <div class="mock-row">
-                    <span>Northstar</span>
-                    <span>Designer</span>
-                    <span>Applied</span>
-                  </div>
-                  <div class="mock-row">
-                    <span>Atlas Works</span>
-                    <span>Researcher</span>
-                    <span>Interview?</span>
-                  </div>
-                  <div class="mock-row">
-                    <span>Willow Labs</span>
-                    <span>Engineer</span>
-                    <span>Follow up</span>
-                  </div>
-                  <div class="mock-row">
-                    <span>Harbor Team</span>
-                    <span>Strategist</span>
-                    <span>Offer?</span>
-                  </div>
-                </div>
-              )}
-              {problem.visual === "timeline" && (
-                <div class="problem-mock mock-timeline" aria-hidden="true">
-                  <strong>Four Applications, four stages</strong>
-                  <div>
-                    <span>Northstar Studio</span>
-                    <b>Applied</b>
-                  </div>
-                  <div>
-                    <span>Willow Labs</span>
-                    <b>In review</b>
-                  </div>
-                  <div>
-                    <span>Atlas Works</span>
-                    <b>Interview</b>
-                  </div>
-                  <div>
-                    <span>Harbor Team</span>
-                    <b>Offer</b>
-                  </div>
-                </div>
-              )}
-              {problem.visual === "reminders" && (
-                <div class="problem-mock mock-reminders" aria-hidden="true">
-                  <strong>Things to remember</strong>
-                  <div>
-                    <span>↗</span>
-                    <p>
-                      Reply to Atlas Works<small>Interview details</small>
-                    </p>
-                  </div>
-                  <div>
-                    <span>○</span>
-                    <p>
-                      Follow up with Willow Labs
-                      <small>Application update</small>
-                    </p>
-                  </div>
-                  <div>
-                    <span>▤</span>
-                    <p>
-                      Review Northstar notes<small>Before your call</small>
-                    </p>
-                  </div>
-                </div>
-              )}
+        <div class="problem__cards-container">
+          <figure class="problem__card">
+            <div class="problem__card-video-wrapper">
+              <video
+                autoplay=""
+                height="460px"
+                loop=""
+                muted=""
+                playsinline=""
+                width="800px"
+              >
+                <source
+                  src="/assets/hoja-calculo-animation-hd_1.mov"
+                  type="video/mp4; codecs=hvc1"
+                />
+                <source
+                  src="/assets/hoja-calculo-animation-hd.webm"
+                  type="video/webm"
+                />
+              </video>
             </div>
-            <div class="problem-content">
-              <span class="eyebrow">A FAMILIAR CHALLENGE</span>
-              <h3>{problem.title}</h3>
-              <p>{problem.description}</p>
-              <ul>
-                {problem.points.map((point) => (
-                  <li>
-                    <span aria-hidden="true">✕</span>
-                    {point}
+            <figcaption class="problem__card-content-wrapper">
+              <div class="problem__card-content-top">
+                <span class="badge">The everyday challenge</span>
+                <h3 class="problem__card-subheading">
+                  The spreadsheet shuffle
+                </h3>
+                <p class="problem__card-description">
+                  Color-coded columns and duplicate tabs make it hard to see
+                  what comes next.
+                </p>
+                <div class="problem__card-btns">
+                  <a class="cta-btn hero-cta" href="#pricing-section">
+                    Subscribe
+                  </a>
+                  <a class="secondary-btn" href="#features-section">
+                    <span>How it works</span>
+                    <span class="secondary-btn-svg">
+                      <svg
+                        class="lucide lucide-chevron-down-icon lucide-chevron-down"
+                        fill="none"
+                        height="16"
+                        stroke="currentColor"
+                        stroke-linecap="round"
+                        stroke-linejoin="round"
+                        stroke-width="2"
+                        viewBox="0 0 24 24"
+                        width="16"
+                        xmlns="http://www.w3.org/2000/svg"
+                      >
+                        <path d="m6 9 6 6 6-6"></path>
+                      </svg>{" "}
+                    </span>
+                  </a>
+                </div>
+              </div>
+              <div class="problem__card-content-bot">
+                <ul class="problem__card-badge-list">
+                  <li class="problem__card-badge">
+                    <p>
+                      <span>
+                        <svg
+                          class="lucide lucide-circle-x-icon lucide-circle-x"
+                          fill="none"
+                          height="16"
+                          stroke="currentColor"
+                          stroke-linecap="round"
+                          stroke-linejoin="round"
+                          stroke-width="2"
+                          viewBox="0 0 24 24"
+                          width="16"
+                          xmlns="http://www.w3.org/2000/svg"
+                        >
+                          <circle cx="12" cy="12" r="10"></circle>
+                          <path d="m15 9-6 6"></path>
+                          <path d="m9 9 6 6"></path>
+                        </svg>
+                      </span>
+                      Details scattered across sheets
+                    </p>
                   </li>
-                ))}
-              </ul>
+                  <li class="problem__card-badge">
+                    <p>
+                      <span>
+                        <svg
+                          class="lucide lucide-frown-icon lucide-frown"
+                          fill="none"
+                          height="16"
+                          stroke="currentColor"
+                          stroke-linecap="round"
+                          stroke-linejoin="round"
+                          stroke-width="2"
+                          viewBox="0 0 24 24"
+                          width="16"
+                          xmlns="http://www.w3.org/2000/svg"
+                        >
+                          <circle cx="12" cy="12" r="10"></circle>
+                          <path d="M16 16s-1.5-2-4-2-4 2-4 2"></path>
+                          <line x1="9" x2="9.01" y1="9" y2="9"></line>
+                          <line x1="15" x2="15.01" y1="9" y2="9"></line>
+                        </svg>
+                      </span>
+                      No clear view of each role
+                    </p>
+                  </li>
+                  <li class="problem__card-badge">
+                    <p>
+                      <svg
+                        class="lucide lucide-thumbs-down-icon lucide-thumbs-down"
+                        fill="none"
+                        height="16"
+                        stroke="currentColor"
+                        stroke-linecap="round"
+                        stroke-linejoin="round"
+                        stroke-width="2"
+                        viewBox="0 0 24 24"
+                        width="16"
+                        xmlns="http://www.w3.org/2000/svg"
+                      >
+                        <path d="M9 18.12 10 14H4.17a2 2 0 0 1-1.92-2.56l2.33-8A2 2 0 0 1 6.5 2H20a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2h-2.76a2 2 0 0 0-1.79 1.11L12 22a3.13 3.13 0 0 1-3-3.88Z"></path>
+                        <path d="M17 14V2"></path>
+                      </svg>
+                      Updates easy to miss
+                    </p>
+                  </li>
+                </ul>
+              </div>
+            </figcaption>
+          </figure>
+          <figure class="problem__card">
+            <div class="problem__card-video-wrapper">
+              <video
+                autoplay=""
+                height="460px"
+                loop=""
+                muted=""
+                playsinline=""
+                width="800px"
+              >
+                <source
+                  src="/assets/estados-empresas-animation_1.mov"
+                  type="video/mp4; codecs=hvc1"
+                />
+                <source
+                  src="/assets/estados-empresas-animation.webm"
+                  type="video/webm"
+                />
+              </video>
             </div>
-          </article>
-        ))}
-      </div>
-    </section>
-
-    <section
-      id="features-section"
-      class="features-section section-wrap"
-      aria-labelledby="features-heading"
-    >
-      <div class="section-intro">
-        <span class="eyebrow">FEATURES</span>
-        <h2 id="features-heading">
-          Less searching.
-          <br />
-          More clarity.
-        </h2>
-        <p>
-          JobTrackr gives every Application a place, from the Kanban board to
-          its documents and history.
-        </p>
-      </div>
-      <div class="feature-grid">
-        {features.map((feature) => (
-          <article class="feature-card">
-            <div
-              class={`feature-visual feature-visual-${feature.visual}`}
-              aria-hidden="true"
-            >
-              {feature.visual === "board" && (
-                <div class="mini-board">
-                  <div>
-                    <b>Applied</b>
-                    <span>Product Designer</span>
-                    <span>Frontend Engineer</span>
-                  </div>
-                  <div>
-                    <b>Interview</b>
-                    <span>UX Researcher</span>
-                  </div>
-                  <div>
-                    <b>Offer</b>
-                    <span>Content Strategist</span>
-                  </div>
+            <figcaption class="problem__card-content-wrapper">
+              <div class="problem__card-content-top">
+                <span class="badge">The everyday challenge</span>
+                <h3 class="problem__card-subheading">
+                  Every company is at a different stage.
+                </h3>
+                <p class="problem__card-description">
+                  One role is waiting for a reply while another is moving toward
+                  an Interview. Keep each Application in view.
+                </p>
+                <div class="problem__card-btns">
+                  <a class="cta-btn hero-cta" href="#pricing-section">
+                    Subscribe
+                  </a>
+                  <a class="secondary-btn" href="#faq-section">
+                    <span>Read the FAQ</span>
+                    <span class="secondary-btn-svg">
+                      <svg
+                        class="lucide lucide-chevron-down-icon lucide-chevron-down"
+                        fill="none"
+                        height="16"
+                        stroke="currentColor"
+                        stroke-linecap="round"
+                        stroke-linejoin="round"
+                        stroke-width="2"
+                        viewBox="0 0 24 24"
+                        width="16"
+                        xmlns="http://www.w3.org/2000/svg"
+                      >
+                        <path d="m6 9 6 6 6-6"></path>
+                      </svg>{" "}
+                    </span>
+                  </a>
                 </div>
-              )}
-              {feature.visual === "detail" && (
-                <div class="mini-detail">
-                  <b>UX Researcher</b>
-                  <small>Atlas Works · Interview</small>
-                  <hr />
-                  <span>Application details</span>
-                  <p>Interview with hiring team</p>
-                  <span>Notes</span>
-                  <p>Prepare portfolio examples</p>
-                </div>
-              )}
-              {feature.visual === "document" && (
-                <div class="mini-document">
-                  <div class="mini-document-line">
-                    <span>≡</span>
-                    <b>Generated CV</b>
-                    <small>UX Researcher</small>
-                  </div>
-                  <div class="mini-document-line">
-                    <span>≡</span>
-                    <b>Generated CV</b>
-                    <small>Product Designer</small>
-                  </div>
-                  <div class="mini-document-line">
-                    <span>≡</span>
-                    <b>Base CV</b>
-                    <small>Candidate source</small>
-                  </div>
-                </div>
-              )}
+              </div>
+              <div class="problem__card-content-bot">
+                <ul class="problem__card-badge-list">
+                  <li class="problem__card-badge">
+                    <p>
+                      <span>
+                        <svg
+                          class="lucide lucide-orbit-icon lucide-orbit"
+                          fill="none"
+                          height="16"
+                          stroke="currentColor"
+                          stroke-linecap="round"
+                          stroke-linejoin="round"
+                          stroke-width="2"
+                          viewBox="0 0 24 24"
+                          width="16"
+                          xmlns="http://www.w3.org/2000/svg"
+                        >
+                          <path d="M20.341 6.484A10 10 0 0 1 10.266 21.85"></path>
+                          <path d="M3.659 17.516A10 10 0 0 1 13.74 2.152"></path>
+                          <circle cx="12" cy="12" r="3"></circle>
+                          <circle cx="19" cy="5" r="2"></circle>
+                          <circle cx="5" cy="19" r="2"></circle>
+                        </svg>
+                      </span>
+                      Different stages to track
+                    </p>
+                  </li>
+                  <li class="problem__card-badge">
+                    <p>
+                      <span>
+                        <svg
+                          class="lucide lucide-banknote-x-icon lucide-banknote-x"
+                          fill="none"
+                          height="16"
+                          stroke="currentColor"
+                          stroke-linecap="round"
+                          stroke-linejoin="round"
+                          stroke-width="2"
+                          viewBox="0 0 24 24"
+                          width="16"
+                          xmlns="http://www.w3.org/2000/svg"
+                        >
+                          <path d="M13 18H4a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5"></path>
+                          <path d="m17 17 5 5"></path>
+                          <path d="M18 12h.01"></path>
+                          <path d="m22 17-5 5"></path>
+                          <path d="M6 12h.01"></path>
+                          <circle cx="12" cy="12" r="2"></circle>
+                        </svg>
+                      </span>
+                      Follow-ups to remember
+                    </p>
+                  </li>
+                  <li class="problem__card-badge">
+                    <p>
+                      <svg
+                        class="lucide lucide-calendar-off-icon lucide-calendar-off"
+                        fill="none"
+                        height="16"
+                        stroke="currentColor"
+                        stroke-linecap="round"
+                        stroke-linejoin="round"
+                        stroke-width="2"
+                        viewBox="0 0 24 24"
+                        width="16"
+                        xmlns="http://www.w3.org/2000/svg"
+                      >
+                        <path d="M4.2 4.2A2 2 0 0 0 3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 1.82-1.18"></path>
+                        <path d="M21 15.5V6a2 2 0 0 0-2-2H9.5"></path>
+                        <path d="M16 2v4"></path>
+                        <path d="M3 10h7"></path>
+                        <path d="M21 10h-5.5"></path>
+                        <path d="m2 2 20 20"></path>
+                      </svg>
+                      Timelines to keep in view
+                    </p>
+                  </li>
+                </ul>
+              </div>
+            </figcaption>
+          </figure>
+          <figure class="problem__card">
+            <div class="problem__card-video-wrapper">
+              <video
+                autoplay=""
+                height="450px"
+                loop=""
+                muted=""
+                playsinline=""
+                width="1200px"
+              >
+                <source
+                  src="/assets/llamada-perdida-toast-animation-svg_1.mov"
+                  type="video/mp4; codecs=hvc1"
+                />
+                <source
+                  src="/assets/llamada-perdida-toast-animation.webm"
+                  type="video/webm"
+                />
+              </video>
             </div>
-            <span class="feature-number">{feature.number} / 03</span>
-            <h3>{feature.title}</h3>
-            <p>{feature.description}</p>
-          </article>
-        ))}
-      </div>
-    </section>
-
-    <section
-      id="pricing-section"
-      class="pricing-section"
-      aria-labelledby="pricing-heading"
-    >
-      <div class="section-wrap pricing-layout">
-        <div class="pricing-copy">
-          <span class="eyebrow">PRICING</span>
-          <h2 id="pricing-heading">One clear weekly plan.</h2>
-          <p>
-            Keep your Applications organized and create role-tailored CVs during
-            paid access.
-          </p>
+            <figcaption class="problem__card-content-wrapper">
+              <div class="problem__card-content-top">
+                <span class="badge">The everyday challenge</span>
+                <h3 class="problem__card-subheading">
+                  Important updates get buried.
+                </h3>
+                <p class="problem__card-description">
+                  Keep your Interviews, notes, and documents close to the right
+                  Application.
+                </p>
+                <div class="problem__card-btns">
+                  <a class="cta-btn hero-cta" href="#pricing-section">
+                    Subscribe
+                  </a>
+                  <a class="secondary-btn" href="#features-section">
+                    <span>How it works</span>
+                    <span class="secondary-btn-svg">
+                      <svg
+                        class="lucide lucide-chevron-down-icon lucide-chevron-down"
+                        fill="none"
+                        height="16"
+                        stroke="currentColor"
+                        stroke-linecap="round"
+                        stroke-linejoin="round"
+                        stroke-width="2"
+                        viewBox="0 0 24 24"
+                        width="16"
+                        xmlns="http://www.w3.org/2000/svg"
+                      >
+                        <path d="m6 9 6 6 6-6"></path>
+                      </svg>{" "}
+                    </span>
+                  </a>
+                </div>
+              </div>
+              <div class="problem__card-content-bot">
+                <ul class="problem__card-badge-list">
+                  <li class="problem__card-badge">
+                    <p>
+                      <span>
+                        <svg
+                          class="lucide lucide-phone-missed-icon lucide-phone-missed"
+                          fill="none"
+                          height="16"
+                          stroke="currentColor"
+                          stroke-linecap="round"
+                          stroke-linejoin="round"
+                          stroke-width="2"
+                          viewBox="0 0 24 24"
+                          width="16"
+                          xmlns="http://www.w3.org/2000/svg"
+                        >
+                          <path d="m16 2 6 6"></path>
+                          <path d="m22 2-6 6"></path>
+                          <path d="M13.832 16.568a1 1 0 0 0 1.213-.303l.355-.465A2 2 0 0 1 17 15h3a2 2 0 0 1 2 2v3a2 2 0 0 1-2 2A18 18 0 0 1 2 4a2 2 0 0 1 2-2h3a2 2 0 0 1 2 2v3a2 2 0 0 1-.8 1.6l-.468.351a1 1 0 0 0-.292 1.233 14 14 0 0 0 6.392 6.384"></path>
+                        </svg>
+                      </span>
+                      Calls to return
+                    </p>
+                  </li>
+                  <li class="problem__card-badge">
+                    <p>
+                      <span>
+                        <svg
+                          class="lucide lucide-mail-question-mark-icon lucide-mail-question-mark"
+                          fill="none"
+                          height="16"
+                          stroke="currentColor"
+                          stroke-linecap="round"
+                          stroke-linejoin="round"
+                          stroke-width="2"
+                          viewBox="0 0 24 24"
+                          width="16"
+                          xmlns="http://www.w3.org/2000/svg"
+                        >
+                          <path d="M22 10.5V6a2 2 0 0 0-2-2H4a2 2 0 0 0-2 2v12c0 1.1.9 2 2 2h12.5"></path>
+                          <path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7"></path>
+                          <path d="M18 15.28c.2-.4.5-.8.9-1a2.1 2.1 0 0 1 2.6.4c.3.4.5.8.5 1.3 0 1.3-2 2-2 2"></path>
+                          <path d="M20 22v.01"></path>
+                        </svg>
+                      </span>
+                      Messages to follow up
+                    </p>
+                  </li>
+                  <li class="problem__card-badge">
+                    <p>
+                      <svg
+                        class="lucide lucide-frown-icon lucide-frown"
+                        fill="none"
+                        height="16"
+                        stroke="currentColor"
+                        stroke-linecap="round"
+                        stroke-linejoin="round"
+                        stroke-width="2"
+                        viewBox="0 0 24 24"
+                        width="16"
+                        xmlns="http://www.w3.org/2000/svg"
+                      >
+                        <circle cx="12" cy="12" r="10"></circle>
+                        <path d="M16 16s-1.5-2-4-2-4 2-4 2"></path>
+                        <line x1="9" x2="9.01" y1="9" y2="9"></line>
+                        <line x1="15" x2="15.01" y1="9" y2="9"></line>
+                      </svg>
+                      Details to revisit
+                    </p>
+                  </li>
+                </ul>
+              </div>
+            </figcaption>
+          </figure>
         </div>
-        <article class="pricing-card">
-          <span class="eyebrow">JOBTRACKR SUBSCRIPTION</span>
-          <h3>Everything you need to keep moving.</h3>
-          <p class="price">
-            €10.99 <span>per week</span>
-          </p>
-          <p class="billing-note">
-            Weekly recurring billing; applicable tax included.
-          </p>
-          <ul>
-            <li>Unlimited CV Generation during paid access</li>
-            <li>20 saved Generated CVs per Application</li>
-            <li>Applications, Kanban, Interviews, and Documents</li>
-          </ul>
-          <a
-            class="button pricing-button"
-            href="https://app.jobtrakcr.com/subscribe"
-          >
-            Subscribe <span aria-hidden="true">↗</span>
-          </a>
-          <p class="pricing-footnote">
-            Already have a User?{" "}
-            <a href="https://app.jobtrakcr.com/auth/login">Sign in</a>
-          </p>
-        </article>
-      </div>
-    </section>
-
-    <section
-      id="faq-section"
-      class="faq-section section-wrap"
-      aria-labelledby="faq-heading"
-    >
-      <div class="section-intro compact">
-        <span class="eyebrow">FAQ</span>
-        <h2 id="faq-heading">Frequently asked questions.</h2>
-        <p>
-          For anything else, email{" "}
-          <a href="mailto:support@jobtrakcr.com">support@jobtrakcr.com</a>.
+      </section>
+      <!-- Features Section -->
+      <section class="features__container" id="features-section">
+        <div class="features__content-wrapper">
+          <span class="badge">Features</span>
+          <h2 class="section__heading">
+            Less searching.
+            <br />
+            More clarity.
+          </h2>
+          <h3 class="section__description">
+            JobTrackr gives each Application a clear place.
+            <br />
+            Use the Kanban board, details, and Documents to stay organized.
+          </h3>
+        </div>
+        <ul class="features__list">
+          <li class="feature-card__item">
+            <figure>
+              <div class="feature-card__image-wrapper">
+                <img
+                  alt="Supplied Kanban board illustration"
+                  src="/assets/kanba-visual1.webp"
+                />
+              </div>
+              <figcaption class="feature-card__figcaption">
+                <h4>See every Application on your Kanban board.</h4>
+                <p>Move cards between stages as your job search progresses.</p>
+              </figcaption>
+            </figure>
+          </li>
+          <li class="feature-card__item">
+            <figure>
+              <div class="feature-card__image-wrapper">
+                <img
+                  alt="Supplied Application detail illustration"
+                  src="/assets/entrevista-details1.webp"
+                />
+              </div>
+              <figcaption class="feature-card__figcaption">
+                <h4>Keep each role and Interview together.</h4>
+                <p>Move cards between stages as your job search progresses.</p>
+              </figcaption>
+            </figure>
+          </li>
+          <li class="feature-card__item">
+            <figure>
+              <div class="feature-card__image-wrapper">
+                <img
+                  alt="Supplied sortable list illustration"
+                  src="/assets/sortable-list.webp"
+                />
+              </div>
+              <figcaption class="feature-card__figcaption">
+                <h4>Move an Application when its status changes.</h4>
+                <p>Move cards between stages as your job search progresses.</p>
+              </figcaption>
+            </figure>
+          </li>
+        </ul>
+      </section>
+      <!-- Pricing Section -->
+      <section class="pricing__container" id="pricing-section">
+        <div class="pricing__content-wrapper">
+          <span class="badge">Pricing</span>
+          <h2 class="section__heading">One clear weekly plan.</h2>
+          <h3 class="section__description">
+            Pay for weekly access to JobTrackr and CV Generation.
+          </h3>
+        </div>
+        <div class="pricing-card__wrapper">
+          <article class="pricing-card__article">
+            <h2>JobTrackr Subscription</h2>
+            <p class="pricing-card__description">
+              Organize your Applications and create role-tailored CVs during
+              paid access.
+            </p>
+            <p class="pricing-card__price">
+              &euro;10.99
+              <span class="pricing-card__price-span">per week</span>
+            </p>
+            <div class="pricing-card__separator"></div>
+            <ul>
+              <li>&checkmark; Applications and Kanban board</li>
+              <li>&checkmark; Interviews and Documents</li>
+              <li>&checkmark; Unlimited CV Generation during paid access</li>
+              <li>&checkmark; 20 saved Generated CVs per Application</li>
+              <li>&checkmark; Access from your browser</li>
+              <li>
+                &checkmark; Weekly recurring billing; applicable tax included
+              </li>
+            </ul>
+            <a
+              class="cta-btn pricing-cta"
+              href="https://app.jobtrakcr.com/subscribe"
+            >
+              Subscribe
+            </a>
+            <p class="pricing-card__signin">
+              Already have a User?{" "}
+              <a href="https://app.jobtrakcr.com/auth/login">Sign in</a>
+            </p>
+          </article>
+        </div>
+      </section>
+      <!-- FAQ Section -->
+      <section class="contact-faq__container" id="faq-section">
+        <div class="faq__wrapper">
+          <h2 class="section__heading">Frequently asked questions</h2>
+          <h3 class="section__description">
+            Find answers below or email support@jobtrakcr.com.
+          </h3>
+          <dl class="faq__list">
+            <div class="faq__question-group">
+              <dt
+                aria-controls="faq-answer-1"
+                aria-expanded="false"
+                role="button"
+                tabindex="0"
+              >
+                Do I need to pay before registering?
+                <span>
+                  <svg
+                    class="lucide lucide-plus-icon lucide-plus"
+                    fill="none"
+                    height="20"
+                    stroke="currentColor"
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                    stroke-width="2"
+                    viewBox="0 0 24 24"
+                    width="20"
+                    xmlns="http://www.w3.org/2000/svg"
+                  >
+                    <path d="M5 12h14"></path>
+                    <path d="M12 5v14"></path>
+                  </svg>
+                </span>
+              </dt>
+              <dd id="faq-answer-1">
+                A first-time buyer purchases a weekly subscription, then
+                registers with the verified Checkout Email.
+              </dd>
+            </div>
+            <div class="faq__question-group">
+              <dt
+                aria-controls="faq-answer-2"
+                aria-expanded="false"
+                role="button"
+                tabindex="0"
+              >
+                Will my Applications still be there when I return?
+                <span>
+                  <svg
+                    class="lucide lucide-plus-icon lucide-plus"
+                    fill="none"
+                    height="20"
+                    stroke="currentColor"
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                    stroke-width="2"
+                    viewBox="0 0 24 24"
+                    width="20"
+                    xmlns="http://www.w3.org/2000/svg"
+                  >
+                    <path d="M5 12h14"></path>
+                    <path d="M12 5v14"></path>
+                  </svg>
+                </span>
+              </dt>
+              <dd id="faq-answer-2">
+                Yes. Your Applications and saved documents stay with your User
+                when you sign in again.
+              </dd>
+            </div>
+            <div class="faq__question-group">
+              <dt
+                aria-controls="faq-answer-3"
+                aria-expanded="false"
+                role="button"
+                tabindex="0"
+              >
+                Can I use JobTrackr on my phone?
+                <span>
+                  <svg
+                    class="lucide lucide-plus-icon lucide-plus"
+                    fill="none"
+                    height="20"
+                    stroke="currentColor"
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                    stroke-width="2"
+                    viewBox="0 0 24 24"
+                    width="20"
+                    xmlns="http://www.w3.org/2000/svg"
+                  >
+                    <path d="M5 12h14"></path>
+                    <path d="M12 5v14"></path>
+                  </svg>
+                </span>
+              </dt>
+              <dd id="faq-answer-3">
+                Yes. JobTrackr works in mobile and desktop browsers.
+              </dd>
+            </div>
+            <div class="faq__question-group">
+              <dt
+                aria-controls="faq-answer-4"
+                aria-expanded="false"
+                role="button"
+                tabindex="0"
+              >
+                Is CV Generation limited to 20 per week?
+                <span>
+                  <svg
+                    class="lucide lucide-plus-icon lucide-plus"
+                    fill="none"
+                    height="20"
+                    stroke="currentColor"
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                    stroke-width="2"
+                    viewBox="0 0 24 24"
+                    width="20"
+                    xmlns="http://www.w3.org/2000/svg"
+                  >
+                    <path d="M5 12h14"></path>
+                    <path d="M12 5v14"></path>
+                  </svg>
+                </span>
+              </dt>
+              <dd id="faq-answer-4">
+                No. CV Generation is unlimited during paid access. Each
+                Application can keep up to 20 saved Generated CVs at once.
+              </dd>
+            </div>
+            <div class="faq__question-group">
+              <dt
+                aria-controls="faq-answer-5"
+                aria-expanded="false"
+                role="button"
+                tabindex="0"
+              >
+                What happens if I cancel renewal?
+                <span>
+                  <svg
+                    class="lucide lucide-plus-icon lucide-plus"
+                    fill="none"
+                    height="20"
+                    stroke="currentColor"
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                    stroke-width="2"
+                    viewBox="0 0 24 24"
+                    width="20"
+                    xmlns="http://www.w3.org/2000/svg"
+                  >
+                    <path d="M5 12h14"></path>
+                    <path d="M12 5v14"></path>
+                  </svg>
+                </span>
+              </dt>
+              <dd id="faq-answer-5">
+                Paid features remain available until the end of the week you
+                already paid for. After that, you can still view and update
+                existing Applications.
+              </dd>
+            </div>
+            <div class="faq__question-group">
+              <dt
+                aria-controls="faq-answer-6"
+                aria-expanded="false"
+                role="button"
+                tabindex="0"
+              >
+                When does my paid week begin?
+                <span>
+                  <svg
+                    class="lucide lucide-plus-icon lucide-plus"
+                    fill="none"
+                    height="20"
+                    stroke="currentColor"
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                    stroke-width="2"
+                    viewBox="0 0 24 24"
+                    width="20"
+                    xmlns="http://www.w3.org/2000/svg"
+                  >
+                    <path d="M5 12h14"></path>
+                    <path d="M12 5v14"></path>
+                  </svg>
+                </span>
+              </dt>
+              <dd id="faq-answer-6">
+                The paid week starts when Stripe first bills the subscription,
+                even if you complete registration later.
+              </dd>
+            </div>
+            <div class="faq__question-group">
+              <dt
+                aria-controls="faq-answer-7"
+                aria-expanded="false"
+                role="button"
+                tabindex="0"
+              >
+                How can I get help?
+                <span>
+                  <svg
+                    class="lucide lucide-plus-icon lucide-plus"
+                    fill="none"
+                    height="20"
+                    stroke="currentColor"
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                    stroke-width="2"
+                    viewBox="0 0 24 24"
+                    width="20"
+                    xmlns="http://www.w3.org/2000/svg"
+                  >
+                    <path d="M5 12h14"></path>
+                    <path d="M12 5v14"></path>
+                  </svg>
+                </span>
+              </dt>
+              <dd id="faq-answer-7">
+                Contact support@jobtrakcr.com for help. The Terms, Privacy, and
+                Cancellation/Refund pages are linked below.
+              </dd>
+            </div>
+          </dl>
+        </div>
+      </section>
+    </main>
+    <footer>
+      <div class="footer__year-date-wrapper">
+        <p class="footer__year-date">
+          &copy; <span id="year-date">2026</span> JobTrackr
         </p>
       </div>
-      <div class="faq-list">
-        {faqs.map((faq) => (
-          <details>
-            <summary>
-              {faq.question}
-              <span aria-hidden="true">+</span>
-            </summary>
-            <p>{faq.answer}</p>
-          </details>
-        ))}
+      <div class="footer__made-by-wrapper">
+        <p class="footer__made-by-text">
+          By Ricardo Guzman -
+          <a href="https://github.com/ricard0g" target="_blank">
+            Github
+          </a>
+        </p>
       </div>
-    </section>
-  </main>
-</SiteLayout>
+      <div class="footer__logo-wrapper">
+        <img alt="" class="logo-image" src="/assets/jobtrackr-logo.webp" />
+      </div>
+      <nav aria-label="Support and policies" class="footer__policies">
+        <a href="mailto:support@jobtrakcr.com">support@jobtrakcr.com</a>
+        <a href="/terms/">Terms</a>
+        <a href="/privacy/">Privacy</a>
+        <a href="/cancellation-refund/">Cancellation and Refund</a>
+      </nav>
+    </footer>
+  </body>
+</html>

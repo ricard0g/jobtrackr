@@ -7,7 +7,7 @@
     "check": "astro check",
     "build": "astro build",
     "preview": "astro preview",
-    "format": "prettier --plugin prettier-plugin-astro --write 'src/**/*.astro' src/styles/site.css tests/*.ts *.ts *.mjs *.json",
+    "format": "prettier --plugin prettier-plugin-astro --write 'src/**/*.astro' public/styles/landing-additions.css public/scripts/landing.js tests/*.ts *.ts *.mjs *.json",
     "test": "playwright test"
   },
   "dependencies": {
