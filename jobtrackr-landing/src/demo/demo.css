@@ -1,0 +1,3 @@
+/* The landing omits Tailwind preflight to keep the supplied reset; the demo app replica needs it. */
+@import "../styles/global.css";
+@import "tailwindcss/preflight.css" layer(base);

@@ -265,19 +265,16 @@ import "../styles/global.css";
             </span>
           </div>
         </div>
-        <div class="hero__image-wrapper [max-width:100%] overflow-hidden under-1100:[max-width:90%]">
+        <div class="hero__image-wrapper [width:1100px] [max-width:100%] overflow-hidden under-1100:[max-width:90%]">
           <figure
-            aria-label="Reserved Public Demo"
+            aria-label="JobTrackr Public Demo"
             id="demo-section"
             class="flex justify-center items-center [width:100%] [height:auto] [background-size:cover] [background-position:center] rounded-card hero-background [scroll-margin-top:9rem] [padding:2.5%_0] under-768:[scroll-margin-top:5rem]"
           >
-            <div
-              aria-label="Reserved browser frame for the Public Demo"
-              class="demo__browser-shell [width:95%] [border:1px_solid_var(--color-light-gray)] [border-radius:20px] overflow-hidden [box-shadow:var(--shadow-cool-strong)]"
-            >
+            <div class="demo__browser-shell flex [flex-flow:column_nowrap] [width:95%] bg-page [border:1px_solid_var(--color-light-gray)] [border-radius:20px] overflow-hidden [box-shadow:var(--shadow-cool-strong)]">
               <div
                 aria-hidden="true"
-                class="demo__browser-bar flex items-center justify-between [height:48px] [padding:0_1.25rem] [background:var(--color-off-white)] [border-bottom:1px_solid_var(--color-light-gray)] text-medium-gray"
+                class="demo__browser-bar flex shrink-0 items-center justify-between [height:48px] [padding:0_1.25rem] [background:var(--color-off-white)] [border-bottom:1px_solid_var(--color-light-gray)] text-medium-gray"
               >
                 <span class="demo__dots flex [gap:5px]">
                   <i class="[width:10px] [height:10px] [border-radius:50%] [background:var(--color-demo-red)]"></i>
@@ -289,20 +286,12 @@ import "../styles/global.css";
                 </span>
                 <span>&orarr;</span>
               </div>
-              <div class="demo__placeholder flex [flex-flow:column_nowrap] items-center justify-center [min-height:400px] [padding:2rem] [background:linear-gradient(_125deg,_var(--color-off-white)_70%,_var(--color-accent-light)_)] text-center under-768:[min-height:260px]">
-                <img
-                  alt=""
-                  src="/assets/jobtrackr-logo.webp"
-                  class="block [max-width:100%] [scale:0.95] rounded-card [transition:all_200ms_linear] hover:[scale:1] under-768:[scale:1] [width:76px] [height:76px]"
-                />
-                <strong class="font-display [font-size:1.75rem]">
-                  Public Demo coming soon
-                </strong>
-                <p class="text-medium-gray">
-                  A fictional workspace will appear here when the preview is
-                  ready.
-                </p>
-              </div>
+              <iframe
+                src="/demo"
+                title="JobTrackr Public Demo"
+                loading="lazy"
+                class="block [width:100%] [height:560px] [border:none] under-768:[height:520px]"
+              ></iframe>
             </div>
           </figure>
         </div>

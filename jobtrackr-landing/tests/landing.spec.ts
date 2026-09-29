@@ -27,9 +27,7 @@ test("landing carries the supplied visual structure and assets", async ({
   expect(theme.displayFont).toContain("Nunito");
   const demoFigure = page.locator(".hero__image-wrapper figure#demo-section");
   await expect(demoFigure.locator(".demo__browser-shell")).toBeVisible();
-  await expect(demoFigure.locator(".demo__placeholder")).toContainText(
-    "Public Demo coming soon",
-  );
+  await expect(demoFigure.locator('iframe[src="/demo"]')).toHaveCount(1);
   await expect(
     page.locator('img[src="/assets/jobtrackr-hero-picture.webp"]'),
   ).toHaveCount(0);
