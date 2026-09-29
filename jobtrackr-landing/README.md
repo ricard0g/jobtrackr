@@ -15,7 +15,7 @@ On Vercel, set the root directory to `jobtrackr-landing`. Astro builds to `dist/
 
 ## Design source
 
-`public/styles/reset.css`, `public/styles/styles.css`, and `public/assets/` are direct copies of `tmp/landing/`. The landing page keeps the source's section markup, classes, Inter/Nunito font link, and visual assets. `public/styles/landing-additions.css` contains only the new demo space, policy navigation, FAQ interaction, and small adjustments required after removing the contact form. Some supplied image and video assets contain Spanish text as part of the original visual.
+`src/styles/global.css` imports Tailwind and defines the supplied palette, Inter/Nunito fonts, radii, breakpoints, and shadows with `@theme static`. The source styles, including responsive and interaction states, are expressed with Tailwind utilities in the component layer. Arbitrary utilities preserve values that are specific to the supplied design. The supplied reset lives in Tailwind's base layer to preserve video sizing, and `public/assets/` remains a direct copy of `tmp/landing/assets/`. Some supplied image and video assets contain Spanish text as part of the original visual.
 
 ## Launch dependencies
 

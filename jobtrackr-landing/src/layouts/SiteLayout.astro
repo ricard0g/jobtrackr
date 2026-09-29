@@ -1,4 +1,6 @@
 ---
+import "../styles/global.css";
+
 interface Props {
   title: string;
   description: string;
@@ -26,9 +28,6 @@ const links = [
       href="https://fonts.googleapis.com/css2?family=Inter:ital,opsz,wght@0,14..32,100..900;1,14..32,100..900&family=Nunito:ital,wght@0,200..1000;1,200..1000&display=swap"
       rel="stylesheet"
     />
-    <link rel="stylesheet" href="/styles/reset.css" />
-    <link rel="stylesheet" href="/styles/styles.css" />
-    <link rel="stylesheet" href="/styles/landing-additions.css" />
     <link rel="icon" href="/assets/jobtrackr-favicon.png" />
     <title>{title}</title>
     <script is:inline src="/scripts/landing.js" defer></script>

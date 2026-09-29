@@ -7,7 +7,7 @@
     "check": "astro check",
     "build": "astro build",
     "preview": "astro preview",
-    "format": "prettier --plugin prettier-plugin-astro --write 'src/**/*.astro' public/styles/landing-additions.css public/scripts/landing.js tests/*.ts *.ts *.mjs *.json",
+    "format": "prettier --plugin prettier-plugin-astro --write 'src/**/*.astro' src/styles/*.css public/scripts/landing.js tests/*.ts *.ts *.mjs *.json",
     "test": "playwright test"
   },
   "dependencies": {
@@ -16,9 +16,11 @@
   "devDependencies": {
     "@astrojs/check": "^0.9.4",
     "@playwright/test": "^1.55.0",
+    "@tailwindcss/vite": "^4.3.3",
     "@types/node": "^26.6.3",
     "prettier": "^3.9.9",
     "prettier-plugin-astro": "^1.1.0",
+    "tailwindcss": "^4.3.3",
     "typescript": "^5.9.3"
   }
 }

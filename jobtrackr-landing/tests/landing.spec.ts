@@ -4,7 +4,20 @@ test("landing carries the supplied visual structure and assets", async ({
   page,
 }) => {
   await page.goto("/");
-  await expect(page.locator('link[href="/styles/styles.css"]')).toHaveCount(1);
+  await expect(page.locator('link[href^="/styles/"]')).toHaveCount(0);
+  const theme = await page.locator("html").evaluate((html) => {
+    const styles = getComputedStyle(html);
+    return {
+      accent: styles.getPropertyValue("--color-accent-main").trim(),
+      radius: styles.getPropertyValue("--radius-card").trim(),
+      shadow: styles.getPropertyValue("--shadow-cool-strong").trim(),
+      displayFont: styles.getPropertyValue("--font-display").trim(),
+    };
+  });
+  expect(theme.accent).toBe("#aaf0d1");
+  expect(theme.radius).toBe("10px");
+  expect(theme.shadow).toContain("inset");
+  expect(theme.displayFont).toContain("Nunito");
   const demoFigure = page.locator(".hero__image-wrapper figure#demo-section");
   await expect(demoFigure.locator(".demo__browser-shell")).toBeVisible();
   await expect(demoFigure.locator(".demo__placeholder")).toContainText(
@@ -14,7 +27,9 @@ test("landing carries the supplied visual structure and assets", async ({
     page.locator('img[src="/assets/jobtrackr-hero-picture.webp"]'),
   ).toHaveCount(0);
   expect(
-    await demoFigure.evaluate((figure) => getComputedStyle(figure).backgroundImage),
+    await demoFigure.evaluate(
+      (figure) => getComputedStyle(figure).backgroundImage,
+    ),
   ).toContain("background-hero-2.webp");
   expect(
     await page
@@ -97,8 +112,9 @@ test("public demo stays inside the hero and navigation works on mobile", async (
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto("/");
 
-  await expect(page.locator("#home-section .hero__image-wrapper #demo-section"))
-    .toBeVisible();
+  await expect(
+    page.locator("#home-section .hero__image-wrapper #demo-section"),
+  ).toBeVisible();
   await expect(page.locator("main > #demo-section")).toHaveCount(0);
   await page.getByRole("button", { name: "Open menu" }).click();
   await page
