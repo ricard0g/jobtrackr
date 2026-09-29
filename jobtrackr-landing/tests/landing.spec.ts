@@ -68,8 +68,8 @@ test("visitor sees the weekly offer and can reach support and policy pages", asy
     "Your job search. Organized.",
   );
   const pricing = page.locator("#pricing-section");
-  await expect(pricing).toContainText("€10.99");
-  await expect(pricing).toContainText("per week");
+  await expect(pricing).toContainText("10.99€");
+  await expect(pricing).toContainText("/week");
   await expect(pricing).toContainText("recurring");
   await expect(pricing).toContainText("applicable tax included");
   await expect(pricing).toContainText(

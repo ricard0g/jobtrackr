@@ -167,6 +167,7 @@
 @utility hero-background {
   background-image: url("/assets/background-hero-2.webp");
 }
+
 @utility pricing-background {
   background-image:
     linear-gradient(
@@ -175,4 +176,14 @@
       var(--color-pricing-overlay-light)
     ),
     url("/assets/pricing-card-bg.avif");
+}
+
+@utility pricing-heading-bg {
+  background: linear-gradient(
+    90deg,
+    var(--color-page),
+    var(--color-pricing-pink)
+  );
+  background-clip: text;
+  color: transparent;
 }

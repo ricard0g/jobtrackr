@@ -12,8 +12,20 @@ _Avoid_: Google user, password user, account
 The read-only email address associated with a User and used for password sign-in and Identity Link matching. A provider email may change independently and does not replace it.
 _Avoid_: Google email, editable email, provider subject
 
+**Checkout Email**:
+The address Stripe records for a buyer's initial paid Checkout. It is prefilled and fixed during JobTrackr registration, where it becomes the User's Primary Email.
+_Avoid_: Verified Email, separate registration email
+
+**Registration Claim**:
+The one-time eligibility to create a User from an unclaimed Checkout with current paid access. Its Checkout Email must match the verified address used for password or Google registration. It can be recovered through a one-time link sent to that address, and it expires when paid access ends.
+_Avoid_: Email match alone, reusable Checkout Session
+
+**Billing Customer**:
+The Stripe customer identity created for a buyer and linked to one User after registration. It persists across successive weekly subscriptions, with at most one active JobTrackr Subscription at a time. Before registration, the same one-subscription rule also applies to the Checkout Email.
+_Avoid_: User, Subscription
+
 **Verified Email**:
-A Primary Email whose ownership has been accepted from the current verification mechanism, including Google's verified-email assertion. Verification status alone never creates an Identity Link.
+A Primary Email whose ownership JobTrackr has accepted from a one-time verification link sent to the Checkout Email or from Google's verified-email assertion. Verification status alone never creates an Identity Link.
 _Avoid_: Identity Link, automatic account match
 
 **Sign-in Identity**:
@@ -48,8 +60,12 @@ _Avoid_: Parsed CV, raw text
 A role-tailored CV whose content has been drafted from Candidate Evidence for a specific Application. Once created, it is an independent artifact from its source Base CV.
 _Avoid_: Application CV, output CV
 
+**Saved CV Capacity**:
+An Application can retain at most 20 Generated CVs at once; deleting one frees space for a new generation.
+_Avoid_: Weekly generation quota, CV credits
+
 **CV Generation**:
-The creation of a Generated CV using a real drafting model. If that model is unavailable, CV Generation fails rather than returning a placeholder artifact.
+The creation of a Generated CV using a real drafting model. If that model is unavailable, CV Generation fails rather than returning a placeholder artifact. An Application may have one CV Generation in progress at a time; a User may have several in progress across different Applications.
 _Avoid_: Export, conversion
 
 **Output Format**:
@@ -67,3 +83,19 @@ _Avoid_: Keyword stuffing, verbatim paste without evidence, loose title matching
 **Google Sign-In**:
 A way for Google to verify a person's identity when they enter JobTrackr. JobTrackr uses only Google's stable subject and verified email, without accessing Google services or importing Google profile data.
 _Avoid_: Google integration, Google API access, Google connection
+
+**Public Demo**:
+A prepared, public example of JobTrackr's Kanban and Documents views, including Application details, prior CV Generations, and Generated CV previews, using fictional candidate data. Visitors may move sample Kanban cards and inspect prepared content; they cannot create or edit Applications, upload or download documents, or generate CVs.
+_Avoid_: Visitor account, live CV generation
+
+**JobTrackr Subscription**:
+A recurring weekly purchase that enables JobTrackr's paid features during a paid access period. It includes CV Generation without a per-CV credit allowance.
+_Avoid_: Lifetime purchase, CV credit pack, customer-supplied AI key
+
+**Paid Access Period**:
+A subscription week that begins with Stripe's initial subscription billing, independent of when the buyer creates a JobTrackr User. Cancelling renewal does not shorten the paid week; paid features remain available until it ends.
+_Avoid_: Billing status, scheduled cancellation
+
+**Limited Access**:
+A signed-in state reached when a User's paid access period ends or a subscription payment fails. Existing Applications remain editable, new Interviews may be added to them, and reusable Tags may be created and later attached; new Applications, CV Generation, and Base CV uploads are unavailable, while previously Generated CVs remain accessible.
+_Avoid_: Locked account, deleted account, trial
