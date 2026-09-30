@@ -1,0 +1,61 @@
+---
+import PublicDemoFrame from "./PublicDemoFrame.astro";
+---
+
+<section
+  class="hero__container [scroll-margin-top:9rem] under-768:[scroll-margin-top:5rem] flex [flex-flow:column_nowrap] justify-center items-center [row-gap:70px] [height:auto] [max-width:1100px] [width:100%] [margin:0_auto_8rem_auto] [padding-bottom:8rem] [border-bottom:1px_solid_var(--color-light-gray)]"
+  id="home-section"
+>
+  <div class="hero__content-wrapper flex [flex-flow:column_nowrap] justify-center items-center [row-gap:0.625rem] [margin-top:18vh] under-1100:[max-width:90%] under-768:[row-gap:1.125rem]">
+    <span class="badge block [max-width:fit-content] [font-size:0.75rem] uppercase text-silver bg-off-white [padding:0.125rem_1.5rem] rounded-pill [border:1px_solid_var(--color-light-gray)]">
+      SIMPLE AND CLEAR
+    </span>
+    <h1 class="hero__heading font-display [font-size:3.5rem] [font-weight:500] text-center under-768:[font-size:2.5rem] under-768:[line-height:1.25]">
+      Your job search. <br />
+      Organized.
+    </h1>
+    <p class="hero__subheading font-text text-medium-gray [font-size:0.9rem] [font-weight:500] text-center [max-width:600px] under-768:[font-size:0.875rem]">
+      Keep every Application in view, from your first submission to the final
+      decision. Track your progress and the details that matter in one place.
+    </p>
+    <div class="hero__btn-wrapper flex justify-center items-center [column-gap:1rem] [margin:1.125rem_0] under-768:[flex-flow:column_nowrap] under-768:[row-gap:1rem] under-768:[width:100%]">
+      <a
+        class="cta-btn hero-cta block [padding:0.5rem_1.5rem] text-accent-darkest [font-weight:500] capitalize bg-accent-main no-underline [box-shadow:var(--shadow-accent-light)] rounded-card [transition:all_300ms_ease] hover:[box-shadow:var(--shadow-accent-strong)] under-768:block under-768:[width:100%] under-768:text-center under-768:[padding:0.75rem_0]"
+        href="#pricing-section"
+      >
+        Subscribe
+      </a>
+      <a
+        class="secondary-btn group/secondary flex justify-center items-center [column-gap:0.25rem] [padding:0.5rem_1.5rem] text-accent-darkest [font-weight:400] capitalize [background-color:transparent] no-underline rounded-card [border:1px_solid_var(--color-silver)] [transition:all_300ms_ease] hover:[box-shadow:var(--shadow-inner-light)] under-768:block under-768:[width:100%] under-768:text-center under-768:[padding:0.75rem_0]"
+        href="#features-section"
+      >
+        <span>How it works</span>
+        <span class="secondary-btn-svg [width:0] [height:1rem] [opacity:0] [transition:all_200ms_ease] group-hover/secondary:[width:1rem] group-hover/secondary:[opacity:1] under-768:hidden">
+          <svg
+            class="lucide lucide-chevron-down-icon lucide-chevron-down"
+            fill="none"
+            height="16"
+            stroke="currentColor"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+            stroke-width="2"
+            viewBox="0 0 24 24"
+            width="16"
+            xmlns="http://www.w3.org/2000/svg"
+          >
+            <path d="m6 9 6 6 6-6"></path>
+          </svg>{" "}
+        </span>
+      </a>
+    </div>
+    <div class="hero__social-proof-wrapper flex items-center justify-center [column-gap:0.5rem]">
+      <span class="[font-size:1rem] text-dark-gray under-768:[font-size:0.875rem]">
+        &checkmark;
+      </span>
+      <span class="[font-size:1rem] text-dark-gray under-768:[font-size:0.875rem]">
+        Applications, Interviews, and Generated CVs in one place.
+      </span>
+    </div>
+  </div>
+  <PublicDemoFrame />
+</section>

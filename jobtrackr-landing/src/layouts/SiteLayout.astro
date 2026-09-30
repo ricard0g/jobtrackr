@@ -1,5 +1,7 @@
 ---
 import "../styles/global.css";
+import Navbar from "../components/Navbar.astro";
+import Footer from "../components/Footer.astro";
 
 interface Props {
   title: string;
@@ -7,13 +9,6 @@ interface Props {
 }
 
 const { title, description } = Astro.props;
-const links = [
-  { label: "Home", href: "/#home-section" },
-  { label: "Problem", href: "/#problem-section" },
-  { label: "Features", href: "/#features-section" },
-  { label: "Pricing", href: "/#pricing-section" },
-  { label: "FAQ", href: "/#faq-section" },
-];
 ---
 
 <!doctype html>
@@ -36,189 +31,8 @@ const links = [
     <script is:inline src="/scripts/landing.js" defer></script>
   </head>
   <body class="[width:100vw] [height:auto] overflow-x-hidden bg-page">
-    <header class="header__container [width:100%]">
-      <nav
-        class="header__navbar fixed [top:0] [left:50%] [transform:translateX(-50%)] flex [flex-flow:row_nowrap] justify-center items-center [max-width:1100px] [width:100%] [margin:1rem_auto_0_auto] [padding:0.25rem_1.5rem] bg-off-white [border:1px_solid_var(--color-light-gray)] rounded-card [box-shadow:var(--shadow-cool-light)] [z-index:10] under-1100:[max-width:90%] under-768:hidden"
-        aria-label="Primary"
-      >
-        <ul class="header__outer-list relative flex [flex-flow:row_nowrap] justify-between items-center [width:100%] list-none [padding:0]">
-          <li class="logo flex justify-center items-center">
-            <a
-              class="logo__link under-768:flex under-768:justify-center under-768:items-center under-768:[font-size:0.75rem] under-768:no-underline under-768:text-ink flex items-center text-ink no-underline"
-              href="/"
-            >
-              <img
-                src="/assets/jobtrackr-logo.webp"
-                alt="JobTrackr logo"
-                class="logo-image [width:60px] [height:60px] under-768:[width:40px] under-768:[height:40px]"
-              />
-              <span class="[font-size:1.25rem] font-display [font-weight:700] [letter-spacing:-0.5px]">
-                JobTrackr
-              </span>
-            </a>
-          </li>
-          <li class="header__inner-list-container absolute [left:50%] [transform:translateX(-50%)] [width:40%] under-1100:[width:55%]">
-            <ul class="header__inner-list flex [flex-flow:row_nowrap] justify-center items-center [column-gap:0.75rem] list-none [padding:0]">
-              {links.map((link) => (
-                <li>
-                  <a
-                    href={link.href}
-                    class="block text-medium-gray no-underline [transition:all_300ms_ease] hover:text-ink hover:no-underline hover:underline"
-                  >
-                    {link.label}
-                  </a>
-                </li>
-              ))}
-            </ul>
-          </li>
-          <li class="flex items-center [gap:1rem]">
-            <a
-              class="header__sign-in text-dark-gray [font-size:0.875rem] [font-weight:600] no-underline hover:underline focus-visible:[outline:2px_solid_var(--color-accent-dark)] focus-visible:[outline-offset:3px]"
-              href="https://app.jobtrakcr.com/auth/login"
-            >
-              Sign in
-            </a>
-            <a
-              class="cta-btn block [padding:0.5rem_1.5rem] text-accent-darkest [font-weight:500] capitalize bg-accent-main no-underline [box-shadow:var(--shadow-accent-light)] rounded-card [transition:all_300ms_ease] hover:[box-shadow:var(--shadow-accent-strong)]"
-              href="/#pricing-section"
-            >
-              Subscribe
-            </a>
-          </li>
-        </ul>
-      </nav>
-      <nav
-        class="header__navbar-mobile hidden under-768:fixed under-768:[top:0] under-768:[left:50%] under-768:[transform:translateX(-50%)] under-768:flex under-768:[flex-flow:row_nowrap] under-768:justify-center under-768:items-center under-768:[width:95%] under-768:[margin:1rem_auto_0_auto] under-768:[padding:0.25rem_0.75rem] under-768:bg-off-white under-768:[border:1px_solid_var(--color-light-gray)] under-768:rounded-card under-768:[box-shadow:var(--shadow-cool-light)] under-768:[z-index:10]"
-        aria-label="Mobile"
-      >
-        <ul class="header__outer-list relative flex [flex-flow:row_nowrap] justify-between items-center [width:100%] list-none [padding:0]">
-          <li class="logo flex justify-center items-center">
-            <a
-              class="logo__link under-768:flex under-768:justify-center under-768:items-center under-768:[font-size:0.75rem] under-768:no-underline under-768:text-ink"
-              href="/"
-            >
-              <img
-                src="/assets/jobtrackr-logo.webp"
-                alt="JobTrackr logo"
-                class="logo-image [width:60px] [height:60px] under-768:[width:40px] under-768:[height:40px]"
-              />
-              <span class="[font-size:1.25rem] font-display [font-weight:700] [letter-spacing:-0.5px]">
-                JobTrackr
-              </span>
-            </a>
-          </li>
-          <li class="header__button-mobile">
-            <button
-              id="mobile-button"
-              type="button"
-              aria-label="Open menu"
-              aria-expanded="false"
-              class="under-768:flex under-768:justify-center under-768:items-center under-768:[border:none] under-768:[background-color:transparent]"
-            >
-              <svg
-                xmlns="http://www.w3.org/2000/svg"
-                width="28"
-                height="28"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="#000"
-                stroke-width="2"
-                stroke-linecap="round"
-                stroke-linejoin="round"
-              >
-                <path d="M4 5h16" />
-                <path d="M4 12h16" />
-                <path d="M4 19h16" />
-              </svg>
-            </button>
-            <ul class="header__inner-list-mobile under-768:absolute under-768:flex under-768:[flex-flow:column_nowrap] under-768:[row-gap:0.5rem] under-768:[left:50%] under-768:[transform:translateX(-50%)_translateY(-5%)] under-768:[margin-top:1rem] under-768:[padding:1rem_1.75rem] under-768:[width:95%] under-768:bg-off-white under-768:[border:1px_solid_var(--color-light-gray)] under-768:rounded-card under-768:[box-shadow:var(--shadow-cool-light)] under-768:list-none under-768:[opacity:0] under-768:[pointer-events:none] under-768:[transition:all_250ms_ease-in] under-768:[&.show-inner-list-mobile]:[opacity:1] under-768:[&.show-inner-list-mobile]:[transform:translateX(-50%)_translateY(0)] under-768:[&.show-inner-list-mobile]:[pointer-events:all] under-768:[max-height:calc(100vh_-_100px)] under-768:overflow-y-auto">
-              {links.map((link) => (
-                <li class="under-768:[padding:0.9rem_0_0.5rem_0] under-768:[font-size:1.125rem] under-768:text-center under-768:[border-bottom:1px_solid_var(--color-light-gray)]">
-                  <a
-                    href={link.href}
-                    class="under-768:text-ink under-768:no-underline"
-                  >
-                    {link.label}
-                  </a>
-                </li>
-              ))}
-              <li class="under-768:[padding:0.9rem_0_0.5rem_0] under-768:[font-size:1.125rem] under-768:text-center under-768:[border-bottom:1px_solid_var(--color-light-gray)]">
-                <a
-                  href="https://app.jobtrakcr.com/auth/login"
-                  class="under-768:text-ink under-768:no-underline"
-                >
-                  Sign in
-                </a>
-              </li>
-              <li class="under-768:[padding:0.9rem_0_0.5rem_0] under-768:[font-size:1.125rem] under-768:text-center under-768:[border-bottom:1px_solid_var(--color-light-gray)] under-768:[border-bottom:none]">
-                <a
-                  class="cta-btn block [padding:0.5rem_1.5rem] text-accent-darkest [font-weight:500] capitalize bg-accent-main no-underline [box-shadow:var(--shadow-accent-light)] rounded-card [transition:all_300ms_ease] hover:[box-shadow:var(--shadow-accent-strong)] under-768:text-ink under-768:no-underline"
-                  href="/#pricing-section"
-                >
-                  Subscribe
-                </a>
-              </li>
-            </ul>
-          </li>
-        </ul>
-      </nav>
-    </header>
+    <Navbar />
     <slot />
-    <footer class="relative flex flex-row flex-wrap justify-between items-center [column-gap:3rem] [max-width:1100px] [width:100%] [margin:3rem_auto] bg-off-white [padding:0.5rem_1rem] rounded-card [border:1px_solid_var(--color-light-gray)] [box-shadow:var(--shadow-cool-light)] under-1100:[max-width:90%] under-600:flex-col under-600:[justify-content:space-around] under-600:items-center under-600:[padding:1rem] [row-gap:0.75rem]">
-      <div class="footer__year-date-wrapper under-600:[width:100%] under-600:[order:3]">
-        <p class="footer__year-date [font-size:0.875rem] text-medium-gray under-600:text-center">
-          © <span id="year-date">2026</span> JobTrackr
-        </p>
-      </div>
-      <div class="footer__made-by-wrapper static [left:50%] under-600:[width:100%]">
-        <p class="footer__made-by-text font-display under-600:[width:100%] under-600:text-center">
-          By Ricardo Guzman -{" "}
-          <a
-            href="https://github.com/ricard0g"
-            target="_blank"
-            rel="noopener noreferrer"
-            class="underline text-dark-gray [font-weight:800]"
-          >
-            Github
-          </a>
-        </p>
-      </div>
-      <div class="footer__logo-wrapper under-600:[width:100%]">
-        <img
-          src="/assets/jobtrackr-logo.webp"
-          alt=""
-          class="logo-image [width:60px] [height:60px] under-768:[width:40px] under-768:[height:40px] under-600:[width:120px] under-600:[height:120px] under-600:[margin:0_auto]"
-        />
-      </div>
-      <nav
-        class="footer__policies flex [flex-basis:100%] justify-center flex-wrap [gap:0.5rem_1.25rem] [padding-top:0.5rem] [border-top:1px_solid_var(--color-light-gray)] under-600:flex-col under-600:items-center"
-        aria-label="Support and policies"
-      >
-        <a
-          href="mailto:support@jobtrakcr.com"
-          class="hover:underline focus-visible:[outline:2px_solid_var(--color-accent-dark)] focus-visible:[outline-offset:3px] text-dark-gray [font-size:0.8rem] no-underline"
-        >
-          support@jobtrakcr.com
-        </a>
-        <a
-          href="/terms/"
-          class="hover:underline focus-visible:[outline:2px_solid_var(--color-accent-dark)] focus-visible:[outline-offset:3px] text-dark-gray [font-size:0.8rem] no-underline"
-        >
-          Terms
-        </a>
-        <a
-          href="/privacy/"
-          class="hover:underline focus-visible:[outline:2px_solid_var(--color-accent-dark)] focus-visible:[outline-offset:3px] text-dark-gray [font-size:0.8rem] no-underline"
-        >
-          Privacy
-        </a>
-        <a
-          href="/cancellation-refund/"
-          class="hover:underline focus-visible:[outline:2px_solid_var(--color-accent-dark)] focus-visible:[outline-offset:3px] text-dark-gray [font-size:0.8rem] no-underline"
-        >
-          Cancellation and Refund
-        </a>
-      </nav>
-    </footer>
+    <Footer />
   </body>
 </html>
