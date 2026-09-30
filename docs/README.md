@@ -18,3 +18,5 @@ Subproject-specific documentation lives in:
 
 - `JobTrackrApi/docs/`
 - `jobtrackr-web/docs/`
+
+- [Stripe hosted Checkout](stripe-checkout.md): test/live configuration and the durable initial-purchase boundary.

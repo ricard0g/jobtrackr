@@ -1,3 +1,8 @@
+---
+const apiOrigin =
+  import.meta.env.PUBLIC_API_ORIGIN ?? "https://app.jobtrakcr.com";
+---
+
 <section
   class="pricing__container [scroll-margin-top:9rem] under-768:[scroll-margin-top:5rem] flex [flex-flow:column_nowrap] justify-center items-center [row-gap:70px] [height:auto] [max-width:1100px] [width:100%] [margin:0_auto_8rem_auto] [padding-bottom:8rem] [border-bottom:1px_solid_var(--color-light-gray)] under-1100:[max-width:90%]"
   id="pricing-section"
@@ -49,12 +54,20 @@
           &checkmark; Weekly recurring billing; applicable tax included
         </li>
       </ul>
-      <a
+      <button
+        id="subscribe-button"
+        type="button"
+        data-api-origin={apiOrigin}
         class="cta-btn pricing-cta block [padding:0.5rem_1.5rem] text-accent-darkest [font-weight:500] capitalize bg-accent-main no-underline [box-shadow:var(--shadow-accent-light)] rounded-card [transition:all_300ms_ease] hover:[box-shadow:var(--shadow-accent-strong)] [width:100%] text-center"
-        href="https://app.jobtrakcr.com/subscribe"
       >
         Subscribe
-      </a>
+      </button>
+      <p
+        id="checkout-message"
+        role="status"
+        aria-live="polite"
+        class="text-off-white"
+      ></p>
       <p class="pricing-card__signin [align-self:center] text-off-white [font-size:0.85rem]">
         Already have a User?{" "}
         <a
@@ -67,3 +80,50 @@
     </article>
   </div>
 </section>
+
+<script>
+  const button =
+    document.querySelector<HTMLButtonElement>("#subscribe-button")!;
+  const message =
+    document.querySelector<HTMLParagraphElement>("#checkout-message")!;
+  button.addEventListener("click", async () => {
+    if (button.disabled) return;
+    button.disabled = true;
+    message.textContent = "Opening Stripe Checkout…";
+    try {
+      let requestId = sessionStorage.getItem("jobtrackr-checkout-request");
+      if (!requestId) {
+        requestId = crypto.randomUUID();
+        sessionStorage.setItem("jobtrackr-checkout-request", requestId);
+      }
+      const response = await fetch(
+        `${button.dataset.apiOrigin}/api/v1/billing/checkouts`,
+        {
+          method: "POST",
+          headers: { "Idempotency-Key": requestId },
+        },
+      );
+      const body = await response.json();
+      if (!response.ok) {
+        if (body.code === "CHECKOUT_EXPIRED") {
+          sessionStorage.removeItem("jobtrackr-checkout-request");
+          button.disabled = false;
+          button.click();
+          return;
+        }
+        message.textContent =
+          body.message ?? "Checkout is unavailable. Please try again later.";
+        button.disabled = false;
+        return;
+      }
+      const url = new URL(body.url);
+      if (url.protocol !== "https:" || url.hostname !== "checkout.stripe.com") {
+        throw new Error("Invalid Checkout URL");
+      }
+      window.location.assign(url.href);
+    } catch {
+      message.textContent = "Could not open Checkout. Please try again.";
+      button.disabled = false;
+    }
+  });
+</script>

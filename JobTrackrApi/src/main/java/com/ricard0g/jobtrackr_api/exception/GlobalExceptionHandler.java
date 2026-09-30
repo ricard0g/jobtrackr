@@ -18,6 +18,13 @@ import jakarta.validation.ConstraintViolationException;
 @RestControllerAdvice
 public class GlobalExceptionHandler {
 
+    @ExceptionHandler(com.ricard0g.jobtrackr_api.billing.BillingException.class)
+    public ResponseEntity<ErrorResponse> handleBilling(
+            final com.ricard0g.jobtrackr_api.billing.BillingException exception) {
+        return ResponseEntity.status(exception.getStatus())
+                .body(ErrorResponse.of(exception.getCode(), exception.getMessage()));
+    }
+
     @ExceptionHandler(CvGenerationException.class)
     public ResponseEntity<ErrorResponse> handleCvGeneration(final CvGenerationException exception) {
         return ResponseEntity.status(exception.getStatus())

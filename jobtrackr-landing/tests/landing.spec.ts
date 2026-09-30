@@ -76,8 +76,8 @@ test("visitor sees the weekly offer and can reach support and policy pages", asy
   await expect(pricing).toContainText("20 saved Generated CVs per Application");
   await expect(pricing).not.toContainText("USD");
   await expect(
-    pricing.getByRole("link", { name: "Subscribe" }),
-  ).toHaveAttribute("href", "https://app.jobtrakcr.com/subscribe");
+    pricing.getByRole("button", { name: "Subscribe", exact: true }),
+  ).toBeVisible();
   await expect(pricing.getByRole("link", { name: "Sign in" })).toHaveAttribute(
     "href",
     "https://app.jobtrakcr.com/auth/login",

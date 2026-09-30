@@ -59,6 +59,8 @@ public class SecurityConfig {
                             return authHeader != null && authHeader.startsWith(BEARER_PREFIX);
                         })
                         .ignoringRequestMatchers(
+                                "/api/v1/billing/checkouts",
+                                "/api/v1/billing/webhook",
                                 "/api/v1/auth/register",
                                 "/api/v1/auth/login",
                                 "/actuator/health",
@@ -71,12 +73,15 @@ public class SecurityConfig {
                         .accessDeniedHandler(accessDeniedHandler))
                 .authorizeHttpRequests(auth -> auth
                         .requestMatchers(
+                                "/api/v1/billing/checkouts",
+                                "/api/v1/billing/webhook",
                                 "/api/v1/auth/register",
                                 "/api/v1/auth/login",
                                 "/api/v1/auth/refresh",
                                 "/api/v1/auth/logout",
                                 "/api/v1/auth/csrf",
                                 "/api/v1/auth/providers",
+                                "/api/v1/billing/checkouts/status",
                                 "/api/v1/auth/oauth2/**",
                                 "/actuator/health",
                                 "/actuator/health/liveness",

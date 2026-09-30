@@ -1,0 +1,84 @@
+---
+import SiteLayout from "../layouts/SiteLayout.astro";
+const apiOrigin =
+  import.meta.env.PUBLIC_API_ORIGIN ?? "https://app.jobtrakcr.com";
+---
+
+<SiteLayout
+  title="Payment status | JobTrackr"
+  description="Check your JobTrackr payment confirmation."
+>
+  <main class="section-wrap [max-width:760px] [width:calc(100%_-_2rem)] [min-height:55vh] [margin:11rem_auto_7rem]">
+    <h1 class="font-display text-4xl font-semibold">Your payment status</h1>
+    <p
+      id="payment-status"
+      data-api-origin={apiOrigin}
+      role="status"
+      aria-live="polite"
+      class="my-6"
+    >
+      Waiting for verified payment confirmation…
+    </p>
+    <p id="paid-period" class="my-6"></p>
+    <p class="my-6">
+      Your paid week starts at Stripe billing. If you need help completing
+      registration, contact{" "}
+      <a href="mailto:support@jobtrakcr.com" class="text-accent-darkest">
+        support@jobtrakcr.com
+      </a>{" "}
+      using your Checkout Email.
+    </p>
+    <a href="/" class="text-accent-darkest">
+      Back to JobTrackr
+    </a>
+  </main>
+</SiteLayout>
+
+<script>
+  const message =
+    document.querySelector<HTMLParagraphElement>("#payment-status")!;
+  const period = document.querySelector<HTMLParagraphElement>("#paid-period")!;
+  const fragment = location.hash.slice(1);
+  history.replaceState(null, "", location.pathname);
+  if (fragment) sessionStorage.setItem("jobtrackr-checkout-token", fragment);
+  const token = fragment || sessionStorage.getItem("jobtrackr-checkout-token");
+  async function checkPayment(attempt = 0): Promise<void> {
+    if (!token) {
+      message.textContent =
+        "No Checkout was provided. A return to this page alone does not confirm payment.";
+      return;
+    }
+    try {
+      const response = await fetch(
+        `${message.dataset.apiOrigin}/api/v1/billing/checkouts/status`,
+        {
+          headers: { "X-Checkout-Token": token },
+          cache: "no-store",
+        },
+      );
+      if (!response.ok) throw new Error("Payment status unavailable");
+      const body = await response.json();
+      if (body.registrationEligible) {
+        message.textContent =
+          "Payment confirmed. Your purchase is ready for registration.";
+        period.textContent = `Your paid week runs from ${new Date(body.paidPeriodStart).toLocaleString()} until ${new Date(body.expiresAt).toLocaleString()}.`;
+        return;
+      }
+      if (body.expiresAt && new Date(body.expiresAt).getTime() <= Date.now()) {
+        message.textContent =
+          "This paid week has ended. Registration requires a new purchase.";
+        return;
+      }
+      if (attempt < 45) {
+        window.setTimeout(() => void checkPayment(attempt + 1), 2000);
+        return;
+      }
+      message.textContent =
+        "Payment has not been confirmed yet. Revisit this page or contact support; please avoid another purchase.";
+    } catch {
+      message.textContent =
+        "Payment status is temporarily unavailable. Refresh this page or contact support; please avoid another purchase.";
+    }
+  }
+  void checkPayment();
+</script>
