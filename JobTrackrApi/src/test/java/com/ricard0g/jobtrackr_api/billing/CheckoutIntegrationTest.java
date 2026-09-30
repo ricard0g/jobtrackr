@@ -4,6 +4,8 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.doReturn;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
@@ -166,6 +168,66 @@ class CheckoutIntegrationTest {
         sessionEvent("evt_unpaid", "checkout.session.completed", "unpaid").andExpect(status().isOk());
         checkoutStatus(checkout).andExpect(status().isOk())
                 .andExpect(jsonPath("$.registrationEligible").value(false));
+    }
+
+    @Test
+    void anUnpaidAttemptDoesNotBlockASuccessfulPurchaseForTheSameEmail() throws Exception {
+        // given
+        final Started unpaid = start("unpaid_attempt");
+        when(stripe.retrievePurchase("cs_unpaid_attempt")).thenReturn(new StripeGateway.Purchase(
+                "cs_unpaid_attempt", "cus_unpaid_attempt", "retry@example.com", "sub_unpaid_attempt", "incomplete",
+                "in_unpaid_attempt", "open", "price_weekly", Instant.now(),
+                Instant.now().plusSeconds(WEEK_SECONDS), "open"));
+        webhook("evt_unpaid_attempt", "invoice.payment_failed", "{\"id\":\"in_unpaid_attempt\",\"parent\":{"
+                + "\"subscription_details\":{\"metadata\":{\"checkout_id\":\"" + unpaid.requestId() + "\"}}}}")
+                .andExpect(status().isOk());
+        final Started paid = start("successful_retry");
+        when(stripe.retrievePurchase("cs_successful_retry"))
+                .thenReturn(paidPurchase("successful_retry", "retry@example.com"));
+        when(stripe.reverseDuplicate(paid.requestId(), "sub_successful_retry", "in_successful_retry"))
+                .thenReturn("duplicate_refunded");
+        // when
+        sessionEvent("evt_successful_retry", "checkout.session.completed", "successful_retry")
+                .andExpect(status().isOk());
+        // then
+        checkoutStatus(unpaid).andExpect(status().isOk())
+                .andExpect(jsonPath("$.registrationEligible").value(false));
+        checkoutStatus(paid).andExpect(status().isOk())
+                .andExpect(jsonPath("$.registrationEligible").value(true));
+    }
+
+    @Test
+    void aDelayedEventForAnEndedPurchaseDoesNotRefundItAfterAReplacementPurchase() throws Exception {
+        // given
+        final Started original = start("ended_original");
+        final StripeGateway.Purchase originalPayment = paidPurchase("ended_original", "replacement@example.com");
+        when(stripe.retrievePurchase("cs_ended_original")).thenReturn(originalPayment);
+        sessionEvent("evt_ended_original_paid", "checkout.session.completed", "ended_original")
+                .andExpect(status().isOk());
+        when(stripe.retrievePurchase("cs_ended_original")).thenReturn(new StripeGateway.Purchase(
+                originalPayment.sessionId(), originalPayment.customerId(), originalPayment.email(),
+                originalPayment.subscriptionId(), "canceled", originalPayment.invoiceId(), "paid", "price_weekly",
+                originalPayment.periodStart(), originalPayment.periodEnd(), "complete"));
+        final String subscriptionObject = "{\"id\":\"sub_ended_original\",\"metadata\":{\"checkout_id\":\""
+                + original.requestId() + "\"}}";
+        webhook("evt_ended_original_updated", "customer.subscription.updated", subscriptionObject)
+                .andExpect(status().isOk());
+        final Started replacement = start("replacement_purchase");
+        when(stripe.retrievePurchase("cs_replacement_purchase"))
+                .thenReturn(paidPurchase("replacement_purchase", "replacement@example.com"));
+        sessionEvent("evt_replacement_paid", "checkout.session.completed", "replacement_purchase")
+                .andExpect(status().isOk());
+        when(stripe.reverseDuplicate(original.requestId(), "sub_ended_original", "in_ended_original"))
+                .thenReturn("duplicate_refunded");
+        // when
+        webhook("evt_ended_original_deleted", "customer.subscription.deleted", subscriptionObject)
+                .andExpect(status().isOk());
+        // then
+        verify(stripe, never()).reverseDuplicate(original.requestId(), "sub_ended_original", "in_ended_original");
+        checkoutStatus(original).andExpect(status().isOk())
+                .andExpect(jsonPath("$.registrationEligible").value(false));
+        checkoutStatus(replacement).andExpect(status().isOk())
+                .andExpect(jsonPath("$.registrationEligible").value(true));
     }
 
     @Test

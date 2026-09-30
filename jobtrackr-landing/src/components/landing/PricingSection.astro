@@ -86,6 +86,9 @@ const apiOrigin =
     document.querySelector<HTMLButtonElement>("#subscribe-button")!;
   const message =
     document.querySelector<HTMLParagraphElement>("#checkout-message")!;
+  window.addEventListener("pageshow", (event) => {
+    if (event.persisted) button.disabled = false;
+  });
   button.addEventListener("click", async () => {
     if (button.disabled) return;
     button.disabled = true;

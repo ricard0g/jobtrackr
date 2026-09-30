@@ -133,9 +133,11 @@ public class BillingRepository {
         }
         final boolean ended = "canceled".equals(purchase.subscriptionStatus())
                 || "incomplete_expired".equals(purchase.subscriptionStatus());
+        final boolean initialPaymentConfirmed = purchase.subscriptionId() != null
+                && "paid".equals(purchase.paymentStatus()) && "complete".equals(purchase.sessionStatus());
         final CheckoutState state = "expired".equals(purchase.sessionStatus()) ? CheckoutState.EXPIRED
                 : ended ? CheckoutState.ENDED
-                : purchase.subscriptionId() != null ? CheckoutState.PAID : CheckoutState.OPEN;
+                : initialPaymentConfirmed ? CheckoutState.PAID : CheckoutState.OPEN;
         jdbc.sql("UPDATE billing_checkouts SET state = :state WHERE id = :id")
                 .param("state", state.name()).param("id", checkout.id()).update();
         if (paid) {

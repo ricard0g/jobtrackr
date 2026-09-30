@@ -56,7 +56,9 @@ public class BillingEventTransactions {
         if (purchase.subscriptionId() != null) {
             repository.bindCustomer(checkout, purchase);
             checkout = repository.checkout(checkout.id()).orElseThrow();
-            if (repository.hasAnotherPurchase(checkout, purchase)) {
+            final boolean endedSubscription = "canceled".equals(purchase.subscriptionStatus())
+                    || "incomplete_expired".equals(purchase.subscriptionStatus());
+            if (!endedSubscription && repository.hasAnotherPurchase(checkout, purchase)) {
                 repository.markDuplicate(checkout, purchase);
                 return repository.duplicate(checkout.id());
             }
