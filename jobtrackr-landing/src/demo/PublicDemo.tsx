@@ -40,9 +40,6 @@ export function PublicDemo() {
             </button>
           ))}
         </nav>
-        <p className="text-xs text-medium-gray">
-          Preview with fictional data · changes reset on reload
-        </p>
       </header>
       <main className="flex min-h-0 flex-1 flex-col">
         <div
