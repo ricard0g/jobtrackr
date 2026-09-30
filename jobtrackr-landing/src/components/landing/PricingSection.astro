@@ -89,7 +89,7 @@ const apiOrigin =
   button.addEventListener("click", async () => {
     if (button.disabled) return;
     button.disabled = true;
-    message.textContent = "Opening Stripe Checkout…";
+    message.textContent = "";
     try {
       let requestId = sessionStorage.getItem("jobtrackr-checkout-request");
       if (!requestId) {
