@@ -17,9 +17,11 @@
     "@dnd-kit/react": "^0.4.0",
     "astro": "^7.3.5",
     "lucide-react": "^1.48.0",
+    "radix-ui": "^1.6.7",
     "react": "^19.3.0",
     "react-dom": "^19.3.0",
-    "react-markdown": "^10.1.0"
+    "react-pdf": "^10.5.0",
+    "tailwind-merge": "^3.7.0"
   },
   "devDependencies": {
     "@astrojs/check": "^0.9.4",

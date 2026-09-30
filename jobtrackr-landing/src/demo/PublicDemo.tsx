@@ -50,7 +50,9 @@ export function PublicDemo() {
         >
           <DemoKanban onOpenApplication={setOpenApplication} />
         </div>
-        {workspace === "documents" ? <DemoDocuments /> : null}
+        {workspace === "documents" ? (
+          <DemoDocuments onOpenApplication={setOpenApplication} />
+        ) : null}
       </main>
       {openApplication ? (
         <ApplicationPreview

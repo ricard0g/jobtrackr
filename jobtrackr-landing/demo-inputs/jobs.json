@@ -1,7 +1,0 @@
-[
-  { "filename": "alex-rivera-cobalt-studio-v1.md", "job_description": "Cobalt Studio (fictional) seeks a UI Engineer to build accessible, responsive React and TypeScript interfaces, collaborate with designers, maintain a component library, and test user journeys with Playwright." },
-  { "filename": "alex-rivera-brightline-health-v1.md", "job_description": "Brightline Health (fictional) seeks a Frontend Developer to build accessible React interfaces for an appointment dashboard. Work includes REST API integration, loading and error states, responsive layouts, and collaboration with backend engineers." },
-  { "filename": "alex-rivera-northwind-labs-v1.md", "job_description": "Northwind Labs (fictional) seeks a Senior Frontend Engineer to maintain a React and TypeScript component library, review code, improve accessibility, and deliver responsive operations dashboards." },
-  { "filename": "alex-rivera-northwind-labs-v2.md", "job_description": "Northwind Labs (fictional) seeks a Senior Frontend Engineer to maintain a React and TypeScript component library, review code, improve accessibility, and deliver responsive operations dashboards. The team also values Playwright integration testing and reducing JavaScript bundle sizes." },
-  { "filename": "alex-rivera-fernway-bank-v1.md", "job_description": "Fernway Bank (fictional) seeks a Frontend Platform Engineer to maintain shared React and TypeScript components, improve keyboard and screen-reader accessibility, reduce bundle sizes, and support other product teams with integration tests and code review." }
-]

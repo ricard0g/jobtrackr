@@ -115,7 +115,7 @@ export const demoApplications: DemoApplication[] = [
       {
         id: 21,
         status: "COMPLETED",
-        format: "MD",
+        format: "PDF",
         requestedAt: "2026-09-24T08:12:00Z",
         completedAt: "2026-09-24T08:13:10Z",
         generatedCvVersion: 1,
@@ -125,9 +125,9 @@ export const demoApplications: DemoApplication[] = [
     generatedCvs: [
       {
         version: 1,
-        format: "MD",
-        filename: "alex-rivera-cobalt-studio-v1.md",
-        byteSize: 1501,
+        format: "PDF",
+        filename: "application-2-cv-v1.pdf",
+        byteSize: 20_145,
         createdAt: "2026-09-24T08:13:10Z",
       },
     ],
@@ -150,7 +150,7 @@ export const demoApplications: DemoApplication[] = [
       {
         id: 31,
         status: "COMPLETED",
-        format: "MD",
+        format: "PDF",
         requestedAt: "2026-09-14T17:40:00Z",
         completedAt: "2026-09-14T17:41:22Z",
         generatedCvVersion: 1,
@@ -160,9 +160,9 @@ export const demoApplications: DemoApplication[] = [
     generatedCvs: [
       {
         version: 1,
-        format: "MD",
-        filename: "alex-rivera-brightline-health-v1.md",
-        byteSize: 1431,
+        format: "PDF",
+        filename: "application-3-cv-v1.pdf",
+        byteSize: 20_145,
         createdAt: "2026-09-14T17:41:22Z",
       },
     ],
@@ -200,7 +200,7 @@ export const demoApplications: DemoApplication[] = [
       {
         id: 43,
         status: "COMPLETED",
-        format: "MD",
+        format: "PDF",
         requestedAt: "2026-09-12T09:05:00Z",
         completedAt: "2026-09-12T09:06:14Z",
         generatedCvVersion: 2,
@@ -209,7 +209,7 @@ export const demoApplications: DemoApplication[] = [
       {
         id: 42,
         status: "FAILED",
-        format: "MD",
+        format: "PDF",
         requestedAt: "2026-09-12T08:51:00Z",
         completedAt: "2026-09-12T08:52:03Z",
         generatedCvVersion: null,
@@ -218,7 +218,7 @@ export const demoApplications: DemoApplication[] = [
       {
         id: 41,
         status: "COMPLETED",
-        format: "MD",
+        format: "PDF",
         requestedAt: "2026-09-07T18:20:00Z",
         completedAt: "2026-09-07T18:21:31Z",
         generatedCvVersion: 1,
@@ -228,16 +228,16 @@ export const demoApplications: DemoApplication[] = [
     generatedCvs: [
       {
         version: 2,
-        format: "MD",
-        filename: "alex-rivera-northwind-labs-v2.md",
-        byteSize: 1449,
+        format: "PDF",
+        filename: "application-4-cv-v2.pdf",
+        byteSize: 20_145,
         createdAt: "2026-09-12T09:06:14Z",
       },
       {
         version: 1,
-        format: "MD",
-        filename: "alex-rivera-northwind-labs-v1.md",
-        byteSize: 1439,
+        format: "PDF",
+        filename: "application-4-cv-v1.pdf",
+        byteSize: 20_145,
         createdAt: "2026-09-07T18:21:31Z",
       },
     ],
@@ -293,7 +293,7 @@ export const demoApplications: DemoApplication[] = [
       {
         id: 61,
         status: "COMPLETED",
-        format: "MD",
+        format: "PDF",
         requestedAt: "2026-08-17T11:02:00Z",
         completedAt: "2026-08-17T11:03:05Z",
         generatedCvVersion: 1,
@@ -303,9 +303,9 @@ export const demoApplications: DemoApplication[] = [
     generatedCvs: [
       {
         version: 1,
-        format: "MD",
-        filename: "alex-rivera-fernway-bank-v1.md",
-        byteSize: 1481,
+        format: "PDF",
+        filename: "application-6-cv-v1.pdf",
+        byteSize: 20_145,
         createdAt: "2026-08-17T11:03:05Z",
       },
     ],

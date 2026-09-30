@@ -21,19 +21,13 @@ On Vercel, set the root directory to `jobtrackr-landing`. Astro builds to `dist/
 
 `/demo` is a standalone React page (`src/demo/`) that the hero embeds through a same-origin `<iframe src="/demo">`. The decorative Safari-style bar sits above the iframe in `index.astro`, never over it. The demo renders client-side only from the fictional data in `src/demo/demo-data.ts`; card moves live in memory, and a reload restores the prepared board. It makes no API, authentication, or persistence requests and offers no create, edit, upload, download, or generation controls. Unlike the landing, the demo page loads Tailwind preflight so its controls match the app.
 
-### Fictional Generated CV assets
+### Documents and the sample PDF
 
-Documents lists the five Generated CVs attached to the prepared Applications. Each row opens its own local Markdown asset in a responsive, read-only preview. The browser only requests static files under `/demo-cvs/`; it never calls a generation service. Navigation preserves temporary Kanban moves, and reload restores the board and closes the preview.
+The demo adapts `jobtrackr-web/src/routes/DocumentsRoute.tsx` and its `DocumentTable`, `DocumentPreviewDialog`, and `PdfDocumentViewer` components. It uses the same Documents tabs, Recent files strip, sortable columns, table surfaces, placeholder rows, pagination footer, and responsive icon actions. The Base CV tab shows an empty prepared library. Application actions open the existing fictional details.
 
-The files in `public/demo-cvs/` were produced in advance with the **real app's FastAPI CV generation pipeline and Gemini provider**, using only the fictional Base CV and job descriptions in `demo-inputs/`. No Spring User, database record, private document, R2 upload, or development mock provider was used. Markdown is an output format supported by the signed-in app. `demo-inputs/provenance.json` records the real response model/workflow headers, generation timestamps, byte sizes, and SHA-256 hashes. Table dates represent the prepared fictional history.
+`public/demo-cvs/application-3-cv-v1.pdf` is an unchanged copy of the example PDF supplied at `tmp/application-3-cv-v1.pdf`. All five fictional Generated CV rows use this one sample for preview; their filenames and dates represent prepared library metadata. The former generated Markdown samples and regeneration script have been removed.
 
-To deliberately regenerate the public samples, start the real local CV service with Gemini configured, then run from the repository root with its service token in the environment:
-
-```sh
-cv-generation-service/.venv/bin/python jobtrackr-landing/scripts/generate-demo-cvs.py
-```
-
-This script uses the service's existing `httpx` dependency and requires `CV_GENERATION_SERVICE_TOKEN`. `CV_GENERATION_SERVICE_BASE_URL` defaults to `http://localhost:8081`. It refuses the fake provider. Review the generated files for fictional content and update the prepared byte sizes before committing. Generation is never part of a landing build. The preview exposes no upload, download, or generation action; public files remain technically saveable outside the interface.
+The viewer uses `react-pdf` with a locally bundled PDF.js worker, selectable text, page controls, zoom, fit-to-width, and retry. The initial fit adapts to the available width, including mobile viewports. PDF annotations are omitted to keep the example preview-only. There are no upload, download, delete, or generation controls, and no live API, User, or persistence requests. The public PDF remains technically saveable outside the interface.
 
 ## Launch dependencies
 
