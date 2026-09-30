@@ -6,6 +6,8 @@ export type ApplicationStatus =
 
 export type RemoteType = "ON_SITE" | "HYBRID" | "REMOTE";
 
+export type DemoDocumentFormat = "PDF" | "DOCX" | "MD";
+
 export interface DemoTag {
   name: string;
   color: string;
@@ -22,7 +24,7 @@ export interface DemoInterview {
 export interface DemoCvGeneration {
   id: number;
   status: "COMPLETED" | "FAILED";
-  format: "PDF" | "DOCX" | "MD";
+  format: DemoDocumentFormat;
   requestedAt: string;
   completedAt: string;
   generatedCvVersion: number | null;
@@ -31,7 +33,7 @@ export interface DemoCvGeneration {
 
 export interface DemoGeneratedCv {
   version: number;
-  format: "PDF" | "DOCX" | "MD";
+  format: DemoDocumentFormat;
   filename: string;
   byteSize: number;
   createdAt: string;
@@ -113,7 +115,7 @@ export const demoApplications: DemoApplication[] = [
       {
         id: 21,
         status: "COMPLETED",
-        format: "PDF",
+        format: "MD",
         requestedAt: "2026-09-24T08:12:00Z",
         completedAt: "2026-09-24T08:13:10Z",
         generatedCvVersion: 1,
@@ -123,9 +125,9 @@ export const demoApplications: DemoApplication[] = [
     generatedCvs: [
       {
         version: 1,
-        format: "PDF",
-        filename: "alex-rivera-cobalt-studio-v1.pdf",
-        byteSize: 84_210,
+        format: "MD",
+        filename: "alex-rivera-cobalt-studio-v1.md",
+        byteSize: 1501,
         createdAt: "2026-09-24T08:13:10Z",
       },
     ],
@@ -148,7 +150,7 @@ export const demoApplications: DemoApplication[] = [
       {
         id: 31,
         status: "COMPLETED",
-        format: "DOCX",
+        format: "MD",
         requestedAt: "2026-09-14T17:40:00Z",
         completedAt: "2026-09-14T17:41:22Z",
         generatedCvVersion: 1,
@@ -158,9 +160,9 @@ export const demoApplications: DemoApplication[] = [
     generatedCvs: [
       {
         version: 1,
-        format: "DOCX",
-        filename: "alex-rivera-brightline-health-v1.docx",
-        byteSize: 31_904,
+        format: "MD",
+        filename: "alex-rivera-brightline-health-v1.md",
+        byteSize: 1431,
         createdAt: "2026-09-14T17:41:22Z",
       },
     ],
@@ -198,7 +200,7 @@ export const demoApplications: DemoApplication[] = [
       {
         id: 43,
         status: "COMPLETED",
-        format: "PDF",
+        format: "MD",
         requestedAt: "2026-09-12T09:05:00Z",
         completedAt: "2026-09-12T09:06:14Z",
         generatedCvVersion: 2,
@@ -207,7 +209,7 @@ export const demoApplications: DemoApplication[] = [
       {
         id: 42,
         status: "FAILED",
-        format: "PDF",
+        format: "MD",
         requestedAt: "2026-09-12T08:51:00Z",
         completedAt: "2026-09-12T08:52:03Z",
         generatedCvVersion: null,
@@ -216,7 +218,7 @@ export const demoApplications: DemoApplication[] = [
       {
         id: 41,
         status: "COMPLETED",
-        format: "DOCX",
+        format: "MD",
         requestedAt: "2026-09-07T18:20:00Z",
         completedAt: "2026-09-07T18:21:31Z",
         generatedCvVersion: 1,
@@ -226,16 +228,16 @@ export const demoApplications: DemoApplication[] = [
     generatedCvs: [
       {
         version: 2,
-        format: "PDF",
-        filename: "alex-rivera-northwind-labs-v2.pdf",
-        byteSize: 91_532,
+        format: "MD",
+        filename: "alex-rivera-northwind-labs-v2.md",
+        byteSize: 1449,
         createdAt: "2026-09-12T09:06:14Z",
       },
       {
         version: 1,
-        format: "DOCX",
-        filename: "alex-rivera-northwind-labs-v1.docx",
-        byteSize: 33_118,
+        format: "MD",
+        filename: "alex-rivera-northwind-labs-v1.md",
+        byteSize: 1439,
         createdAt: "2026-09-07T18:21:31Z",
       },
     ],
@@ -291,7 +293,7 @@ export const demoApplications: DemoApplication[] = [
       {
         id: 61,
         status: "COMPLETED",
-        format: "PDF",
+        format: "MD",
         requestedAt: "2026-08-17T11:02:00Z",
         completedAt: "2026-08-17T11:03:05Z",
         generatedCvVersion: 1,
@@ -301,9 +303,9 @@ export const demoApplications: DemoApplication[] = [
     generatedCvs: [
       {
         version: 1,
-        format: "PDF",
-        filename: "alex-rivera-fernway-bank-v1.pdf",
-        byteSize: 88_402,
+        format: "MD",
+        filename: "alex-rivera-fernway-bank-v1.md",
+        byteSize: 1481,
         createdAt: "2026-08-17T11:03:05Z",
       },
     ],

@@ -84,6 +84,13 @@ test("visitor moves fictional cards temporarily and reload restores the board", 
   await expect(card(column(page, "In Review"), "Quanta Freight")).toBeVisible();
   await expect(card(column(page, "Applied"), "Quanta Freight")).toHaveCount(0);
 
+  await page.getByRole("button", { name: "Documents", exact: true }).click();
+  await expect(
+    page.getByRole("table", { name: "Generated CVs" }),
+  ).toBeVisible();
+  await page.getByRole("button", { name: "Kanban", exact: true }).click();
+  await expect(card(column(page, "In Review"), "Quanta Freight")).toBeVisible();
+
   await page.reload();
 
   await expect(card(column(page, "Applied"), "Quanta Freight")).toBeVisible();
