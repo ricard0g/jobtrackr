@@ -241,6 +241,14 @@ export async function login(request: LoginRequest) {
 	return response;
 }
 
+export async function recoverRegistration(email: string) {
+	return authRequest<void>("/registration/recovery", {
+		method: "POST",
+		headers: jsonHeaders,
+		body: JSON.stringify({ email }),
+	});
+}
+
 export async function getRegistrationVerification(token: string) {
 	return authRequest<{ email: string; paidUntil: string }>(
 		"/registration/verification",

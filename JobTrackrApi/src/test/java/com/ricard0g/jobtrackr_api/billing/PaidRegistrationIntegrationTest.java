@@ -8,6 +8,9 @@ import static org.mockito.Mockito.clearInvocations;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.timeout;
+import static org.mockito.Mockito.after;
+import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
@@ -143,6 +146,122 @@ class PaidRegistrationIntegrationTest {
                 .andExpect(status().isForbidden());
         checkoutStatus(checkout).andExpect(status().isOk())
                 .andExpect(jsonPath("$.registrationEligible").value(false));
+    }
+
+    @Test
+    void recoveryDeliversToCheckoutEmailAndConsumesTheOriginalPaidClaimOnce() throws Exception {
+        final Started checkout = start("recovery");
+        final StripeGateway.Purchase purchase = paidPurchase("recovery", "recovery@example.com");
+        when(stripe.retrievePurchase("cs_recovery")).thenReturn(purchase);
+        sessionEvent("evt_recovery", "checkout.session.completed", "recovery").andExpect(status().isOk());
+
+        recover("RECOVERY@example.com").andExpect(status().isAccepted());
+        final ArgumentCaptor<String> token = ArgumentCaptor.forClass(String.class);
+        verify(emailSender, timeout(5000)).sendVerification(eq("recovery@example.com"), token.capture(), any(Instant.class));
+        http.perform(get("/api/v1/auth/registration/verification").header("X-Verification-Token", token.getValue()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.email").value("recovery@example.com"))
+                .andExpect(jsonPath("$.paidUntil").value(purchase.periodEnd().toString()));
+        register("different@example.com", token.getValue()).andExpect(status().isForbidden());
+        register("recovery@example.com", token.getValue()).andExpect(status().isCreated());
+        register("recovery@example.com", token.getValue()).andExpect(status().isForbidden());
+        http.perform(get("/api/v1/auth/registration/verification").header("X-Verification-Token", token.getValue()))
+                .andExpect(status().isForbidden());
+        clearInvocations(emailSender);
+        recover("recovery@example.com").andExpect(status().isAccepted());
+        verifyNoInteractions(emailSender);
+        checkoutStatus(checkout).andExpect(jsonPath("$.expiresAt").value(purchase.periodEnd().toString()));
+    }
+
+    @Test
+    void recoveryResponsesDoNotRevealUnknownUnpaidOrExpiredPurchases() throws Exception {
+        recover("unknown-recovery@example.com").andExpect(status().isAccepted())
+                .andExpect(jsonPath("$.message").value("If an unclaimed paid purchase is eligible, "
+                        + "a registration link will be sent to its Checkout Email."))
+                .andExpect(org.springframework.test.web.servlet.result.MockMvcResultMatchers.header()
+                        .string("Cache-Control", "no-store"));
+        final Started unpaid = start("recovery_unpaid");
+        recover("unpaid-recovery@example.com").andExpect(status().isAccepted());
+        checkoutStatus(unpaid).andExpect(jsonPath("$.registrationEligible").value(false));
+        start("recovery_ended");
+        when(stripe.retrievePurchase("cs_recovery_ended"))
+                .thenReturn(paidPurchase("recovery_ended", "ended-recovery@example.com"));
+        sessionEvent("evt_recovery_ended", "checkout.session.completed", "recovery_ended")
+                .andExpect(status().isOk());
+        jdbc.sql("UPDATE registration_claims SET expires_at = clock_timestamp() - interval '1 second' "
+                + "WHERE checkout_id = (SELECT id FROM billing_checkouts WHERE stripe_session_id = :id)")
+                .param("id", "cs_recovery_ended").update();
+        recover("ended-recovery@example.com").andExpect(status().isAccepted());
+        verify(emailSender, after(300).never()).sendVerification(anyString(), anyString(), any(Instant.class));
+    }
+
+    @Test
+    void recoveryLinkExpiresAndAFreshLinkCannotOutliveThePaidWeek() throws Exception {
+        start("recovery_expiry");
+        when(stripe.retrievePurchase("cs_recovery_expiry"))
+                .thenReturn(paidPurchase("recovery_expiry", "expiry-recovery@example.com"));
+        sessionEvent("evt_recovery_expiry", "checkout.session.completed", "recovery_expiry")
+                .andExpect(status().isOk());
+        recover("expiry-recovery@example.com").andExpect(status().isAccepted());
+        final ArgumentCaptor<String> token = ArgumentCaptor.forClass(String.class);
+        verify(emailSender, timeout(5000)).sendVerification(eq("expiry-recovery@example.com"), token.capture(),
+                any(Instant.class));
+        http.perform(get("/api/v1/auth/registration/verification").header("X-Verification-Token", token.getValue()))
+                .andExpect(status().isOk());
+        jdbc.sql("UPDATE registration_email_verifications SET expires_at = clock_timestamp() - interval '1 second' "
+                + "WHERE token_hash = :hash").param("hash", RegistrationService.hash(token.getValue())).update();
+        register("expiry-recovery@example.com", token.getValue()).andExpect(status().isForbidden());
+        clearInvocations(emailSender);
+        jdbc.sql("UPDATE registration_claims SET expires_at = clock_timestamp() + interval '10 minutes' "
+                + "WHERE checkout_id = (SELECT id FROM billing_checkouts WHERE stripe_session_id = :id)")
+                .param("id", "cs_recovery_expiry").update();
+        recover("expiry-recovery@example.com").andExpect(status().isAccepted());
+        final ArgumentCaptor<String> fresh = ArgumentCaptor.forClass(String.class);
+        final ArgumentCaptor<Instant> expiry = ArgumentCaptor.forClass(Instant.class);
+        verify(emailSender, timeout(5000)).sendVerification(eq("expiry-recovery@example.com"), fresh.capture(),
+                expiry.capture());
+        http.perform(get("/api/v1/auth/registration/verification").header("X-Verification-Token", fresh.getValue()))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.paidUntil").value(expiry.getValue().toString()));
+        jdbc.sql("UPDATE registration_claims SET expires_at = clock_timestamp() - interval '1 second' "
+                + "WHERE checkout_id = (SELECT id FROM billing_checkouts WHERE stripe_session_id = :id)")
+                .param("id", "cs_recovery_expiry").update();
+        register("expiry-recovery@example.com", fresh.getValue()).andExpect(status().isForbidden());
+        http.perform(get("/api/v1/auth/registration/verification").header("X-Verification-Token", fresh.getValue()))
+                .andExpect(status().isForbidden());
+    }
+
+    @Test
+    void recoveryAcknowledgementDoesNotWaitForDeliveryOrRevealDeliveryFailure() throws Exception {
+        start("recovery_failure");
+        when(stripe.retrievePurchase("cs_recovery_failure"))
+                .thenReturn(paidPurchase("recovery_failure", "failure-recovery@example.com"));
+        sessionEvent("evt_recovery_failure", "checkout.session.completed", "recovery_failure")
+                .andExpect(status().isOk());
+        final CountDownLatch releaseDelivery = new CountDownLatch(1);
+        doAnswer(invocation -> {
+            releaseDelivery.await(5, java.util.concurrent.TimeUnit.SECONDS);
+            throw com.ricard0g.jobtrackr_api.registration.RegistrationException.emailUnavailable();
+        }).when(emailSender).sendVerification(eq("failure-recovery@example.com"), anyString(), any(Instant.class));
+        try {
+            recover("failure-recovery@example.com").andExpect(status().isAccepted());
+            final ArgumentCaptor<String> token = ArgumentCaptor.forClass(String.class);
+            verify(emailSender, timeout(5000)).sendVerification(eq("failure-recovery@example.com"), token.capture(),
+                    any(Instant.class));
+            releaseDelivery.countDown();
+            register("failure-recovery@example.com", token.getValue()).andExpect(status().isForbidden());
+            recover("missing-failure@example.com").andExpect(status().isAccepted());
+        } finally {
+            releaseDelivery.countDown();
+        }
+    }
+
+    private ResultActions recover(final String email) throws Exception {
+        return http.perform(post("/api/v1/auth/registration/recovery").with(newClient())
+                .contentType(MediaType.APPLICATION_JSON).content("{\"email\":\"" + email + "\"}"))
+                .andExpect(org.springframework.test.web.servlet.result.MockMvcResultMatchers.header()
+                        .string("Cache-Control", "no-store"))
+                .andExpect(jsonPath("$.message").value("If an unclaimed paid purchase is eligible, "
+                        + "a registration link will be sent to its Checkout Email."));
     }
 
     @Test

@@ -289,4 +289,4 @@ Paths below are relative to the repository. Start with the services; controllers
 | Registration returns `409` | The Checkout Email already belongs to a User |
 | Request returns `429` | The authentication/registration rate limit |
 
-Public password signup now requires a valid verification token. [Paid Google registration](paid-google-registration.md) consumes the same claim; email recovery without the Checkout return token are separate follow-up work.
+Public password signup now requires a valid verification token. [Paid Google registration](paid-google-registration.md) consumes the same claim; [registration recovery](paid-registration-recovery.md) lets Buyers resume without the Checkout return token.

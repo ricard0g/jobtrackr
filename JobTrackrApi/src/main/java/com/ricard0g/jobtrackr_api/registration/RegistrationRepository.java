@@ -1,6 +1,7 @@
 package com.ricard0g.jobtrackr_api.registration;
 
 import java.time.Instant;
+import java.util.Optional;
 import java.util.UUID;
 
 import org.springframework.jdbc.core.simple.JdbcClient;
@@ -26,6 +27,21 @@ public class RegistrationRepository {
             """;
     private final JdbcClient jdbc;
     private final BillingRepository billing;
+
+    public Optional<Claim> lockEligibleByEmail(final String email) {
+        final Optional<UUID> id = jdbc.sql("""
+                SELECT r.id FROM registration_claims r
+                    JOIN billing_checkouts c ON c.id = r.checkout_id
+                    JOIN billing_customers b ON b.id = c.customer_id
+                    JOIN billing_subscriptions s ON s.checkout_id = c.id
+                WHERE c.checkout_email = CAST(:email AS citext) AND
+                """ + ELIGIBLE).param("email", email).query(UUID.class).optional();
+        if (id.isEmpty()) {
+            return Optional.empty();
+        }
+        final Claim claim = lockClaim("r.id = CAST(:token AS uuid)", id.get().toString());
+        return isEligible(claim.id()) ? Optional.of(claim) : Optional.empty();
+    }
 
     public Claim lockByCheckoutToken(final String token) {
         final Claim claim = lockClaim("c.return_token = :token", token);
@@ -120,16 +136,19 @@ public class RegistrationRepository {
     }
 
     private void requireEligible(final UUID claimId) {
-        final boolean eligible = jdbc.sql("""
+        if (!isEligible(claimId)) {
+            throw RegistrationException.invalidClaim();
+        }
+    }
+
+    private boolean isEligible(final UUID claimId) {
+        return jdbc.sql("""
                 SELECT EXISTS (SELECT 1 FROM registration_claims r
                     JOIN billing_checkouts c ON c.id = r.checkout_id
                     JOIN billing_customers b ON b.id = c.customer_id
                     JOIN billing_subscriptions s ON s.checkout_id = c.id
                     WHERE r.id = :id AND
                 """ + ELIGIBLE + ")").param("id", claimId).query(Boolean.class).single();
-        if (!eligible) {
-            throw RegistrationException.invalidClaim();
-        }
     }
 
     public record Claim(UUID id, UUID checkoutId, UUID customerId, String email, Instant expiresAt) { }

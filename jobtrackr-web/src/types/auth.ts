@@ -23,6 +23,7 @@ export interface PasswordChangeRequest {
 }
 
 export type AuthActionData = {
+	recoveryRequested?: boolean;
 	formError?: string;
 	fieldErrors?: Record<string, string>;
 	values?: Partial<LoginRequest & RegisterRequest>;

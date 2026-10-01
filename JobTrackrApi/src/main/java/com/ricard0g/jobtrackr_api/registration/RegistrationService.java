@@ -28,6 +28,15 @@ public class RegistrationService {
     @Transactional
     public void sendVerification(final String checkoutToken) {
         final RegistrationRepository.Claim claim = repository.lockByCheckoutToken(checkoutToken);
+        sendLink(claim);
+    }
+
+    @Transactional
+    public void sendRecovery(final String email) {
+        repository.lockEligibleByEmail(email).ifPresent(this::sendLink);
+    }
+
+    private void sendLink(final RegistrationRepository.Claim claim) {
         final byte[] bytes = new byte[TOKEN_BYTES];
         RANDOM.nextBytes(bytes);
         final String token = Base64.getUrlEncoder().withoutPadding().encodeToString(bytes);

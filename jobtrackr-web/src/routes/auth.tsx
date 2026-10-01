@@ -228,12 +228,49 @@ export function RegisterPage() {
 				<p role="alert">{loaderData.registrationError}</p>
 			)}
 			{!loaderData.registration && (
-				<a
-					className="font-medium text-darkest-accent underline"
-					href="https://jobtrakcr.com/#pricing-section"
-				>
-					View the weekly subscription
-				</a>
+				<>
+					<p className="mb-4 text-sm text-medium-gray">
+						Already paid? Request a fresh link at your Checkout Email. If your
+						paid week has ended, buy again to register.
+					</p>
+					<RouterForm method="post" className="mb-4 grid gap-3">
+						<input type="hidden" name="intent" value="recover" />
+						<FormField name="email">
+							<FormLabel htmlFor="recovery-email">Checkout Email</FormLabel>
+							<FormControl asChild>
+								<Input
+									id="recovery-email"
+									name="email"
+									type="email"
+									autoComplete="email"
+									required
+									disabled={isSubmitting}
+									defaultValue={actionData?.values?.email ?? ""}
+								/>
+							</FormControl>
+							{actionData?.fieldErrors?.email && (
+								<FormMessage>{actionData.fieldErrors.email}</FormMessage>
+							)}
+						</FormField>
+						<Button type="submit" disabled={isSubmitting}>
+							Send my registration link
+						</Button>
+						{actionData?.recoveryRequested && (
+							<p role="status" className="text-sm text-medium-gray">
+								If an unclaimed paid purchase is eligible, we’ll send a
+								registration link to its Checkout Email. Your paid week does
+								not restart. If it has ended, buy again to register.
+							</p>
+						)}
+						{actionData?.formError && <p role="alert">{actionData.formError}</p>}
+					</RouterForm>
+					<a
+						className="font-medium text-darkest-accent underline"
+						href="https://jobtrakcr.com/#pricing-section"
+					>
+						View the weekly subscription
+					</a>
+				</>
 			)}
 			{loaderData.registration && (
 				<>

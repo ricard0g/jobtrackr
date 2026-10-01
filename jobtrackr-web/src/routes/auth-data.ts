@@ -9,6 +9,7 @@ import {
 	getRegistrationVerification,
 	login,
 	register,
+	recoverRegistration,
 } from "@/lib/api";
 import { AUTH_BASE_URL } from "@/lib/api-config";
 import { redirectPathAfterAuth } from "@/lib/account-settings";
@@ -119,6 +120,9 @@ export async function loginAction({ request }: ActionFunctionArgs) {
 
 export async function registerAction({ request }: ActionFunctionArgs) {
 	const formData = await request.formData();
+	if (formData.get("intent") === "recover") {
+		return requestRegistrationRecovery(formData);
+	}
 	if (formData.get("intent") === "google") {
 		return startGoogleRegistration();
 	}
@@ -201,6 +205,20 @@ async function startGoogleRegistration(): Promise<AuthActionData> {
 				error instanceof Error
 					? error.message
 					: "Could not reach the server. Check your connection and try again.",
+		};
+	}
+}
+
+async function requestRegistrationRecovery(formData: FormData): Promise<AuthActionData> {
+	const email = String(formData.get("email") ?? "").trim();
+	if (!email) return { fieldErrors: { email: "Checkout Email is required." } };
+	try {
+		await recoverRegistration(email);
+		return { recoveryRequested: true };
+	} catch (error) {
+		return {
+			formError: error instanceof Error ? error.message : "Could not reach the server. Please try again.",
+			values: { email },
 		};
 	}
 }

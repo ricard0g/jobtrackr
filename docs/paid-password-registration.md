@@ -42,7 +42,7 @@ Registration locks the Checkout and Billing Customer in the same transaction as 
 claim consumption, Billing Customer linking, and session issuance. Concurrent attempts produce one User session.
 The new Primary Email is the normalized Checkout Email and is marked verified.
 
-[Paid Google registration](paid-google-registration.md) consumes the same claim. Email recovery without the Checkout return token is separate follow-up work.
+[Paid Google registration](paid-google-registration.md) consumes the same claim. See [registration recovery](paid-registration-recovery.md) for Buyers who left Checkout.
 This change closes public password signup and hides the password form until a valid email link is opened.
 
 ## Verification

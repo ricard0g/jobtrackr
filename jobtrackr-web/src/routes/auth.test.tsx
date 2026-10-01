@@ -168,7 +168,7 @@ describe("paid password registration", () => {
 		).toBeNull();
 	});
 
-	it("explains an expired link without offering a password form", async () => {
+	it.each(["expired", "already used", "no longer paid"])("explains a link that is %s without offering a password form", async (reason) => {
 		window.sessionStorage.setItem(
 			"jobtrackr-registration-token",
 			"expired-link",
@@ -178,15 +178,19 @@ describe("paid password registration", () => {
 				return HttpResponse.json(
 					{
 						code: "REGISTRATION_CLAIM_INVALID",
-						message: "This registration link has expired.",
+						message: `This registration link is ${reason}.`,
 					},
 					{ status: 403 },
 				);
 			}),
 		);
 		renderAuth("/auth/register");
-		expect((await screen.findByRole("alert")).textContent).toContain("expired");
+		expect((await screen.findByRole("alert")).textContent).toContain(reason);
 		expect(screen.queryByLabelText("Password")).toBeNull();
+		expect(
+			screen.getByRole("link", { name: "View the weekly subscription" }).getAttribute("href"),
+		).toBe("https://jobtrakcr.com/#pricing-section");
+		expect(screen.getByText(/If your paid week has ended, buy again/)).toBeTruthy();
 	});
 });
 
@@ -350,4 +354,32 @@ describe("paid Google registration", () => {
 
 		await screen.findByText(/No JobTrackr User uses this Google account/);
 	});
+});
+
+describe("registration recovery", () => {
+	it.each(["buyer@example.com", "unknown@example.com"])(
+		"shows the same acknowledgement for %s",
+		async (email) => {
+			let submitted: unknown;
+			mswServer.use(
+				http.post(`${AUTH_BASE_URL}/registration/recovery`, async ({ request }) => {
+					submitted = await request.json();
+					return HttpResponse.json(
+						{
+							message: "If an unclaimed paid purchase is eligible, a registration link will be sent to its Checkout Email.",
+						},
+						{ status: 202 },
+					);
+				}),
+			);
+			renderAuth("/auth/register");
+			fireEvent.change(await screen.findByLabelText("Checkout Email"), {
+				target: { value: email },
+			});
+			fireEvent.click(screen.getByRole("button", { name: "Send my registration link" }));
+			await screen.findByText(/If an unclaimed paid purchase is eligible/);
+			expect(submitted).toEqual({ email });
+			expect(screen.queryByLabelText("Password")).toBeNull();
+		},
+	);
 });

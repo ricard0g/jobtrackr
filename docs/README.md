@@ -22,5 +22,6 @@ Subproject-specific documentation lives in:
 - [Stripe hosted Checkout](stripe-checkout.md): test/live configuration and the durable initial-purchase boundary.
 
 - [Paid password registration](paid-password-registration.md) — Resend configuration, claim verification, and session creation.
+- [Paid registration recovery](paid-registration-recovery.md) — Resume an unclaimed purchase from its Checkout Email.
 - [Paid Google registration](paid-google-registration.md) — Google Sign-In registration with the Checkout Email and closed just-in-time signup.
 - [Backend purchase and registration guide](backend-purchase-registration-guide.md) — diagrams and walkthrough of Stripe payment confirmation, Resend email verification, database records, and authentication sessions.
