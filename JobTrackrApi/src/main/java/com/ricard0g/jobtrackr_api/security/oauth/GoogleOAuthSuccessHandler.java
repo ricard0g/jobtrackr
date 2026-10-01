@@ -15,6 +15,7 @@ import com.ricard0g.jobtrackr_api.config.security.OauthSessionCookieService;
 import com.ricard0g.jobtrackr_api.config.security.RefreshTokenCookieService;
 import com.ricard0g.jobtrackr_api.exception.GoogleSignInRejectedException;
 import com.ricard0g.jobtrackr_api.model.User;
+import com.ricard0g.jobtrackr_api.registration.GoogleRegistrationService;
 import com.ricard0g.jobtrackr_api.service.AuthService;
 import com.ricard0g.jobtrackr_api.service.AuthService.AuthTokenPair;
 import com.ricard0g.jobtrackr_api.service.GoogleSignInService;
@@ -42,6 +43,7 @@ public class GoogleOAuthSuccessHandler implements AuthenticationSuccessHandler {
     private final OauthSessionCookieService oauthSessionCookieService;
     private final GoogleAuthProperties googleAuthProperties;
     private final PasswordCreationGrantService passwordCreationGrantService;
+    private final GoogleRegistrationService googleRegistrationService;
 
     @Override
     public void onAuthenticationSuccess(
@@ -70,6 +72,10 @@ public class GoogleOAuthSuccessHandler implements AuthenticationSuccessHandler {
             }
             if (purpose == OAuthPurpose.CREATE_PASSWORD) {
                 completeCreatePassword(request, response, session, oidcUser, subject, email);
+                return;
+            }
+            if (purpose == OAuthPurpose.REGISTER_GOOGLE) {
+                completeRegistration(request, response, session, subject, email);
                 return;
             }
 
@@ -127,6 +133,27 @@ public class GoogleOAuthSuccessHandler implements AuthenticationSuccessHandler {
         response.sendRedirect(OAuthRedirects.successLocation(
                 googleAuthProperties.normalizedPublicOrigin(),
                 returnTo));
+    }
+
+    private void completeRegistration(
+            final HttpServletRequest request,
+            final HttpServletResponse response,
+            final HttpSession session,
+            final String subject,
+            final String email) throws IOException {
+        final AuthTokenPair tokenPair = googleRegistrationService.complete(sessionClaimId(session), subject, email);
+        refreshTokenCookieService.writeRefreshTokenCookie(
+                response,
+                tokenPair.refreshToken(),
+                tokenPair.refreshExpiresAt());
+        log.info(
+                "[GoogleSignIn] - COMPLETE: outcome: success, purpose: {}, userId: {}",
+                OAuthPurpose.REGISTER_GOOGLE,
+                tokenPair.authResponse().user().userId());
+        terminateOauthSession(request, response);
+        response.sendRedirect(OAuthRedirects.successLocation(
+                googleAuthProperties.normalizedPublicOrigin(),
+                OAuthSession.DEFAULT_RETURN_TO));
     }
 
     private void completeCreatePassword(
@@ -238,6 +265,9 @@ public class GoogleOAuthSuccessHandler implements AuthenticationSuccessHandler {
         if (OAuthPurpose.CREATE_PASSWORD.name().equals(purpose)) {
             return OAuthPurpose.CREATE_PASSWORD;
         }
+        if (OAuthPurpose.REGISTER_GOOGLE.name().equals(purpose)) {
+            return OAuthPurpose.REGISTER_GOOGLE;
+        }
         if (OAuthPurpose.SIGN_IN.name().equals(purpose)) {
             return OAuthPurpose.SIGN_IN;
         }
@@ -255,6 +285,9 @@ public class GoogleOAuthSuccessHandler implements AuthenticationSuccessHandler {
         if (OAuthPurpose.CREATE_PASSWORD.name().equals(purpose)) {
             return OAuthPurpose.CREATE_PASSWORD;
         }
+        if (OAuthPurpose.REGISTER_GOOGLE.name().equals(purpose)) {
+            return OAuthPurpose.REGISTER_GOOGLE;
+        }
         return OAuthPurpose.SIGN_IN;
     }
 
@@ -264,6 +297,18 @@ public class GoogleOAuthSuccessHandler implements AuthenticationSuccessHandler {
         }
         final Object boundUserId = session.getAttribute(OAuthSession.USER_ID_ATTRIBUTE);
         if (boundUserId instanceof String value) {
+            try {
+                return UUID.fromString(value);
+            } catch (final IllegalArgumentException ignored) {
+                throw new GoogleSignInRejectedException(OAuthResultCode.EXPIRED);
+            }
+        }
+        throw new GoogleSignInRejectedException(OAuthResultCode.EXPIRED);
+    }
+
+    private static UUID sessionClaimId(final HttpSession session) {
+        final Object claimId = session.getAttribute(OAuthSession.CLAIM_ID_ATTRIBUTE);
+        if (claimId instanceof String value) {
             try {
                 return UUID.fromString(value);
             } catch (final IllegalArgumentException ignored) {

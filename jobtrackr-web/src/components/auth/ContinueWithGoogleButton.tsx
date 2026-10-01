@@ -21,12 +21,28 @@ function GoogleGLogo() {
 	);
 }
 
-export function ContinueWithGoogleButton({ href }: { href: string }) {
+const buttonClassName =
+	"inline-flex h-10 w-full items-center justify-center gap-3 rounded-lg border border-light-gray bg-white text-sm font-medium text-dark-gray shadow-cool-light hover:bg-off-white disabled:opacity-50";
+
+export function ContinueWithGoogleButton(
+	props: { href: string } | { submitIntent: string; disabled?: boolean },
+) {
+	if ("submitIntent" in props) {
+		return (
+			<button
+				type="submit"
+				name="intent"
+				value={props.submitIntent}
+				disabled={props.disabled}
+				className={buttonClassName}
+			>
+				<GoogleGLogo />
+				Continue with Google
+			</button>
+		);
+	}
 	return (
-		<a
-			href={href}
-			className="inline-flex h-10 w-full items-center justify-center gap-3 rounded-lg border border-light-gray bg-white text-sm font-medium text-dark-gray shadow-cool-light hover:bg-off-white"
-		>
+		<a href={props.href} className={buttonClassName}>
 			<GoogleGLogo />
 			Continue with Google
 		</a>

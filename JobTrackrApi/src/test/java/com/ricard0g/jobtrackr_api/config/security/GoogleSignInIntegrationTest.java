@@ -613,45 +613,6 @@ class GoogleSignInIntegrationTest {
     }
 
     @Test
-    void unknownGoogleSubject_createsExactlyOneUserAndIdentityWhenEmailIsUnused() throws Exception {
-        final String email = uniqueEmail("jit");
-        final String subject = "jit-subject-" + UUID.randomUUID();
-        GOOGLE.planSuccess(subject, email, true);
-        final long userCount = userRepository.count();
-        final long identityCount = userIdentityRepository.count();
-
-        final MvcResult callback = completeGoogleSignIn("/api/v1/auth/oauth2/authorization/google");
-
-        assertThat(callback.getResponse().getRedirectedUrl()).isEqualTo(PUBLIC_ORIGIN + "/");
-        assertThat(callback.getResponse().getRedirectedUrl()).doesNotContain(email);
-        assertThat(callback.getResponse().getRedirectedUrl()).doesNotContain(subject);
-        final Cookie refreshCookie = callback.getResponse().getCookie("refresh_token");
-        assertThat(refreshCookie).isNotNull();
-
-        final MvcResult refreshed = mockMvc.perform(post("/api/v1/auth/refresh")
-                        .with(csrf())
-                        .cookie(refreshCookie))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.user.userEmail").value(email))
-                .andExpect(jsonPath("$.user.userDisplayName").isEmpty())
-                .andReturn();
-        final String userId = JsonPath.read(refreshed.getResponse().getContentAsString(), "$.user.userId");
-
-        assertThat(userRepository.count()).isEqualTo(userCount + 1);
-        assertThat(userIdentityRepository.count()).isEqualTo(identityCount + 1);
-        final User created = userRepository.findById(UUID.fromString(userId)).orElseThrow();
-        assertThat(created.getUserEmail()).isEqualTo(email);
-        assertThat(created.getUserPasswordHash()).isNull();
-        assertThat(created.getUserDisplayName()).isNull();
-        assertThat(created.isUserEmailVerified()).isTrue();
-        final UserIdentity identity = userIdentityRepository
-                .findByProviderAndSubject(IdentityProvider.GOOGLE, subject)
-                .orElseThrow();
-        assertThat(identity.getUser().getUserId()).isEqualTo(created.getUserId());
-        assertThat(identity.getProviderEmail()).isEqualToIgnoringCase(email);
-    }
-
-    @Test
     void unknownGoogleSubject_withExistingPrimaryEmail_isRejectedWithoutLinking() throws Exception {
         final RegisteredUser registered = registerUser("Taken@example.com");
         final User existing = userRepository.findById(registered.userId()).orElseThrow();
@@ -684,48 +645,6 @@ class GoogleSignInIntegrationTest {
                 () -> GOOGLE.planSuccess("unverified-subject", uniqueEmail("unverified"), false));
         assertIncompleteGoogleIdentityFailsClosed(
                 () -> GOOGLE.planMissingSubject(uniqueEmail("missing-sub")));
-    }
-
-    @Test
-    void concurrentCallbacksForTheSameNewIdentity_createOneUserAndOneIdentity() throws Exception {
-        final String email = uniqueEmail("race");
-        final String subject = "race-subject-" + UUID.randomUUID();
-        GOOGLE.planSuccess(subject, email, true);
-        final long userCount = userRepository.count();
-        final long identityCount = userIdentityRepository.count();
-        final ExecutorService executor = Executors.newFixedThreadPool(CONCURRENT_JIT_ATTEMPTS);
-        final CountDownLatch start = new CountDownLatch(1);
-
-        try {
-            final Future<MvcResult> first = executor.submit(() -> {
-                start.await();
-                return completeGoogleSignIn("/api/v1/auth/oauth2/authorization/google");
-            });
-            final Future<MvcResult> second = executor.submit(() -> {
-                start.await();
-                return completeGoogleSignIn("/api/v1/auth/oauth2/authorization/google");
-            });
-            start.countDown();
-            final MvcResult firstCallback = first.get(CONCURRENT_JIT_TIMEOUT_SECONDS, TimeUnit.SECONDS);
-            final MvcResult secondCallback = second.get(CONCURRENT_JIT_TIMEOUT_SECONDS, TimeUnit.SECONDS);
-
-            assertThat(firstCallback.getResponse().getRedirectedUrl()).isEqualTo(PUBLIC_ORIGIN + "/");
-            assertThat(secondCallback.getResponse().getRedirectedUrl()).isEqualTo(PUBLIC_ORIGIN + "/");
-            assertThat(firstCallback.getResponse().getCookie("refresh_token")).isNotNull();
-            assertThat(secondCallback.getResponse().getCookie("refresh_token")).isNotNull();
-            assertThat(firstCallback.getResponse().getRedirectedUrl()).doesNotContain(email);
-            assertThat(secondCallback.getResponse().getRedirectedUrl()).doesNotContain(subject);
-        } finally {
-            executor.shutdownNow();
-        }
-
-        assertThat(userRepository.count()).isEqualTo(userCount + 1);
-        assertThat(userIdentityRepository.count()).isEqualTo(identityCount + 1);
-        final UserIdentity identity = userIdentityRepository
-                .findByProviderAndSubject(IdentityProvider.GOOGLE, subject)
-                .orElseThrow();
-        assertThat(identity.getUser().getUserEmail()).isEqualToIgnoringCase(email);
-        assertThat(userRepository.findByUserEmail(email)).isPresent();
     }
 
     @Test
@@ -1427,7 +1346,22 @@ class GoogleSignInIntegrationTest {
         final String email = uniqueEmail(emailPrefix);
         final String subject = "create-password-subject-" + UUID.randomUUID();
         GOOGLE.planSuccess(subject, email, true);
-        final MvcResult callback = completeGoogleSignIn("/api/v1/auth/oauth2/authorization/google");
+        final String verificationToken = JsonPath.read(PaidRegistrationFixture.withVerifiedPurchase(
+                registrationJdbc, "{\"email\":\"" + email + "\"}"), "$.verificationToken");
+        final MvcResult intent = mockMvc.perform(post("/api/v1/auth/registration/google")
+                        .with(remoteAddr(uniqueReauthIp(email)))
+                        .with(csrf())
+                        .header("X-Verification-Token", verificationToken))
+                .andExpect(status().isNoContent())
+                .andReturn();
+        final StartedFlow started = startGoogle(
+                "/api/v1/auth/oauth2/authorization/google?screen=register",
+                (MockHttpSession) intent.getRequest().getSession(false),
+                new Cookie[0]);
+        final MvcResult callback = performCallback(
+                followGoogle(started.googleLocation()),
+                started.session(),
+                started.cookies());
         final Cookie refreshCookie = callback.getResponse().getCookie("refresh_token");
         assertThat(refreshCookie).isNotNull();
         final MvcResult refreshed = mockMvc.perform(post("/api/v1/auth/refresh")

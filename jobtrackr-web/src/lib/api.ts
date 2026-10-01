@@ -251,6 +251,32 @@ export async function getRegistrationVerification(token: string) {
 	);
 }
 
+export async function getRegistrationClaim(checkoutToken: string) {
+	return authRequest<{ email: string; paidUntil: string }>(
+		"/registration/claim",
+		{
+			headers: { "X-Checkout-Token": checkoutToken },
+			cache: "no-store",
+		},
+	);
+}
+
+export async function createGoogleRegistrationIntent(
+	token: { checkoutToken: string } | { verificationToken: string },
+) {
+	return authRequest<void>(
+		"/registration/google",
+		{
+			method: "POST",
+			headers:
+				"checkoutToken" in token
+					? { "X-Checkout-Token": token.checkoutToken }
+					: { "X-Verification-Token": token.verificationToken },
+		},
+		true,
+	);
+}
+
 export async function register(request: RegisterRequest) {
 	const response = await authRequest<AuthResponse>("/register", {
 		method: "POST",

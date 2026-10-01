@@ -59,7 +59,7 @@ public class AuthService {
 
         try {
             final User savedUser = userRepository.saveAndFlush(user);
-            registrationRepository.consumeAndLink(claim, savedUser.getUserId(), hash);
+            registrationRepository.consumeVerifiedAndLink(claim, savedUser.getUserId(), hash);
             return issueTokenPair(savedUser);
         } catch (DataIntegrityViolationException exception) {
             throw new DuplicateEmailException("Email already in use");

@@ -2,6 +2,7 @@
 import SiteLayout from "../layouts/SiteLayout.astro";
 const apiOrigin =
   import.meta.env.PUBLIC_API_ORIGIN ?? "https://app.jobtrakcr.com";
+const appOrigin = import.meta.env.PUBLIC_APP_ORIGIN ?? apiOrigin;
 ---
 
 <SiteLayout
@@ -13,6 +14,7 @@ const apiOrigin =
     <p
       id="payment-status"
       data-api-origin={apiOrigin}
+      data-app-origin={appOrigin}
       role="status"
       aria-live="polite"
       class="my-6"
@@ -28,6 +30,13 @@ const apiOrigin =
     >
       Send my registration email
     </button>
+    <a
+      id="register-google"
+      hidden
+      class="ml-3 [padding:0.5rem_1.5rem] text-accent-darkest [font-weight:500] border border-accent-main rounded-card"
+    >
+      Continue with Google
+    </a>
     <p id="email-status" role="status" aria-live="polite" class="my-6"></p>
     <p class="my-6">
       Your paid week starts at Stripe billing. If you need help completing
@@ -55,6 +64,20 @@ const apiOrigin =
     document.querySelector<HTMLButtonElement>("#verify-email")!;
   const emailStatus =
     document.querySelector<HTMLParagraphElement>("#email-status")!;
+  const googleLink =
+    document.querySelector<HTMLAnchorElement>("#register-google")!;
+  async function offerGoogle() {
+    try {
+      const response = await fetch(
+        `${message.dataset.apiOrigin}/api/v1/auth/providers`,
+      );
+      if (!response.ok || (await response.json()).google !== true) return;
+      googleLink.href = `${message.dataset.appOrigin}/auth/register#checkout=${encodeURIComponent(token!)}`;
+      googleLink.hidden = false;
+    } catch {
+      googleLink.hidden = true;
+    }
+  }
   verifyButton.addEventListener("click", async () => {
     if (!token) return;
     verifyButton.disabled = true;
@@ -104,6 +127,7 @@ const apiOrigin =
         message.textContent =
           "Payment confirmed. Your purchase is ready for registration.";
         verifyButton.hidden = false;
+        void offerGoogle();
         period.textContent = `Your paid week runs from ${new Date(body.paidPeriodStart).toLocaleString()} until ${new Date(body.expiresAt).toLocaleString()}.`;
         return;
       }

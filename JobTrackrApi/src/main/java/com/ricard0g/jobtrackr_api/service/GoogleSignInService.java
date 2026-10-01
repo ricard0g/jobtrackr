@@ -31,7 +31,7 @@ public class GoogleSignInService {
     public User resolveGoogleSignIn(final String subject, final String verifiedEmail) {
         return findGoogleIdentity(subject)
                 .map(this::requireAvailableUser)
-                .orElseGet(() -> createGoogleUserIfEmailUnused(subject, normalizeEmail(verifiedEmail)));
+                .orElseThrow(() -> unregisteredGoogleIdentity(normalizeEmail(verifiedEmail)));
     }
 
     public void linkGoogleIdentity(final UUID userId, final String subject, final String verifiedEmail) {
@@ -78,33 +78,11 @@ public class GoogleSignInService {
         userIdentityRepository.save(identity);
     }
 
-    private User createGoogleUserIfEmailUnused(final String subject, final String verifiedEmail) {
+    private GoogleSignInRejectedException unregisteredGoogleIdentity(final String verifiedEmail) {
         if (userRepository.existsByUserEmail(verifiedEmail)) {
-            return recoverFromCreationRace(subject, verifiedEmail);
+            return new GoogleSignInRejectedException(OAuthResultCode.CONFLICT);
         }
-        try {
-            return transactionTemplate.execute(status -> createGoogleUser(subject, verifiedEmail));
-        } catch (final DataIntegrityViolationException ignored) {
-            return recoverFromCreationRace(subject, verifiedEmail);
-        }
-    }
-
-    private User createGoogleUser(final String subject, final String verifiedEmail) {
-        final OffsetDateTime now = OffsetDateTime.now();
-        final User savedUser = userRepository.saveAndFlush(User.googleJustInTime(verifiedEmail));
-        userIdentityRepository.saveAndFlush(UserIdentity.googleIdentity(savedUser, subject, verifiedEmail, now));
-        return savedUser;
-    }
-
-    private User recoverFromCreationRace(final String subject, final String verifiedEmail) {
-        return findGoogleIdentity(subject)
-                .map(this::requireAvailableUser)
-                .orElseThrow(() -> {
-                    if (userRepository.existsByUserEmail(verifiedEmail)) {
-                        return new GoogleSignInRejectedException(OAuthResultCode.CONFLICT);
-                    }
-                    return new GoogleSignInRejectedException(OAuthResultCode.FAILED);
-                });
+        return new GoogleSignInRejectedException(OAuthResultCode.NOT_REGISTERED);
     }
 
     private User requireAvailableUser(final UserIdentity identity) {

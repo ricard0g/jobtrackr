@@ -43,6 +43,12 @@ public class RegistrationService {
         return new VerificationDetails(claim.email(), claim.expiresAt());
     }
 
+    @Transactional
+    public VerificationDetails claimDetails(final String checkoutToken) {
+        final RegistrationRepository.Claim claim = repository.lockByCheckoutToken(checkoutToken);
+        return new VerificationDetails(claim.email(), claim.expiresAt());
+    }
+
     public static String hash(final String token) {
         final boolean invalidToken = token == null || token.isBlank() || token.length() > MAX_TOKEN_LENGTH;
         if (invalidToken) {

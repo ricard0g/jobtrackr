@@ -26,4 +26,5 @@ export type AuthActionData = {
 	formError?: string;
 	fieldErrors?: Record<string, string>;
 	values?: Partial<LoginRequest & RegisterRequest>;
+	googleAuthorizationHref?: string;
 };

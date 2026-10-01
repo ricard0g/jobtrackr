@@ -63,7 +63,9 @@ public class GoogleOAuthStartFilter extends OncePerRequestFilter {
             return;
         }
 
-        if (isProtectedHandshakeSession(request)) {
+        if (isPendingRegistration(request)) {
+            request.getSession(false).setMaxInactiveInterval(OAuthSession.TIMEOUT_SECONDS);
+        } else if (isProtectedHandshakeSession(request)) {
             if (!preserveProtectedOauthSession(request)) {
                 rejectExpiredProtectedStart(request, response);
                 return;
@@ -72,6 +74,13 @@ public class GoogleOAuthStartFilter extends OncePerRequestFilter {
             replaceOauthSession(request, response);
         }
         filterChain.doFilter(request, response);
+    }
+
+    private static boolean isPendingRegistration(final HttpServletRequest request) {
+        final HttpSession session = request.getSession(false);
+        final boolean registrationStart = "register".equals(request.getParameter("screen"));
+        return registrationStart && session != null
+                && OAuthPurpose.REGISTER_GOOGLE.name().equals(session.getAttribute(OAuthSession.PURPOSE_ATTRIBUTE));
     }
 
     private boolean isProtectedHandshakeSession(final HttpServletRequest request) {

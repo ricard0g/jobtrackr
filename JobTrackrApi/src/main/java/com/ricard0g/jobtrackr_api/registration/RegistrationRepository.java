@@ -57,18 +57,41 @@ public class RegistrationRepository {
                 .param("expires", java.sql.Timestamp.from(expiresAt)).update();
     }
 
-    public void consumeAndLink(final Claim claim, final UUID userId, final String hash) {
-        final int consumed = jdbc.sql("""
+    public Claim lockById(final UUID claimId) {
+        final Claim claim = lockClaim("r.id = CAST(:token AS uuid)", claimId.toString());
+        requireEligible(claim.id());
+        return claim;
+    }
+
+    public boolean isConsumed(final UUID claimId) {
+        return jdbc.sql("SELECT EXISTS (SELECT 1 FROM registration_claims WHERE id = :id AND consumed_at IS NOT NULL)")
+                .param("id", claimId).query(Boolean.class).single();
+    }
+
+    public void consumeVerifiedAndLink(final Claim claim, final UUID userId, final String hash) {
+        consumeAndLink(claim, userId, """
+                AND EXISTS (SELECT 1 FROM registration_email_verifications v WHERE v.token_hash = :hash
+                    AND v.claim_id = r.id AND v.checkout_email = c.checkout_email
+                    AND v.expires_at > clock_timestamp())
+                """, hash);
+    }
+
+    public void consumeAndLink(final Claim claim, final UUID userId) {
+        consumeAndLink(claim, userId, "", null);
+    }
+
+    private void consumeAndLink(final Claim claim, final UUID userId, final String verification,
+                                final String hash) {
+        JdbcClient.StatementSpec update = jdbc.sql("""
                 UPDATE registration_claims r SET consumed_at = clock_timestamp()
                 FROM billing_checkouts c JOIN billing_customers b ON b.id = c.customer_id
                     JOIN billing_subscriptions s ON s.checkout_id = c.id
                 WHERE r.checkout_id = c.id AND r.id = :id AND
-                """ + ELIGIBLE + """
-                AND EXISTS (SELECT 1 FROM registration_email_verifications v WHERE v.token_hash = :hash
-                    AND v.claim_id = r.id AND v.checkout_email = c.checkout_email
-                    AND v.expires_at > clock_timestamp())
-                """).param("id", claim.id()).param("hash", hash).update();
-        if (consumed != 1) {
+                """ + ELIGIBLE + verification).param("id", claim.id());
+        if (hash != null) {
+            update = update.param("hash", hash);
+        }
+        if (update.update() != 1) {
             throw RegistrationException.invalidClaim();
         }
         final int linked = jdbc.sql("UPDATE billing_customers SET user_id = :user "

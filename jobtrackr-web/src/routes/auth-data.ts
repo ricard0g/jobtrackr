@@ -3,19 +3,24 @@ import { redirect } from "react-router";
 
 import {
 	ApiError,
+	createGoogleRegistrationIntent,
 	getAuthProviders,
+	getRegistrationClaim,
 	getRegistrationVerification,
 	login,
 	register,
 } from "@/lib/api";
+import { AUTH_BASE_URL } from "@/lib/api-config";
 import { redirectPathAfterAuth } from "@/lib/account-settings";
 import { passwordPolicyError } from "@/lib/password-policy";
 import {
+	getCheckoutRegistrationToken,
 	getRegistrationToken,
 	clearRegistrationToken,
 } from "@/lib/registration-token";
 import {
 	consumeOAuthResultParam,
+	googleAuthorizationHref,
 	type OAuthResultCode,
 } from "@/lib/google-auth";
 import type {
@@ -27,7 +32,11 @@ import type {
 export type PublicAuthLoaderData = {
 	google: boolean;
 	oauthResult: OAuthResultCode | null;
-	registration: { email: string; paidUntil: string } | null;
+	registration: {
+		email: string;
+		paidUntil: string;
+		passwordAllowed: boolean;
+	} | null;
 	registrationError: string | null;
 };
 
@@ -44,15 +53,24 @@ export async function publicAuthLoader({
 	let registrationError: string | null = null;
 	if (url.pathname === "/auth/register") {
 		const token = getRegistrationToken();
-		if (token) {
-			try {
-				registration = await getRegistrationVerification(token);
-			} catch (error) {
-				if (!(error instanceof ApiError) || error.status !== 403) {
-					throw error;
-				}
-				registrationError = error.message;
+		const checkoutToken = getCheckoutRegistrationToken();
+		try {
+			if (token) {
+				registration = {
+					...(await getRegistrationVerification(token)),
+					passwordAllowed: true,
+				};
+			} else if (checkoutToken) {
+				registration = {
+					...(await getRegistrationClaim(checkoutToken)),
+					passwordAllowed: false,
+				};
 			}
+		} catch (error) {
+			if (!(error instanceof ApiError) || error.status !== 403) {
+				throw error;
+			}
+			registrationError = error.message;
 		}
 	}
 
@@ -101,6 +119,9 @@ export async function loginAction({ request }: ActionFunctionArgs) {
 
 export async function registerAction({ request }: ActionFunctionArgs) {
 	const formData = await request.formData();
+	if (formData.get("intent") === "google") {
+		return startGoogleRegistration();
+	}
 	const email = String(formData.get("email") ?? "").trim();
 	const password = String(formData.get("password") ?? "");
 	const displayName = String(formData.get("displayName") ?? "").trim();
@@ -150,5 +171,36 @@ export async function registerAction({ request }: ActionFunctionArgs) {
 					: "Could not reach the server. Check your connection and try again.",
 			values: { email, displayName },
 		} satisfies AuthActionData;
+	}
+}
+
+async function startGoogleRegistration(): Promise<AuthActionData> {
+	const verificationToken = getRegistrationToken();
+	const checkoutToken = getCheckoutRegistrationToken();
+	try {
+		if (verificationToken) {
+			await createGoogleRegistrationIntent({ verificationToken });
+		} else if (checkoutToken) {
+			await createGoogleRegistrationIntent({ checkoutToken });
+		} else {
+			return {
+				formError:
+					"Open your payment confirmation or registration email to continue.",
+			};
+		}
+		return {
+			googleAuthorizationHref: googleAuthorizationHref(
+				"register",
+				null,
+				`${AUTH_BASE_URL}/oauth2/authorization/google`,
+			),
+		};
+	} catch (error) {
+		return {
+			formError:
+				error instanceof Error
+					? error.message
+					: "Could not reach the server. Check your connection and try again.",
+		};
 	}
 }

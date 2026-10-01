@@ -6,10 +6,11 @@ import {
 	waitFor,
 } from "@testing-library/react";
 import { HttpResponse, http } from "msw";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { createMemoryRouter, RouterProvider } from "react-router";
 
 import { AUTH_BASE_URL } from "@/lib/api-config";
+import * as googleAuth from "@/lib/google-auth";
 import {
 	loginAction,
 	publicAuthLoader,
@@ -23,6 +24,7 @@ startMsw();
 afterEach(() => {
 	cleanup();
 	window.sessionStorage.clear();
+	vi.restoreAllMocks();
 });
 
 function renderAuth(initialEntry: string) {
@@ -185,5 +187,167 @@ describe("paid password registration", () => {
 		renderAuth("/auth/register");
 		expect((await screen.findByRole("alert")).textContent).toContain("expired");
 		expect(screen.queryByLabelText("Password")).toBeNull();
+	});
+});
+
+describe("paid Google registration", () => {
+	function stubClaim(email = "checkout@example.com") {
+		mswServer.use(
+			http.get(`${AUTH_BASE_URL}/registration/claim`, ({ request }) => {
+				expect(request.headers.get("X-Checkout-Token")).toBe("checkout-token");
+				return HttpResponse.json({ email, paidUntil: "2099-10-08T00:00:00Z" });
+			}),
+		);
+	}
+
+	it("starts Google registration from the payment return without offering a password form", async () => {
+		enableGoogle();
+		stubClaim();
+		window.sessionStorage.setItem(
+			"jobtrackr-registration-checkout-token",
+			"checkout-token",
+		);
+		let intentHeaders: Headers | undefined;
+		mswServer.use(
+			http.post(`${AUTH_BASE_URL}/registration/google`, ({ request }) => {
+				intentHeaders = request.headers;
+				return new HttpResponse(null, { status: 204 });
+			}),
+		);
+		const redirect = vi
+			.spyOn(googleAuth, "redirectToGoogleAuthorization")
+			.mockImplementation(() => undefined);
+		renderAuth("/auth/register");
+
+		await screen.findByText(/Registering checkout@example\.com/);
+		expect(screen.queryByLabelText("Password")).toBeNull();
+		fireEvent.click(
+			screen.getByRole("button", { name: "Continue with Google" }),
+		);
+
+		await waitFor(() => {
+			expect(redirect).toHaveBeenCalledWith(
+				`${AUTH_BASE_URL}/oauth2/authorization/google?screen=register`,
+			);
+		});
+		expect(intentHeaders?.get("X-Checkout-Token")).toBe("checkout-token");
+		expect(intentHeaders?.get("X-XSRF-TOKEN")).toBe("mock-csrf-token");
+	});
+
+	it("offers Google alongside the password form after the email link", async () => {
+		enableGoogle();
+		window.sessionStorage.setItem(
+			"jobtrackr-registration-token",
+			"verified-link",
+		);
+		let verificationHeader: string | null = null;
+		mswServer.use(
+			http.get(`${AUTH_BASE_URL}/registration/verification`, () => {
+				return HttpResponse.json({
+					email: "checkout@example.com",
+					paidUntil: "2099-10-08T00:00:00Z",
+				});
+			}),
+			http.post(`${AUTH_BASE_URL}/registration/google`, ({ request }) => {
+				verificationHeader = request.headers.get("X-Verification-Token");
+				return new HttpResponse(null, { status: 204 });
+			}),
+		);
+		const redirect = vi
+			.spyOn(googleAuth, "redirectToGoogleAuthorization")
+			.mockImplementation(() => undefined);
+		renderAuth("/auth/register");
+
+		await screen.findByLabelText("Password");
+		fireEvent.click(
+			screen.getByRole("button", { name: "Continue with Google" }),
+		);
+
+		await waitFor(() => expect(redirect).toHaveBeenCalled());
+		expect(verificationHeader).toBe("verified-link");
+	});
+
+	it("explains a Google email mismatch and lets the Buyer try another Google account", async () => {
+		enableGoogle();
+		stubClaim();
+		window.sessionStorage.setItem(
+			"jobtrackr-registration-checkout-token",
+			"checkout-token",
+		);
+		renderAuth("/auth/register?oauthResult=mismatch");
+
+		expect(
+			(await screen.findByText(/does not match your Checkout Email/))
+				.textContent,
+		).toBeTruthy();
+		expect(
+			screen.getByRole("button", { name: "Continue with Google" }),
+		).toBeTruthy();
+	});
+
+	it("explains a used or expired purchase after a Google callback", async () => {
+		enableGoogle();
+		window.sessionStorage.setItem(
+			"jobtrackr-registration-checkout-token",
+			"checkout-token",
+		);
+		mswServer.use(
+			http.get(`${AUTH_BASE_URL}/registration/claim`, () => {
+				return HttpResponse.json(
+					{
+						code: "REGISTRATION_CLAIM_INVALID",
+						message:
+							"This registration link is invalid, already used, or no longer paid.",
+					},
+					{ status: 403 },
+				);
+			}),
+		);
+		renderAuth("/auth/register?oauthResult=registration_expired");
+
+		await screen.findByText(/paid week has ended or payment is no longer current/);
+		expect(screen.getByRole("alert").textContent).toContain("already used");
+		expect(
+			screen.queryByRole("button", { name: "Continue with Google" }),
+		).toBeNull();
+	});
+
+	it("shows why Google registration could not start", async () => {
+		enableGoogle();
+		stubClaim();
+		window.sessionStorage.setItem(
+			"jobtrackr-registration-checkout-token",
+			"checkout-token",
+		);
+		mswServer.use(
+			http.post(`${AUTH_BASE_URL}/registration/google`, () => {
+				return HttpResponse.json(
+					{
+						code: "REGISTRATION_CLAIM_INVALID",
+						message: "This purchase is no longer paid.",
+					},
+					{ status: 403 },
+				);
+			}),
+		);
+		const redirect = vi
+			.spyOn(googleAuth, "redirectToGoogleAuthorization")
+			.mockImplementation(() => undefined);
+		renderAuth("/auth/register");
+
+		fireEvent.click(
+			await screen.findByRole("button", { name: "Continue with Google" }),
+		);
+
+		expect((await screen.findByRole("alert")).textContent).toBe(
+			"This purchase is no longer paid.",
+		);
+		expect(redirect).not.toHaveBeenCalled();
+	});
+
+	it("tells an unknown Google identity to buy access before signing in", async () => {
+		renderAuth("/auth/login?oauthResult=not_registered");
+
+		await screen.findByText(/No JobTrackr User uses this Google account/);
 	});
 });
