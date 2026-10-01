@@ -179,7 +179,8 @@ public class BillingRepository {
                     (r.consumed_at IS NULL AND r.expires_at > now() AND c.state = 'PAID'
                         AND s.status = 'active' AND EXISTS (SELECT 1 FROM billing_payments p
                             WHERE p.checkout_id = c.id AND p.outcome = 'paid'
-                                AND p.period_start = r.paid_period_start AND p.period_end = r.expires_at)) AS eligible
+                                AND p.period_start = r.paid_period_start AND p.period_end = r.expires_at)) AS eligible,
+                    c.state = 'DUPLICATE' AS duplicate
                 FROM billing_checkouts c
                 LEFT JOIN registration_claims r ON r.checkout_id = c.id
                 LEFT JOIN billing_subscriptions s ON s.checkout_id = c.id
@@ -187,7 +188,8 @@ public class BillingRepository {
                 """).param("token", token).query((row, index) -> new ClaimStatus(row.getBoolean("eligible"),
                         row.getTimestamp("paid_period_start") == null ? null
                                 : row.getTimestamp("paid_period_start").toInstant(),
-                        row.getTimestamp("expires_at") == null ? null : row.getTimestamp("expires_at").toInstant()))
+                        row.getTimestamp("expires_at") == null ? null : row.getTimestamp("expires_at").toInstant(),
+                        row.getBoolean("duplicate")))
                 .optional().orElseThrow(() -> new BillingException(org.springframework.http.HttpStatus.NOT_FOUND,
                         "CHECKOUT_NOT_FOUND", "Checkout was not found."));
     }
@@ -196,7 +198,8 @@ public class BillingRepository {
         return instant == null ? null : java.sql.Timestamp.from(instant);
     }
 
-    public record ClaimStatus(boolean registrationEligible, Instant paidPeriodStart, Instant expiresAt) { }
+    public record ClaimStatus(boolean registrationEligible, Instant paidPeriodStart, Instant expiresAt,
+                              boolean duplicate) { }
 
     private Checkout mapCheckout(final ResultSet row, final int index) throws SQLException {
         return new Checkout(row.getObject("id", UUID.class), row.getObject("customer_id", UUID.class),

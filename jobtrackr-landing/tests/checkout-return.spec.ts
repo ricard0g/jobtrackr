@@ -29,7 +29,7 @@ test("paid Buyer is directed to the registration email as the only next step", a
   const send = page.getByRole("button", { name: "Send my registration email" });
   await expect(send).toBeVisible();
   await expect(send).toHaveCSS("border-top-width", "0px");
-  await expect(page.locator("main a")).toHaveText(["support@jobtrakcr.com"]);
+  await expect(page.locator("main a:visible")).toHaveText(["support@jobtrakcr.com"]);
   await expect(page).toHaveURL(/\/checkout-return\/$/);
 
   await send.click();
@@ -61,4 +61,35 @@ test("ended paid week explains that a new purchase is required", async ({
   await expect(
     page.getByRole("button", { name: "Send my registration email" }),
   ).toBeHidden();
+});
+
+test("duplicate purchase explains the automatic refund and offers sign in", async ({
+  page,
+}) => {
+  await page.route("**/api/v1/billing/checkouts/status", (route) =>
+    route.fulfill({
+      json: {
+        registrationEligible: false,
+        paidPeriodStart: null,
+        expiresAt: null,
+        duplicate: true,
+      },
+    }),
+  );
+  await page.goto("/checkout-return/#checkout-token");
+
+  await expect(
+    page.getByRole("heading", {
+      level: 1,
+      name: "You already have a JobTrackr subscription",
+    }),
+  ).toBeVisible();
+  await expect(page.getByText(/refunded automatically/)).toBeVisible();
+  await expect(
+    page.getByRole("link", { name: "Sign in to JobTrackr" }),
+  ).toHaveAttribute("href", "https://app.jobtrakcr.com/auth/login");
+  await expect(
+    page.getByRole("button", { name: "Send my registration email" }),
+  ).toBeHidden();
+  await expect(page.getByText("Checking your payment")).toBeHidden();
 });

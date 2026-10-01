@@ -336,12 +336,15 @@ class CheckoutIntegrationTest {
         sessionEvent("evt_duplicate", "checkout.session.completed", "duplicate")
                 .andExpect(status().isServiceUnavailable());
         checkoutStatus(second).andExpect(status().isOk())
-                .andExpect(jsonPath("$.registrationEligible").value(false));
+                .andExpect(jsonPath("$.registrationEligible").value(false))
+                .andExpect(jsonPath("$.duplicate").value(true));
         sessionEvent("evt_duplicate", "checkout.session.completed", "duplicate").andExpect(status().isOk());
         checkoutStatus(first).andExpect(status().isOk())
-                .andExpect(jsonPath("$.registrationEligible").value(true));
+                .andExpect(jsonPath("$.registrationEligible").value(true))
+                .andExpect(jsonPath("$.duplicate").value(false));
         checkoutStatus(second).andExpect(status().isOk())
-                .andExpect(jsonPath("$.registrationEligible").value(false));
+                .andExpect(jsonPath("$.registrationEligible").value(false))
+                .andExpect(jsonPath("$.duplicate").value(true));
     }
 
     @Test

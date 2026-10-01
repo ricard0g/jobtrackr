@@ -35,6 +35,14 @@ const apiOrigin =
     >
       Send my registration email
     </button>
+    <a
+      id="sign-in"
+      hidden
+      href="https://app.jobtrakcr.com/auth/login"
+      class="[margin-top:2rem] [padding:0.875rem_2rem] bg-accent-main text-accent-darkest text-lg [font-weight:600] no-underline rounded-card [box-shadow:var(--shadow-accent-light)] [transition:all_300ms_ease] hover:[box-shadow:var(--shadow-accent-strong)] [&:not([hidden])]:inline-block under-768:[width:100%] under-768:text-center"
+    >
+      Sign in to JobTrackr
+    </a>
     <p
       id="email-status"
       role="status"
@@ -71,6 +79,7 @@ const apiOrigin =
     document.querySelector<HTMLButtonElement>("#verify-email")!;
   const emailStatus =
     document.querySelector<HTMLParagraphElement>("#email-status")!;
+  const signIn = document.querySelector<HTMLAnchorElement>("#sign-in")!;
   function show(status: string, heading: string, text: string) {
     message.textContent = status;
     title.textContent = heading;
@@ -126,6 +135,17 @@ const apiOrigin =
       );
       if (!response.ok) throw new Error("Payment status unavailable");
       const body = await response.json();
+      if (body.duplicate) {
+        show(
+          "",
+          "You already have a JobTrackr subscription",
+          "You weren't subscribed twice. This payment is cancelled and refunded automatically; the refund can take a few days to reach your bank.",
+        );
+        signIn.hidden = false;
+        period.textContent =
+          "Haven't created your account yet? Open the registration email from your first purchase.";
+        return;
+      }
       if (body.registrationEligible) {
         show(
           "✓ Payment confirmed",
