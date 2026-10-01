@@ -40,6 +40,7 @@ import org.springframework.core.env.Environment;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
+import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.mock.web.MockHttpSession;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.context.DynamicPropertyRegistry;
@@ -59,6 +60,7 @@ import ch.qos.logback.classic.Logger;
 import ch.qos.logback.classic.spi.ILoggingEvent;
 import ch.qos.logback.core.read.ListAppender;
 import com.jayway.jsonpath.JsonPath;
+import com.ricard0g.jobtrackr_api.support.PaidRegistrationFixture;
 import com.ricard0g.jobtrackr_api.model.User;
 import com.ricard0g.jobtrackr_api.model.UserIdentity;
 import com.ricard0g.jobtrackr_api.model.enums.IdentityProvider;
@@ -88,6 +90,9 @@ import jakarta.servlet.http.Cookie;
         "jobtrackr.google.redirect-uri=http://localhost/api/v1/auth/oauth2/callback/google"
 })
 class GoogleSignInIntegrationTest {
+    @Autowired
+    private JdbcClient registrationJdbc;
+
 
     static final String SIGNING_KEY = "test-signing-key-with-at-least-32-characters";
 
@@ -1626,13 +1631,14 @@ class GoogleSignInIntegrationTest {
         final MvcResult result = mockMvc.perform(post("/api/v1/auth/register")
                         .with(remoteAddr(clientIp))
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content("""
+                        .content(PaidRegistrationFixture.withVerifiedPurchase(
+                                registrationJdbc, """
                                 {
                                   "email": "%s",
                                   "password": "%s",
                                   "displayName": "Google User"
                                 }
-                                """.formatted(email, PASSWORD)))
+                                """.formatted(email, PASSWORD))))
                 .andExpect(status().isCreated())
                 .andReturn();
         final UUID userId = UUID.fromString(JsonPath.read(result.getResponse().getContentAsString(), "$.user.userId"));

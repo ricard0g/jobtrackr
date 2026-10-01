@@ -13,6 +13,7 @@ export interface LoginRequest {
 }
 
 export interface RegisterRequest extends LoginRequest {
+	verificationToken: string;
 	displayName?: string;
 }
 

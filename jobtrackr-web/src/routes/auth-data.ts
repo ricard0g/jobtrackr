@@ -1,18 +1,34 @@
 import type { ActionFunctionArgs, LoaderFunctionArgs } from "react-router";
 import { redirect } from "react-router";
 
-import { ApiError, getAuthProviders, login, register } from "@/lib/api";
+import {
+	ApiError,
+	getAuthProviders,
+	getRegistrationVerification,
+	login,
+	register,
+} from "@/lib/api";
 import { redirectPathAfterAuth } from "@/lib/account-settings";
 import { passwordPolicyError } from "@/lib/password-policy";
+import {
+	getRegistrationToken,
+	clearRegistrationToken,
+} from "@/lib/registration-token";
 import {
 	consumeOAuthResultParam,
 	type OAuthResultCode,
 } from "@/lib/google-auth";
-import type { AuthActionData, LoginRequest, RegisterRequest } from "@/types/auth";
+import type {
+	AuthActionData,
+	LoginRequest,
+	RegisterRequest,
+} from "@/types/auth";
 
 export type PublicAuthLoaderData = {
 	google: boolean;
 	oauthResult: OAuthResultCode | null;
+	registration: { email: string; paidUntil: string } | null;
+	registrationError: string | null;
 };
 
 export async function publicAuthLoader({
@@ -24,7 +40,25 @@ export async function publicAuthLoader({
 		throw redirect(oauth.redirectHref);
 	}
 
+	let registration: PublicAuthLoaderData["registration"] = null;
+	let registrationError: string | null = null;
+	if (url.pathname === "/auth/register") {
+		const token = getRegistrationToken();
+		if (token) {
+			try {
+				registration = await getRegistrationVerification(token);
+			} catch (error) {
+				if (!(error instanceof ApiError) || error.status !== 403) {
+					throw error;
+				}
+				registrationError = error.message;
+			}
+		}
+	}
+
 	return {
+		registration,
+		registrationError,
 		google: (await getAuthProviders()).google,
 		oauthResult: oauth.result,
 	};
@@ -86,11 +120,19 @@ export async function registerAction({ request }: ActionFunctionArgs) {
 	}
 
 	try {
+		const verificationToken = getRegistrationToken();
+		if (!verificationToken) {
+			return {
+				formError: "Open the verification link sent to your Checkout Email.",
+			} satisfies AuthActionData;
+		}
 		await register({
+			verificationToken,
 			email,
 			password,
 			displayName: displayName || undefined,
 		} satisfies RegisterRequest);
+		clearRegistrationToken();
 		return redirect(redirectPathAfterAuth(request));
 	} catch (error) {
 		if (error instanceof ApiError) {

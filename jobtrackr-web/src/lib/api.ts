@@ -241,6 +241,16 @@ export async function login(request: LoginRequest) {
 	return response;
 }
 
+export async function getRegistrationVerification(token: string) {
+	return authRequest<{ email: string; paidUntil: string }>(
+		"/registration/verification",
+		{
+			headers: { "X-Verification-Token": token },
+			cache: "no-store",
+		},
+	);
+}
+
 export async function register(request: RegisterRequest) {
 	const response = await authRequest<AuthResponse>("/register", {
 		method: "POST",

@@ -14,6 +14,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.http.MediaType;
+import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
@@ -27,6 +28,7 @@ import org.testcontainers.postgresql.PostgreSQLContainer;
 import org.testcontainers.utility.DockerImageName;
 
 import com.jayway.jsonpath.JsonPath;
+import com.ricard0g.jobtrackr_api.support.PaidRegistrationFixture;
 import com.ricard0g.jobtrackr_api.worker.CvGenerationScheduler;
 
 @SpringBootTest
@@ -42,6 +44,9 @@ import com.ricard0g.jobtrackr_api.worker.CvGenerationScheduler;
         "jobtrackr.r2.bucket=test-bucket"
 })
 class UserProfilePatchIntegrationTest {
+    @Autowired
+    private JdbcClient registrationJdbc;
+
 
     static final String SIGNING_KEY = "test-signing-key-with-at-least-32-characters";
 
@@ -184,13 +189,14 @@ class UserProfilePatchIntegrationTest {
         final String email = "profile-" + UUID.randomUUID() + "@example.com";
         final MvcResult result = mockMvc.perform(post("/api/v1/auth/register")
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content("""
+                        .content(PaidRegistrationFixture.withVerifiedPurchase(
+                                registrationJdbc, """
                                 {
                                   "email": "%s",
                                   "password": "%s",
                                   "displayName": "%s"
                                 }
-                                """.formatted(email, PASSWORD, displayName)))
+                                """.formatted(email, PASSWORD, displayName))))
                 .andExpect(status().isCreated())
                 .andReturn();
         return issuedSession(email, result);

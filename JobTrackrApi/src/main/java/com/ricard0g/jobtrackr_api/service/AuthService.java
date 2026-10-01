@@ -18,6 +18,9 @@ import com.ricard0g.jobtrackr_api.dto.UserDto.UserResponseDto;
 import com.ricard0g.jobtrackr_api.exception.DuplicateEmailException;
 import com.ricard0g.jobtrackr_api.exception.InvalidRefreshTokenException;
 import com.ricard0g.jobtrackr_api.model.User;
+import com.ricard0g.jobtrackr_api.registration.RegistrationRepository;
+import com.ricard0g.jobtrackr_api.registration.RegistrationException;
+import com.ricard0g.jobtrackr_api.registration.RegistrationService;
 import com.ricard0g.jobtrackr_api.repository.UserRepository;
 import com.ricard0g.jobtrackr_api.service.RefreshTokenService.IssuedRefreshToken;
 import com.ricard0g.jobtrackr_api.service.RefreshTokenService.RotationResult;
@@ -28,6 +31,7 @@ import lombok.RequiredArgsConstructor;
 @RequiredArgsConstructor
 public class AuthService {
 
+    private final RegistrationRepository registrationRepository;
     private final UserRepository userRepository;
     private final JwtService jwtService;
     private final RefreshTokenService refreshTokenService;
@@ -36,7 +40,14 @@ public class AuthService {
 
     @Transactional
     public AuthTokenPair register(final RegisterRequestDto registerRequestDto) {
-        final String email = normalizeEmail(registerRequestDto.email());
+        final String hash = RegistrationService.hash(
+                registerRequestDto.verificationToken());
+        final RegistrationRepository.Claim claim =
+                registrationRepository.lockByVerificationToken(hash);
+        final String email = claim.email();
+        if (!email.equals(normalizeEmail(registerRequestDto.email()))) {
+            throw RegistrationException.invalidClaim();
+        }
 
         if (userRepository.existsByUserEmail(email)) {
             throw new DuplicateEmailException("Email already exists");
@@ -44,9 +55,11 @@ public class AuthService {
 
         final String passwordHash = passwordEncoder.encode(registerRequestDto.password());
         final User user = User.localAccount(email, passwordHash, registerRequestDto.displayName());
+        user.setUserEmailVerified(true);
 
         try {
-            final User savedUser = userRepository.save(user);
+            final User savedUser = userRepository.saveAndFlush(user);
+            registrationRepository.consumeAndLink(claim, savedUser.getUserId(), hash);
             return issueTokenPair(savedUser);
         } catch (DataIntegrityViolationException exception) {
             throw new DuplicateEmailException("Email already in use");

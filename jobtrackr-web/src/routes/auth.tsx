@@ -163,6 +163,7 @@ export function LoginPage() {
 }
 
 export function RegisterPage() {
+	const loaderData = useLoaderData() as PublicAuthLoaderData;
 	const actionData = useActionData() as AuthActionData | undefined;
 	const navigation = useNavigation();
 	const location = useLocation();
@@ -173,69 +174,99 @@ export function RegisterPage() {
 	};
 
 	return (
-		<AuthShell title="Create account" subtitle="Start tracking your search">
-			<GoogleSignInSection screen="register" />
-			<RouterForm method="post" className="grid gap-4">
-				<FormField name="displayName">
-					<FormLabel>Display name</FormLabel>
-					<FormControl asChild>
-						<Input
-							name="displayName"
-							autoComplete="name"
-							defaultValue={actionData?.values?.displayName ?? ""}
-							disabled={isSubmitting}
-						/>
-					</FormControl>
-				</FormField>
-
-				<FormField name="email">
-					<FormLabel>Email</FormLabel>
-					<FormControl asChild>
-						<Input
-							name="email"
-							type="email"
-							autoComplete="email"
-							defaultValue={actionData?.values?.email ?? ""}
-							aria-invalid={Boolean(actionData?.fieldErrors?.email)}
-							disabled={isSubmitting}
-						/>
-					</FormControl>
-					{actionData?.fieldErrors?.email && (
-						<FormMessage>{actionData.fieldErrors.email}</FormMessage>
-					)}
-				</FormField>
-
-				<FormField name="password">
-					<FormLabel>Password</FormLabel>
-					<FormControl asChild>
-						<Input
-							name="password"
-							type="password"
-							autoComplete="new-password"
-							aria-invalid={Boolean(actionData?.fieldErrors?.password)}
-							disabled={isSubmitting}
-						/>
-					</FormControl>
-					{actionData?.fieldErrors?.password && (
-						<FormMessage>{actionData.fieldErrors.password}</FormMessage>
-					)}
-				</FormField>
-
-				{actionData?.formError && (
-					<p className="rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive">
-						{actionData.formError}
+		<AuthShell title="Create account" subtitle="Finish your paid registration">
+			<p className="mb-4 text-sm text-medium-gray">
+				Complete payment first, then open the verification link sent to your
+				Checkout Email. Your paid week starts at Stripe billing; registration
+				does not restart it.
+			</p>
+			{loaderData.registrationError && (
+				<p role="alert">{loaderData.registrationError}</p>
+			)}
+			{!loaderData.registration && (
+				<a
+					className="font-medium text-darkest-accent underline"
+					href="https://jobtrakcr.com/#pricing-section"
+				>
+					View the weekly subscription
+				</a>
+			)}
+			{loaderData.registration && (
+				<>
+					<p className="mb-4 text-sm text-medium-gray">
+						Paid access ends{" "}
+						{new Date(loaderData.registration.paidUntil).toLocaleString()}.
 					</p>
-				)}
+					<RouterForm method="post" className="grid gap-4">
+						<FormField name="displayName">
+							<FormLabel htmlFor="register-displayName">Display name</FormLabel>
+							<FormControl asChild>
+								<Input
+									name="displayName"
+									id="register-displayName"
+									autoComplete="name"
+									defaultValue={actionData?.values?.displayName ?? ""}
+									disabled={isSubmitting}
+								/>
+							</FormControl>
+						</FormField>
 
-				<Button type="submit" disabled={isSubmitting}>
-					{isSubmitting && <Loader2 className="animate-spin" />}
-					Register
-				</Button>
-			</RouterForm>
+						<FormField name="email">
+							<FormLabel htmlFor="register-email">Email</FormLabel>
+							<FormControl asChild>
+								<Input
+									name="email"
+									id="register-email"
+									type="email"
+									autoComplete="email"
+									value={loaderData.registration.email}
+									readOnly
+									aria-invalid={Boolean(actionData?.fieldErrors?.email)}
+									disabled={isSubmitting}
+								/>
+							</FormControl>
+							{actionData?.fieldErrors?.email && (
+								<FormMessage>{actionData.fieldErrors.email}</FormMessage>
+							)}
+						</FormField>
+
+						<FormField name="password">
+							<FormLabel htmlFor="register-password">Password</FormLabel>
+							<FormControl asChild>
+								<Input
+									name="password"
+									id="register-password"
+									type="password"
+									autoComplete="new-password"
+									aria-invalid={Boolean(actionData?.fieldErrors?.password)}
+									disabled={isSubmitting}
+								/>
+							</FormControl>
+							{actionData?.fieldErrors?.password && (
+								<FormMessage>{actionData.fieldErrors.password}</FormMessage>
+							)}
+						</FormField>
+
+						{actionData?.formError && (
+							<p className="rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive">
+								{actionData.formError}
+							</p>
+						)}
+
+						<Button type="submit" disabled={isSubmitting}>
+							{isSubmitting && <Loader2 className="animate-spin" />}
+							Register
+						</Button>
+					</RouterForm>
+				</>
+			)}
 
 			<p className="mt-4 text-sm text-medium-gray">
 				Already have an account?{" "}
-				<Link className="font-medium text-darkest-accent underline" to={loginTo}>
+				<Link
+					className="font-medium text-darkest-accent underline"
+					to={loginTo}
+				>
 					Log in
 				</Link>
 			</p>

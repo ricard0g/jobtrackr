@@ -20,6 +20,15 @@ const apiOrigin =
       Waiting for verified payment confirmation…
     </p>
     <p id="paid-period" class="my-6"></p>
+    <button
+      id="verify-email"
+      type="button"
+      hidden
+      class="[padding:0.5rem_1.5rem] text-accent-darkest [font-weight:500] bg-accent-main rounded-card cursor-pointer disabled:opacity-50"
+    >
+      Send my registration email
+    </button>
+    <p id="email-status" role="status" aria-live="polite" class="my-6"></p>
     <p class="my-6">
       Your paid week starts at Stripe billing. If you need help completing
       registration, contact{" "}
@@ -42,6 +51,39 @@ const apiOrigin =
   history.replaceState(null, "", location.pathname);
   if (fragment) sessionStorage.setItem("jobtrackr-checkout-token", fragment);
   const token = fragment || sessionStorage.getItem("jobtrackr-checkout-token");
+  const verifyButton =
+    document.querySelector<HTMLButtonElement>("#verify-email")!;
+  const emailStatus =
+    document.querySelector<HTMLParagraphElement>("#email-status")!;
+  verifyButton.addEventListener("click", async () => {
+    if (!token) return;
+    verifyButton.disabled = true;
+    try {
+      const response = await fetch(
+        `${message.dataset.apiOrigin}/api/v1/auth/registration/verification`,
+        {
+          method: "POST",
+          headers: { "X-Checkout-Token": token },
+        },
+      );
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(
+          error.message ||
+            "Could not send the registration email. Please try again.",
+        );
+      }
+      emailStatus.textContent =
+        "Check your Checkout Email for a verification link to create your password. The link lasts up to 30 minutes.";
+    } catch (error) {
+      emailStatus.textContent =
+        error instanceof Error
+          ? error.message
+          : "Could not send the registration email. Please try again.";
+    } finally {
+      verifyButton.disabled = false;
+    }
+  });
   async function checkPayment(attempt = 0): Promise<void> {
     if (!token) {
       message.textContent =
@@ -61,6 +103,7 @@ const apiOrigin =
       if (body.registrationEligible) {
         message.textContent =
           "Payment confirmed. Your purchase is ready for registration.";
+        verifyButton.hidden = false;
         period.textContent = `Your paid week runs from ${new Date(body.paidPeriodStart).toLocaleString()} until ${new Date(body.expiresAt).toLocaleString()}.`;
         return;
       }

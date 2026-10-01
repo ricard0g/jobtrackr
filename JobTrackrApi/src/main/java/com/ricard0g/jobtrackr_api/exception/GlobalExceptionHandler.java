@@ -12,11 +12,18 @@ import org.springframework.web.multipart.MaxUploadSizeExceededException;
 import org.springframework.web.multipart.support.MissingServletRequestPartException;
 
 import com.ricard0g.jobtrackr_api.dto.ErrorResponse;
+import com.ricard0g.jobtrackr_api.registration.RegistrationException;
 
 import jakarta.validation.ConstraintViolationException;
 
 @RestControllerAdvice
 public class GlobalExceptionHandler {
+
+    @ExceptionHandler(RegistrationException.class)
+    public ResponseEntity<ErrorResponse> handleRegistration(final RegistrationException exception) {
+        return ResponseEntity.status(exception.getStatus())
+                .body(ErrorResponse.of(exception.getCode(), exception.getMessage()));
+    }
 
     @ExceptionHandler(com.ricard0g.jobtrackr_api.billing.BillingException.class)
     public ResponseEntity<ErrorResponse> handleBilling(

@@ -21,6 +21,8 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Import;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
+import org.springframework.jdbc.core.simple.JdbcClient;
+import com.ricard0g.jobtrackr_api.support.PaidRegistrationFixture;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
@@ -60,6 +62,9 @@ import io.micrometer.core.instrument.MeterRegistry;
         "jobtrackr.r2.bucket=test-bucket"
 })
 class AuthenticationRateLimitIntegrationTest {
+    @Autowired
+    private JdbcClient registrationJdbc;
+
 
     static final String SIGNING_KEY = "test-signing-key-with-at-least-32-characters";
 
@@ -253,7 +258,7 @@ class AuthenticationRateLimitIntegrationTest {
         // when / then
         register(email, clientIp).andExpect(status().isCreated());
         for (int attempt = 1; attempt < REGISTRATION_IP_LIMIT; attempt++) {
-            register(email, clientIp).andExpect(status().isConflict());
+            register(email, clientIp).andExpect(status().isForbidden());
         }
 
         register(email, clientIp)
@@ -269,7 +274,7 @@ class AuthenticationRateLimitIntegrationTest {
         final String clientIp = uniqueIp();
         register(email, clientIp).andExpect(status().isCreated());
         for (int attempt = 1; attempt < REGISTRATION_IP_LIMIT; attempt++) {
-            register(email, clientIp).andExpect(status().isConflict());
+            register(email, clientIp).andExpect(status().isForbidden());
         }
 
         // when
@@ -294,7 +299,7 @@ class AuthenticationRateLimitIntegrationTest {
 
         register(email, throttledIp).andExpect(status().isCreated());
         for (int attempt = 1; attempt < REGISTRATION_IP_LIMIT; attempt++) {
-            register(email, throttledIp).andExpect(status().isConflict());
+            register(email, throttledIp).andExpect(status().isForbidden());
         }
         register(email, throttledIp).andExpect(status().isTooManyRequests());
 
@@ -424,13 +429,14 @@ class AuthenticationRateLimitIntegrationTest {
                 .with(remoteAddr(clientIp))
                 .with(csrf())
                 .contentType(MediaType.APPLICATION_JSON)
-                .content("""
+                .content(PaidRegistrationFixture.withVerifiedPurchase(
+                                registrationJdbc, """
                         {
                           "email": "%s",
                           "password": "%s",
                           "displayName": "Rate Limit User"
                         }
-                        """.formatted(email, PASSWORD)));
+                        """.formatted(email, PASSWORD))));
     }
 
     private static RequestPostProcessor remoteAddr(final String clientIp) {
