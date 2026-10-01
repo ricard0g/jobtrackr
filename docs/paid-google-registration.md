@@ -7,13 +7,12 @@ and the existing Billing Customer. Registration consumes the same one-time Regis
 
 ## Entry points
 
-- The landing `/checkout-return/` page shows **Continue with Google** after payment confirmation if
-  `GET /api/v1/auth/providers` reports Google enabled. It links to `/auth/register#checkout=<Checkout token>` on
-  `PUBLIC_APP_ORIGIN` (default: `PUBLIC_API_ORIGIN`; use `http://localhost:5173` for host-run development).
-- The registration email link (`#verify=`) shows the password form and **Continue with Google**.
+- The registration email link (`#verify=`) shows the password form and **Continue with Google** when Google is
+  enabled. The landing payment page offers only **Send my registration email**, so the email is the one next step.
+- `/auth/register#checkout=<Checkout token>` also offers Google, without a password form, because a password
+  requires the email-ownership link. The landing doesn't link to it.
 
-The SPA keeps either token in tab storage. A Checkout token alone offers only Google, because a password requires
-the email-ownership link.
+The SPA keeps either token in tab storage.
 
 ## HTTP boundary
 
@@ -48,4 +47,4 @@ An unknown Google identity can no longer create a User through ordinary sign-in.
 uses a local fake Google OIDC server. It covers success through both tokens, mismatch, unverified email, replay,
 paid-week expiry between start and callback, unpaid/unknown tokens, closed just-in-time signup, replacement by
 ordinary sign-in, both collision types, and racing callbacks. React Router tests cover the Google registration
-UI, and a Playwright test covers the landing link.
+UI.

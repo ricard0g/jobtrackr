@@ -23,7 +23,7 @@ Users.
 - `GET /api/v1/auth/registration/claim` and `POST /api/v1/auth/registration/google`
 - New `oauthResult` codes: `not_registered`, `registration_used`, `registration_expired`
 - React registration offers Google with registration-specific mismatch, conflict, and expiry messages
-- Landing payment page links to Google registration when Google is enabled (`PUBLIC_APP_ORIGIN`)
+- Landing payment page focuses on one action: sending the registration email
 - HTTP tests with a fake Google OIDC server cover claims, identities, collisions, replay, and races
 
 ### Impact

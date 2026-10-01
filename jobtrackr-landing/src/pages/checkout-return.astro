@@ -2,59 +2,66 @@
 import SiteLayout from "../layouts/SiteLayout.astro";
 const apiOrigin =
   import.meta.env.PUBLIC_API_ORIGIN ?? "https://app.jobtrakcr.com";
-const appOrigin = import.meta.env.PUBLIC_APP_ORIGIN ?? apiOrigin;
 ---
 
 <SiteLayout
-  title="Payment status | JobTrackr"
-  description="Check your JobTrackr payment confirmation."
+  title="Complete your registration | JobTrackr"
+  description="Confirm your JobTrackr payment and get your registration email."
 >
-  <main class="section-wrap [max-width:760px] [width:calc(100%_-_2rem)] [min-height:55vh] [margin:11rem_auto_7rem]">
-    <h1 class="font-display text-4xl font-semibold">Your payment status</h1>
+  <main class="section-wrap [max-width:640px] [width:calc(100%_-_2rem)] [min-height:55vh] [margin:11rem_auto_7rem]">
     <p
       id="payment-status"
       data-api-origin={apiOrigin}
-      data-app-origin={appOrigin}
       role="status"
       aria-live="polite"
-      class="my-6"
+      class="inline-flex items-center [column-gap:0.5rem] text-sm [font-weight:600] text-accent-dark"
     >
-      Waiting for verified payment confirmation…
+      Confirming your payment…
     </p>
-    <p id="paid-period" class="my-6"></p>
+    <h1
+      id="page-title"
+      class="font-display [font-size:2.5rem] [line-height:1.15] font-semibold text-ink [margin-top:0.75rem] under-768:[font-size:2rem]"
+    >
+      Checking your payment
+    </h1>
+    <p id="page-lead" class="text-lg text-dark-gray [margin-top:1rem]">
+      This usually takes a few seconds. Please keep this page open.
+    </p>
     <button
       id="verify-email"
       type="button"
       hidden
-      class="[padding:0.5rem_1.5rem] text-accent-darkest [font-weight:500] bg-accent-main rounded-card cursor-pointer disabled:opacity-50"
+      class="[margin-top:2rem] [padding:0.875rem_2rem] border-0 bg-accent-main text-accent-darkest text-lg [font-weight:600] rounded-card cursor-pointer [box-shadow:var(--shadow-accent-light)] [transition:all_300ms_ease] hover:[box-shadow:var(--shadow-accent-strong)] disabled:opacity-50 disabled:cursor-wait under-768:[width:100%]"
     >
       Send my registration email
     </button>
-    <a
-      id="register-google"
-      hidden
-      class="ml-3 [padding:0.5rem_1.5rem] text-accent-darkest [font-weight:500] border border-accent-main rounded-card"
+    <p
+      id="email-status"
+      role="status"
+      aria-live="polite"
+      class="text-base text-dark-gray [margin-top:1rem]"
     >
-      Continue with Google
-    </a>
-    <p id="email-status" role="status" aria-live="polite" class="my-6"></p>
-    <p class="my-6">
-      Your paid week starts at Stripe billing. If you need help completing
-      registration, contact{" "}
-      <a href="mailto:support@jobtrakcr.com" class="text-accent-darkest">
-        support@jobtrakcr.com
-      </a>{" "}
-      using your Checkout Email.
     </p>
-    <a href="/" class="text-accent-darkest">
-      Back to JobTrackr
-    </a>
+    <div
+      class="[margin-top:4rem] [padding-top:1.5rem] [border-top:1px_solid_var(--color-light-gray)] text-sm text-medium-gray"
+    >
+      <p id="paid-period"></p>
+      <p class="[margin-top:0.5rem]">
+        Need help? Contact{" "}
+        <a href="mailto:support@jobtrakcr.com" class="text-medium-gray underline">
+          support@jobtrakcr.com
+        </a>{" "}
+        from your Checkout Email.
+      </p>
+    </div>
   </main>
 </SiteLayout>
 
 <script>
   const message =
     document.querySelector<HTMLParagraphElement>("#payment-status")!;
+  const title = document.querySelector<HTMLHeadingElement>("#page-title")!;
+  const lead = document.querySelector<HTMLParagraphElement>("#page-lead")!;
   const period = document.querySelector<HTMLParagraphElement>("#paid-period")!;
   const fragment = location.hash.slice(1);
   history.replaceState(null, "", location.pathname);
@@ -64,23 +71,15 @@ const appOrigin = import.meta.env.PUBLIC_APP_ORIGIN ?? apiOrigin;
     document.querySelector<HTMLButtonElement>("#verify-email")!;
   const emailStatus =
     document.querySelector<HTMLParagraphElement>("#email-status")!;
-  const googleLink =
-    document.querySelector<HTMLAnchorElement>("#register-google")!;
-  async function offerGoogle() {
-    try {
-      const response = await fetch(
-        `${message.dataset.apiOrigin}/api/v1/auth/providers`,
-      );
-      if (!response.ok || (await response.json()).google !== true) return;
-      googleLink.href = `${message.dataset.appOrigin}/auth/register#checkout=${encodeURIComponent(token!)}`;
-      googleLink.hidden = false;
-    } catch {
-      googleLink.hidden = true;
-    }
+  function show(status: string, heading: string, text: string) {
+    message.textContent = status;
+    title.textContent = heading;
+    lead.textContent = text;
   }
   verifyButton.addEventListener("click", async () => {
     if (!token) return;
     verifyButton.disabled = true;
+    emailStatus.textContent = "Sending…";
     try {
       const response = await fetch(
         `${message.dataset.apiOrigin}/api/v1/auth/registration/verification`,
@@ -97,7 +96,8 @@ const appOrigin = import.meta.env.PUBLIC_APP_ORIGIN ?? apiOrigin;
         );
       }
       emailStatus.textContent =
-        "Check your Checkout Email for a verification link to create your password. The link lasts up to 30 minutes.";
+        "Email sent. Open the link in your inbox to create your account. It expires in 30 minutes.";
+      verifyButton.textContent = "Resend registration email";
     } catch (error) {
       emailStatus.textContent =
         error instanceof Error
@@ -109,8 +109,11 @@ const appOrigin = import.meta.env.PUBLIC_APP_ORIGIN ?? apiOrigin;
   });
   async function checkPayment(attempt = 0): Promise<void> {
     if (!token) {
-      message.textContent =
-        "No Checkout was provided. A return to this page alone does not confirm payment.";
+      show(
+        "",
+        "We couldn't find your purchase",
+        "Returning to this page alone doesn't confirm payment. Use the link from Stripe Checkout or contact support.",
+      );
       return;
     }
     try {
@@ -124,27 +127,38 @@ const appOrigin = import.meta.env.PUBLIC_APP_ORIGIN ?? apiOrigin;
       if (!response.ok) throw new Error("Payment status unavailable");
       const body = await response.json();
       if (body.registrationEligible) {
-        message.textContent =
-          "Payment confirmed. Your purchase is ready for registration.";
+        show(
+          "✓ Payment confirmed",
+          "One more step: get your registration email",
+          "We'll send a secure link to your Checkout Email. Open it to create your account and start using JobTrackr.",
+        );
         verifyButton.hidden = false;
-        void offerGoogle();
-        period.textContent = `Your paid week runs from ${new Date(body.paidPeriodStart).toLocaleString()} until ${new Date(body.expiresAt).toLocaleString()}.`;
+        period.textContent = `Your paid week runs from ${new Date(body.paidPeriodStart).toLocaleString()} until ${new Date(body.expiresAt).toLocaleString()}. It started at Stripe billing; registering later doesn't extend it.`;
         return;
       }
       if (body.expiresAt && new Date(body.expiresAt).getTime() <= Date.now()) {
-        message.textContent =
-          "This paid week has ended. Registration requires a new purchase.";
+        show(
+          "",
+          "This paid week has ended",
+          "Registration requires a new purchase.",
+        );
         return;
       }
       if (attempt < 45) {
         window.setTimeout(() => void checkPayment(attempt + 1), 2000);
         return;
       }
-      message.textContent =
-        "Payment has not been confirmed yet. Revisit this page or contact support; please avoid another purchase.";
+      show(
+        "",
+        "We're still confirming your payment",
+        "Revisit this page in a few minutes or contact support. Please avoid making another purchase.",
+      );
     } catch {
-      message.textContent =
-        "Payment status is temporarily unavailable. Refresh this page or contact support; please avoid another purchase.";
+      show(
+        "",
+        "Payment status is temporarily unavailable",
+        "Refresh this page or contact support. Please avoid making another purchase.",
+      );
     }
   }
   void checkPayment();

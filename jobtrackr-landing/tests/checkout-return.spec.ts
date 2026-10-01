@@ -1,6 +1,8 @@
 import { expect, test } from "@playwright/test";
 
-async function paidCheckout(page: import("@playwright/test").Page, google: boolean) {
+test("paid Buyer is directed to the registration email as the only next step", async ({
+  page,
+}) => {
   await page.route("**/api/v1/billing/checkouts/status", (route) =>
     route.fulfill({
       json: {
@@ -10,38 +12,53 @@ async function paidCheckout(page: import("@playwright/test").Page, google: boole
       },
     }),
   );
-  await page.route("**/api/v1/auth/providers", (route) =>
-    route.fulfill({ json: { google } }),
-  );
+  let checkoutToken: string | null = null;
+  await page.route("**/api/v1/auth/registration/verification", (route) => {
+    checkoutToken = route.request().headers()["x-checkout-token"];
+    return route.fulfill({ status: 202 });
+  });
   await page.goto("/checkout-return/#checkout-token");
-}
 
-test("paid Buyer can continue to Google registration with the Checkout token", async ({
-  page,
-}) => {
-  await paidCheckout(page, true);
-
+  await expect(page.getByText("Payment confirmed")).toBeVisible();
   await expect(
-    page.getByRole("button", { name: "Send my registration email" }),
+    page.getByRole("heading", {
+      level: 1,
+      name: "One more step: get your registration email",
+    }),
   ).toBeVisible();
-  const google = page.getByRole("link", { name: "Continue with Google" });
-  await expect(google).toBeVisible();
-  await expect(google).toHaveAttribute(
-    "href",
-    /\/auth\/register#checkout=checkout-token$/,
-  );
+  const send = page.getByRole("button", { name: "Send my registration email" });
+  await expect(send).toBeVisible();
+  await expect(send).toHaveCSS("border-top-width", "0px");
+  await expect(page.locator("main a")).toHaveText(["support@jobtrakcr.com"]);
   await expect(page).toHaveURL(/\/checkout-return\/$/);
+
+  await send.click();
+
+  await expect(page.getByText(/Email sent\. Open the link/)).toBeVisible();
+  await expect(
+    page.getByRole("button", { name: "Resend registration email" }),
+  ).toBeVisible();
+  expect(checkoutToken).toBe("checkout-token");
 });
 
-test("Google registration stays hidden while Google Sign-In is disabled", async ({
+test("ended paid week explains that a new purchase is required", async ({
   page,
 }) => {
-  await paidCheckout(page, false);
+  await page.route("**/api/v1/billing/checkouts/status", (route) =>
+    route.fulfill({
+      json: {
+        registrationEligible: false,
+        paidPeriodStart: "2020-10-01T00:00:00Z",
+        expiresAt: "2020-10-08T00:00:00Z",
+      },
+    }),
+  );
+  await page.goto("/checkout-return/#checkout-token");
 
   await expect(
-    page.getByRole("button", { name: "Send my registration email" }),
+    page.getByRole("heading", { level: 1, name: "This paid week has ended" }),
   ).toBeVisible();
   await expect(
-    page.getByRole("link", { name: "Continue with Google" }),
+    page.getByRole("button", { name: "Send my registration email" }),
   ).toBeHidden();
 });
