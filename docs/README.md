@@ -22,3 +22,4 @@ Subproject-specific documentation lives in:
 - [Stripe hosted Checkout](stripe-checkout.md): test/live configuration and the durable initial-purchase boundary.
 
 - [Paid password registration](paid-password-registration.md) — Resend configuration, claim verification, and session creation.
+- [Backend purchase and registration guide](backend-purchase-registration-guide.md) — diagrams and walkthrough of Stripe payment confirmation, Resend email verification, database records, and authentication sessions.
