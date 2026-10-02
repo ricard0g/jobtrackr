@@ -1,8 +1,9 @@
 package com.ricard0g.jobtrackr_api.billing;
 
-import java.time.Instant;
+import java.time.Clock;
 import java.util.Set;
 import java.util.UUID;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -21,6 +22,7 @@ public class BillingEventTransactions {
     private final BillingRepository repository;
     private final StripeGateway stripe;
     private final StripeProperties properties;
+    private final ObjectProvider<Clock> clocks;
 
     @Transactional
     public DuplicatePurchase process(final StripeWebhookVerifier.VerifiedEvent event) {
@@ -66,7 +68,8 @@ public class BillingEventTransactions {
         final boolean paid = "paid".equals(purchase.paymentStatus())
                 && "complete".equals(purchase.sessionStatus()) && "active".equals(purchase.subscriptionStatus())
                 && purchase.periodStart() != null && purchase.periodEnd() != null
-                && purchase.periodStart().isBefore(purchase.periodEnd()) && purchase.periodEnd().isAfter(Instant.now());
+                && purchase.periodStart().isBefore(purchase.periodEnd())
+                && purchase.periodEnd().isAfter(clocks.getIfAvailable(Clock::systemUTC).instant());
         repository.reconcile(checkout, purchase, paid);
         return null;
     }

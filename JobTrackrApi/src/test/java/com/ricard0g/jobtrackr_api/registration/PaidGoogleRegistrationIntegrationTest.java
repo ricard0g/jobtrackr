@@ -423,7 +423,8 @@ class PaidGoogleRegistrationIntegrationTest {
         final Instant periodStart = Instant.now().minusSeconds(60).truncatedTo(ChronoUnit.SECONDS);
         when(stripe.retrievePurchase("cs_" + suffix)).thenReturn(new StripeGateway.Purchase("cs_" + suffix,
                 "cus_" + suffix, email, "sub_" + suffix, "active", "in_" + suffix, "paid", "price_weekly",
-                periodStart, periodStart.plusSeconds(WEEK_SECONDS), "complete"));
+                periodStart, periodStart.plusSeconds(WEEK_SECONDS), "complete", "paid",
+                new StripeGateway.InitialInvoice("in_" + suffix, periodStart, periodStart.plusSeconds(WEEK_SECONDS))));
         webhook("evt_" + suffix, "{\"id\":\"cs_" + suffix + "\"}").andExpect(status().isOk());
         return token;
     }
