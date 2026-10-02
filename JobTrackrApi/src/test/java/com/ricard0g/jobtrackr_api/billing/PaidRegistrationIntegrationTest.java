@@ -308,7 +308,8 @@ class PaidRegistrationIntegrationTest {
         when(stripe.retrievePurchase("cs_revoked")).thenReturn(new StripeGateway.Purchase(
                 original.sessionId(), original.customerId(), original.email(), original.subscriptionId(), "past_due",
                 original.invoiceId(), "open", original.priceId(), original.periodStart(), original.periodEnd(),
-                "complete"));
+                "complete", original.checkoutPaymentStatus(),
+                original.initialInvoice()));
         sessionEvent("evt_revoked_failed", "checkout.session.completed", "revoked").andExpect(status().isOk());
         register("revoked@example.com", token).andExpect(status().isForbidden());
         http.perform(get("/api/v1/auth/registration/verification").header("X-Verification-Token", token))
@@ -453,7 +454,8 @@ class PaidRegistrationIntegrationTest {
     private StripeGateway.Purchase paidPurchase(final String suffix, final String email) {
         final Instant start = Instant.now().minusSeconds(60).truncatedTo(ChronoUnit.SECONDS);
         return new StripeGateway.Purchase("cs_" + suffix, "cus_" + suffix, email, "sub_" + suffix, "active",
-                "in_" + suffix, "paid", "price_weekly", start, start.plusSeconds(WEEK_SECONDS), "complete");
+                "in_" + suffix, "paid", "price_weekly", start, start.plusSeconds(WEEK_SECONDS), "complete", "paid",
+                new StripeGateway.InitialInvoice("in_" + suffix, start, start.plusSeconds(WEEK_SECONDS)));
     }
 
     private ResultActions sessionEvent(final String id, final String type, final String suffix) throws Exception {

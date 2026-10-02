@@ -14,5 +14,8 @@ public interface StripeGateway {
 
     record Purchase(String sessionId, String customerId, String email, String subscriptionId,
                     String subscriptionStatus, String invoiceId, String paymentStatus, String priceId,
-                    Instant periodStart, Instant periodEnd, String sessionStatus) { }
+                    Instant periodStart, Instant periodEnd, String sessionStatus, String checkoutPaymentStatus,
+                    InitialInvoice initialInvoice) { }
+
+    record InitialInvoice(String id, Instant periodStart, Instant periodEnd) { }
 }

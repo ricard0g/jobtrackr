@@ -2,6 +2,8 @@
 
 Verified events reconcile Stripe's current Checkout Session, Subscription and latest Invoice into PostgreSQL. The latest invoice's subscription line supplies the paid period. A delayed event is a prompt to retrieve current Stripe state, so an old failure cannot undo a paid retry or renewal. Event IDs and billing changes commit together; duplicates do not repeat effects, and a failed Stripe read rolls back processing so Stripe can redeliver.
 
+Checkout completion follows the original Session payment status; a failed renewal does not reopen a completed Checkout or remove its protection against another active purchase. Duplicate reversal retains the initial invoice and its period independently of the latest invoice, and records refund outcomes against that initial invoice only.
+
 Each paid-only HTTP request checks the durable period and confirmed payment with the billing clock. Existing sessions stay signed in during Limited Access. The app refreshes entitlement every 30 seconds while visible, on focus, and at an approaching paid-period expiry; paid-action failures also refresh it. Existing Applications and Generated CVs remain available.
 
 | Stripe state | JobTrackr access |

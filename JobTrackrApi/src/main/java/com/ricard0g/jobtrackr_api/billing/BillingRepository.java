@@ -88,13 +88,14 @@ public class BillingRepository {
         recordSubscription(checkout, purchase);
         jdbc.sql("UPDATE billing_checkouts SET state = 'DUPLICATE' WHERE id = :id")
                 .param("id", checkout.id()).update();
+        final StripeGateway.InitialInvoice initialInvoice = purchase.initialInvoice();
         jdbc.sql("""
                 INSERT INTO billing_duplicates (checkout_id, stripe_subscription_id, stripe_invoice_id)
                 VALUES (:id, :subscription, :invoice) ON CONFLICT DO NOTHING
                 """).param("id", checkout.id()).param("subscription", purchase.subscriptionId())
-                .param("invoice", purchase.invoiceId()).update();
-        recordPayment(checkout.id(), purchase.invoiceId(), "duplicate_pending", purchase.periodStart(),
-                purchase.periodEnd());
+                .param("invoice", initialInvoice.id()).update();
+        recordPayment(checkout.id(), initialInvoice.id(), "duplicate_pending", initialInvoice.periodStart(),
+                initialInvoice.periodEnd());
     }
 
     public BillingEventTransactions.DuplicatePurchase duplicate(final UUID checkoutId) {
@@ -115,7 +116,10 @@ public class BillingRepository {
         final boolean completed = "duplicate_refunded".equals(outcome) || "duplicate_cancelled".equals(outcome);
         jdbc.sql("UPDATE billing_duplicates SET completed = :completed WHERE checkout_id = :id")
                 .param("completed", completed).param("id", checkoutId).update();
-        jdbc.sql("UPDATE billing_payments SET outcome = :outcome, updated_at = now() WHERE checkout_id = :id")
+        jdbc.sql("""
+                UPDATE billing_payments SET outcome = :outcome, updated_at = now()
+                WHERE stripe_invoice_id = (SELECT stripe_invoice_id FROM billing_duplicates WHERE checkout_id = :id)
+                """)
                 .param("id", checkoutId).param("outcome", outcome).update();
     }
 
@@ -135,7 +139,7 @@ public class BillingRepository {
         final boolean ended = "canceled".equals(purchase.subscriptionStatus())
                 || "incomplete_expired".equals(purchase.subscriptionStatus());
         final boolean initialPaymentConfirmed = purchase.subscriptionId() != null
-                && "paid".equals(purchase.paymentStatus()) && "complete".equals(purchase.sessionStatus());
+                && "paid".equals(purchase.checkoutPaymentStatus()) && "complete".equals(purchase.sessionStatus());
         final CheckoutState state = "expired".equals(purchase.sessionStatus()) ? CheckoutState.EXPIRED
                 : ended ? CheckoutState.ENDED
                 : initialPaymentConfirmed ? CheckoutState.PAID : CheckoutState.OPEN;
