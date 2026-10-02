@@ -4,6 +4,7 @@ import static org.hamcrest.Matchers.nullValue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
@@ -21,9 +22,12 @@ import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.boot.webmvc.test.autoconfigure.WebMvcTest;
 import org.springframework.context.annotation.Import;
 import org.springframework.http.MediaType;
+import org.springframework.security.test.context.support.WithAnonymousUser;
+import org.springframework.security.test.context.support.WithMockUser;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 
+import com.ricard0g.jobtrackr_api.config.security.MethodSecurityConfig;
 import com.ricard0g.jobtrackr_api.dto.CvGenerationDto.CvGenerationDtos;
 import com.ricard0g.jobtrackr_api.dto.CvGenerationDto.JobDescriptionResponseDto;
 import com.ricard0g.jobtrackr_api.exception.CvGenerationException;
@@ -34,10 +38,11 @@ import com.ricard0g.jobtrackr_api.service.CvGenerationService;
 
 @WebMvcTest(controllers = CvGenerationController.class)
 @AutoConfigureMockMvc(addFilters = false)
-@Import(GlobalExceptionHandler.class)
+@Import({GlobalExceptionHandler.class, MethodSecurityConfig.class})
+@WithMockUser(username = CvGenerationControllerTest.USER_ID_VALUE)
 class CvGenerationControllerTest {
 
-    private static final String USER_ID_VALUE = "11111111-1111-4111-8111-111111111111";
+    static final String USER_ID_VALUE = "11111111-1111-4111-8111-111111111111";
     private static final UUID USER_ID = UUID.fromString(USER_ID_VALUE);
     private static final UUID CORRELATION_ID = UUID.fromString("22222222-2222-4222-8222-222222222222");
 
@@ -46,6 +51,26 @@ class CvGenerationControllerTest {
 
     @MockitoBean
     private CvGenerationService cvGenerationService;
+
+    @Test
+    @WithAnonymousUser
+    void read_withoutAuthentication_isDeniedByMethodSecurity() throws Exception {
+        // when / then
+        mockMvc.perform(get("/api/v1/cv-generations").principal(principal()))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.code").value("ACCESS_DENIED"));
+        verifyNoInteractions(cvGenerationService);
+    }
+
+    @Test
+    @WithAnonymousUser
+    void mutation_withoutAuthentication_isDeniedByMethodSecurity() throws Exception {
+        // when / then
+        mockMvc.perform(post("/api/v1/cv-generations/11/cancel").principal(principal()))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.code").value("ACCESS_DENIED"));
+        verifyNoInteractions(cvGenerationService);
+    }
 
     @Test
     void create_returnsAcceptedWithoutSensitiveSnapshots() throws Exception {
