@@ -45,6 +45,7 @@ jobs:
 
   backend-image:
     name: Build backend image
+    if: github.event_name != 'pull_request' || github.base_ref == 'main'
     runs-on: ubuntu-latest
     timeout-minutes: 45
     steps:
@@ -73,6 +74,7 @@ jobs:
 
   frontend-image:
     name: Build frontend image
+    if: github.event_name != 'pull_request' || github.base_ref == 'main'
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
@@ -101,6 +103,7 @@ jobs:
 
   cv-generation-image:
     name: Build CV Generation image
+    if: github.event_name != 'pull_request' || github.base_ref == 'main'
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
