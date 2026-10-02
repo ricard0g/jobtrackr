@@ -1,4 +1,4 @@
-import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { act, cleanup, createEvent, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { HttpResponse, http } from "msw";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { createMemoryRouter, Outlet, RouterProvider } from "react-router";
@@ -187,6 +187,28 @@ describe("current entitlement in the signed-in app", () => {
 			expect((button as HTMLButtonElement).disabled).toBe(true);
 		}
 		expect(screen.getAllByRole("link").length).toBeGreaterThan(2);
+	});
+	it("toggles the Limited Access explanation with touch taps", async () => {
+		mswServer.use(http.get(`${API_BASE_URL}/user/entitlement`, () =>
+			HttpResponse.json({ access: "LIMITED", canCreateApplications: false, paidUntil: null }),
+		));
+		await renderBoard();
+		const badge = await screen.findByRole("status", { name: "Limited Access" });
+		const tapBadge = () => {
+			const pointerDown = createEvent.pointerDown(badge);
+			Object.defineProperty(pointerDown, "pointerType", { value: "touch" });
+			fireEvent(badge, pointerDown);
+			fireEvent.pointerUp(badge);
+			fireEvent.click(badge);
+		};
+		tapBadge();
+		expect((await screen.findByRole("tooltip")).textContent).toContain("Creating new Applications, uploading Base CVs, and starting CV Generation require current paid access.");
+		tapBadge();
+		await waitFor(() => expect(screen.queryByRole("tooltip")).toBeNull());
+		tapBadge();
+		await screen.findByRole("tooltip");
+		fireEvent.keyDown(badge, { key: "Escape" });
+		await waitFor(() => expect(screen.queryByRole("tooltip")).toBeNull());
 	});
 	it("refreshes an existing session on focus after payment changes and restores creation after recovery", async () => {
 		let paid = true;

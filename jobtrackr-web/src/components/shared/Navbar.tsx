@@ -1,5 +1,5 @@
 import { TriangleAlert, FileText, LayoutDashboard, LogOut, User as UserIcon, X } from "lucide-react";
-import { useContext, useState } from "react";
+import { useContext, useRef, useState } from "react";
 import { Form as RouterForm, Link, useLocation } from "react-router";
 
 import { Button } from "@/components/ui/button";
@@ -18,6 +18,8 @@ const tabs = [
 
 export function Navbar({ user }: NavbarProps) {
 	const limitedAccess = useContext(EntitlementContext)?.access === "LIMITED";
+	const [accessExplanationOpen, setAccessExplanationOpen] = useState(false);
+	const accessPointerType = useRef("");
 	const [openUserData, setOpenUserData] = useState(false);
 	const location = useLocation();
 	const isKanban = location.pathname === "/" || location.pathname.startsWith("/applications/");
@@ -32,12 +34,22 @@ export function Navbar({ user }: NavbarProps) {
 			<div className="relative mx-auto w-fit max-w-full">
 				{limitedAccess && (
 					<TooltipProvider>
-						<Tooltip>
+						<Tooltip open={accessExplanationOpen} onOpenChange={setAccessExplanationOpen}>
 							<TooltipTrigger asChild>
 								<span
 									role="status"
 									aria-label="Limited Access"
 									tabIndex={0}
+									onPointerDown={(event) => {
+										accessPointerType.current = event.pointerType;
+										// Keep Radix from closing the tooltip before a touch tap toggles it.
+										if (event.pointerType === "touch") event.preventDefault();
+									}}
+									onClick={(event) => {
+										if (accessPointerType.current !== "touch") return;
+										event.preventDefault();
+										setAccessExplanationOpen((open) => !open);
+									}}
 									className="absolute right-[calc(100%+0.5rem)] top-1/2 flex h-8 -translate-y-1/2 cursor-default items-center gap-1.5 rounded-md border border-amber-600/30 bg-amber-50 px-2 text-xs font-semibold text-amber-800 outline-none focus-visible:ring-2 focus-visible:ring-amber-600/50 sm:px-2.5 sm:text-sm"
 								>
 									<TriangleAlert size={16} aria-hidden="true" />
