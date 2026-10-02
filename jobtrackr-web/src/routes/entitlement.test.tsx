@@ -71,6 +71,11 @@ async function renderBoard() {
 	return router;
 }
 
+async function waitForPaidAccess() {
+	await screen.findByRole("navigation", { name: "Main navigation", hidden: true });
+	await waitFor(() => { expect(screen.queryByText("Limited Access")).toBeNull(); });
+}
+
 describe("current entitlement in the signed-in app", () => {
     it.each(["upload", "generation"])("updates the %s capability in a live session after failure and recovery", async (capability) => {
         let paid = true;
@@ -78,7 +83,7 @@ describe("current entitlement in the signed-in app", () => {
             HttpResponse.json({ access: paid ? "PAID" : "LIMITED", canCreateApplications: paid, paidUntil: null }),
         ));
         const router = await renderBoard();
-        await screen.findByText("Paid access");
+        await waitForPaidAccess();
         const application = (await api.getApplications())[0];
         await act(async () => {
             await router.navigate(capability === "upload" ? "/documents?tab=base" : `/applications/${application.applicationId}/generate`);
@@ -95,10 +100,11 @@ describe("current entitlement in the signed-in app", () => {
         }
         paid = true;
         fireEvent(window, new Event("focus"));
-        await screen.findByText("Paid access");
+        await waitForPaidAccess();
         expect(screen.queryByText(capability === "upload" ? /Base CV uploads require current paid access/ : /CV Generation requires current paid access/)).toBeNull();
     });
 	it.each(["expiry", "payment failure"])("keeps existing work usable after %s in the same session", async (reason) => {
+		mswServer.use(http.get(`${API_BASE_URL}/cv-generations`, () => HttpResponse.json([])));
 		let failed = false;
 		let paidUntil = Date.now() + 60_000;
 		mswServer.use(http.get(`${API_BASE_URL}/user/entitlement`, () => {
@@ -109,7 +115,7 @@ describe("current entitlement in the signed-in app", () => {
 			});
 		}));
 		const router = await renderBoard();
-		await screen.findByText("Paid access");
+		await waitForPaidAccess();
 		const application = (await api.getApplications())[0];
 		await act(async () => { await router.navigate(`/applications/${application.applicationId}`); });
 		await screen.findByRole("dialog", { name: application.applicationTitle });
@@ -128,7 +134,7 @@ describe("current entitlement in the signed-in app", () => {
 		fireEvent.click(screen.getByRole("button", { name: /^Save$/ }));
 		await screen.findByRole("dialog", { name: "Continuing pursuit" });
 
-		fireEvent.click(screen.getByRole("button", { name: /^Add$/ }));
+		fireEvent.click(await screen.findByRole("button", { name: /^Add$/ }));
 		fireEvent.change(screen.getByRole("dialog").querySelector<HTMLInputElement>('input[name="interviewScheduledAt"]')!, { target: { value: "2030-01-09T10:00" } });
 		fireEvent.change(screen.getByRole("dialog").querySelector<HTMLTextAreaElement>('textarea[name="interviewNotes"]')!, { target: { value: "Interview for existing pursuit" } });
 		fireEvent.click(screen.getByRole("button", { name: /^Create$/ }));
@@ -138,11 +144,11 @@ describe("current entitlement in the signed-in app", () => {
 		fireEvent.click(screen.getByRole("button", { name: /Edit tags/ }));
 		fireEvent.click(await screen.findByRole("option", { name: "Add Tag" }));
 		fireEvent.change(await screen.findByRole("textbox", { name: "Tag name" }), { target: { value: "Follow up" } });
-		fireEvent.click(screen.getByRole("button", { name: "Create tag" }));
-		const checkbox = await screen.findByRole("checkbox", { name: "Follow up" });
+		fireEvent.click(await screen.findByRole("button", { name: "Create tag" }));
+		const checkbox = await screen.findByRole("checkbox", { name: "Follow up" }, { timeout: 5_000 });
 		await waitFor(() => { expect(checkbox.getAttribute("data-state")).toBe("checked"); });
 		expect((await api.getApplicationById(application.applicationId)).tags.some((tag) => tag.tagName === "Follow up")).toBe(false);
-		fireEvent.click(screen.getByRole("button", { name: /^Apply$/ }));
+		fireEvent.click(await screen.findByRole("button", { name: /^Apply$/ }));
 		await waitFor(async () => {
 			expect((await api.getApplicationById(application.applicationId)).tags.some((tag) => tag.tagName === "Follow up")).toBe(true);
 		});
@@ -168,8 +174,15 @@ describe("current entitlement in the signed-in app", () => {
 		));
 		await renderBoard();
 		expect(await screen.findByText("Limited Access")).toBeTruthy();
-		expect(screen.getByText(/Your existing Applications remain available/)).toBeTruthy();
-		expect(screen.getByText(/add Interviews, create and attach Tags, and preview saved Generated CVs/)).toBeTruthy();
+		const badge = screen.getByText("Limited Access");
+		expect(screen.getByRole("navigation").contains(badge)).toBe(false);
+		expect(screen.getByRole("banner").contains(badge)).toBe(true);
+		expect(screen.queryByRole("button", { name: "Limited Access" })).toBeNull();
+		expect(screen.queryByText(/Your existing Applications remain available/)).toBeNull();
+		fireEvent.focus(badge);
+		const tooltip = await screen.findByRole("tooltip");
+		expect(tooltip.textContent).toContain("add Interviews, create and attach Tags, and preview saved Generated CVs");
+		expect(tooltip.textContent).toContain("Creating new Applications, uploading Base CVs, and starting CV Generation require current paid access.");
 		for (const button of screen.getAllByRole("button", { name: /Create application in/ })) {
 			expect((button as HTMLButtonElement).disabled).toBe(true);
 		}
@@ -185,7 +198,7 @@ describe("current entitlement in the signed-in app", () => {
 			}),
 		));
 		await renderBoard();
-		expect(await screen.findByText("Paid access")).toBeTruthy();
+		await waitForPaidAccess();
 		expect((screen.getAllByRole("button", { name: /Create application in/ })[0] as HTMLButtonElement).disabled).toBe(false);
 		paid = false;
 		fireEvent(window, new Event("focus"));
@@ -194,7 +207,7 @@ describe("current entitlement in the signed-in app", () => {
 		paid = true;
 		fireEvent(window, new Event("focus"));
 		await waitFor(() => {
-			expect(screen.getByText("Paid access")).toBeTruthy();
+			expect(screen.queryByText("Limited Access")).toBeNull();
 			expect((screen.getAllByRole("button", { name: /Create application in/ })[0] as HTMLButtonElement).disabled).toBe(false);
 		});
 	});
@@ -211,7 +224,7 @@ describe("current entitlement in the signed-in app", () => {
 			});
 		}));
 		await renderBoard();
-		expect(await screen.findByText("Paid access")).toBeTruthy();
+		await waitForPaidAccess();
 		await act(async () => { await vi.advanceTimersByTimeAsync(5_000); });
 		expect(await screen.findByText("Limited Access")).toBeTruthy();
 		for (const button of screen.getAllByRole("button", { name: /Create application in/ })) {
@@ -229,7 +242,7 @@ describe("current entitlement in the signed-in app", () => {
 			}),
 		));
 		await renderBoard();
-		expect(await screen.findByText("Paid access")).toBeTruthy();
+		await waitForPaidAccess();
 		paid = false;
 		await act(async () => { await vi.advanceTimersByTimeAsync(30_000); });
 		expect(await screen.findByText("Limited Access")).toBeTruthy();
@@ -244,7 +257,7 @@ describe("current entitlement in the signed-in app", () => {
 			}),
 		));
 		const router = await renderBoard();
-		await screen.findByText("Paid access");
+		await waitForPaidAccess();
 		const application = (await api.getApplications())[0];
 		await act(async () => { await router.navigate(`/applications/${application.applicationId}`); });
 		await screen.findByRole("dialog", { name: application.applicationTitle });
@@ -254,7 +267,7 @@ describe("current entitlement in the signed-in app", () => {
 				target: { value: "Unsaved application draft" },
 			});
 		} else {
-			fireEvent.click(screen.getByRole("button", { name: /^Add$/ }));
+			fireEvent.click(await screen.findByRole("button", { name: /^Add$/ }));
 			const notes = screen.getAllByRole("textbox").find((field) => field.getAttribute("name") === "interviewNotes");
 			expect(notes).toBeTruthy();
 			fireEvent.change(notes!, { target: { value: "Unsaved interview draft" } });

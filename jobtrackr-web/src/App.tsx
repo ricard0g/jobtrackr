@@ -47,18 +47,6 @@ function App() {
 		<EntitlementContext value={entitlement}>
 			<section className="flex h-dvh w-full flex-col overflow-hidden bg-bg md:min-h-screen">
 				<Navbar user={user} />
-				<div role="status" className="shrink-0 border-b border-light-gray px-8 py-2 text-sm">
-					{entitlement.access === "PAID" ? (
-						<span>Paid access</span>
-					) : (
-						<>
-							<strong>Limited Access</strong>{" — "}
-							Your existing Applications remain available to view and edit. You can also
-							add Interviews, create and attach Tags, and preview saved Generated CVs.
-							Creating new Applications, uploading Base CVs, and starting CV Generation require current paid access.
-						</>
-					)}
-				</div>
 				<main className="min-h-0 flex-1 overflow-hidden">
 					<Outlet />
 				</main>
