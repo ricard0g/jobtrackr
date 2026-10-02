@@ -174,7 +174,7 @@ describe("current entitlement in the signed-in app", () => {
 		));
 		await renderBoard();
 		expect(await screen.findByText("Limited Access")).toBeTruthy();
-		const badge = screen.getByText("Limited Access");
+		const badge = screen.getByRole("status", { name: "Limited Access" });
 		expect(screen.getByRole("navigation").contains(badge)).toBe(false);
 		expect(screen.getByRole("banner").contains(badge)).toBe(true);
 		expect(screen.queryByRole("button", { name: "Limited Access" })).toBeNull();

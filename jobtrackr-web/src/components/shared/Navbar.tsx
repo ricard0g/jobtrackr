@@ -29,21 +29,22 @@ export function Navbar({ user }: NavbarProps) {
 
 	return (
 		<header className="mx-auto my-2 w-full max-w-5xl px-3 sm:my-3 sm:px-4">
-			<div className="mx-auto flex w-fit max-w-full items-center gap-2">
+			<div className="relative mx-auto w-fit max-w-full">
 				{limitedAccess && (
 					<TooltipProvider>
 						<Tooltip>
 							<TooltipTrigger asChild>
 								<span
 									role="status"
+									aria-label="Limited Access"
 									tabIndex={0}
-									className="flex h-8 shrink-0 cursor-default items-center gap-1.5 rounded-md border border-amber-600/30 bg-amber-50 px-2 text-xs font-semibold text-amber-800 outline-none focus-visible:ring-2 focus-visible:ring-amber-600/50 sm:px-2.5 sm:text-sm"
+									className="absolute right-[calc(100%+0.5rem)] top-1/2 flex h-8 -translate-y-1/2 cursor-default items-center gap-1.5 rounded-md border border-amber-600/30 bg-amber-50 px-2 text-xs font-semibold text-amber-800 outline-none focus-visible:ring-2 focus-visible:ring-amber-600/50 sm:px-2.5 sm:text-sm"
 								>
 									<TriangleAlert size={16} aria-hidden="true" />
-									Limited Access
+									<span className="sr-only md:not-sr-only md:whitespace-nowrap">Limited Access</span>
 								</span>
 							</TooltipTrigger>
-							<TooltipContent side="bottom" align="start" className="max-w-[min(20rem,calc(100vw-2rem))] space-y-2 px-3 py-2.5 text-sm leading-relaxed">
+							<TooltipContent side="bottom" align="start" className="max-w-[min(20rem,calc(100vw-2rem))] space-y-2 bg-amber-800 text-amber-50 [&_svg]:fill-amber-800 px-3 py-2.5 text-sm leading-relaxed">
 								<p>Your existing Applications remain available to view and edit. You can also add Interviews, create and attach Tags, and preview saved Generated CVs.</p>
 								<p>Creating new Applications, uploading Base CVs, and starting CV Generation require current paid access.</p>
 							</TooltipContent>
