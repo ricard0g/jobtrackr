@@ -11,6 +11,7 @@ import { PostulationCard } from "./PostulationCard";
 import { useBoard } from "./useBoard";
 
 interface StatusColumnProps {
+	canCreateApplications: boolean;
 	status: {
 		value: ApplicationStatus;
 		label: string;
@@ -22,6 +23,7 @@ interface StatusColumnProps {
 
 export const StatusColumn = memo(function StatusColumn({
 	status,
+	canCreateApplications,
 	applications,
 	allApplications,
 }: StatusColumnProps) {
@@ -51,21 +53,33 @@ export const StatusColumn = memo(function StatusColumn({
 					/>
 					{status.label}
 				</div>
-				<CreatePostulationDialog
-					applications={allApplications}
-					defaultStatus={status.value}
-					onApplicationCreated={(application) => upsertApplication(application, "append-to-status")}
-					trigger={
-						<Button
-							type="button"
-							variant="secondary"
-							className="rounded-lg hover:bg-light-gray"
-							aria-label={`Create application in ${status.label}`}
-						>
-							<Plus />
-						</Button>
-					}
-				/>
+				{canCreateApplications ? (
+					<CreatePostulationDialog
+						applications={allApplications}
+						defaultStatus={status.value}
+						onApplicationCreated={(application) => upsertApplication(application, "append-to-status")}
+						trigger={
+							<Button
+								type="button"
+								variant="secondary"
+								className="rounded-lg hover:bg-light-gray"
+								aria-label={`Create application in ${status.label}`}
+							>
+								<Plus />
+							</Button>
+						}
+					/>
+				) : (
+					<Button
+						type="button"
+						variant="secondary"
+						disabled
+						aria-label={`Create application in ${status.label}`}
+						title="Creating a new Application requires current paid access."
+					>
+						<Plus />
+					</Button>
+				)}
 			</div>
 
 			<div className="scrollbar-hide flex min-h-0 flex-1 flex-col gap-y-2 overflow-y-scroll pb-10 pt-1 md:overflow-y-auto">

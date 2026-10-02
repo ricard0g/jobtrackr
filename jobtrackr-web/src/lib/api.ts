@@ -409,7 +409,14 @@ export async function requireSession(request?: Request) {
 	}
 }
 
+export type Entitlement = {
+	access: "PAID" | "LIMITED";
+	canCreateApplications: boolean;
+	paidUntil: string | null;
+};
+
 export const api = {
+	getEntitlement: () => apiRequest<Entitlement>("/user/entitlement"),
 	getCurrentUser: () => apiRequest<User>("/user"),
 	patchUser: (request: UserPatchRequest) =>
 		apiRequest<User>("/user", {
@@ -699,7 +706,12 @@ export type AppLoaderData = {
 	tags: Tag[];
 };
 
-export type AccountLoaderData = {
+export type EntitlementLoaderData = {
+	entitlement: Entitlement;
+	entitlementCheckedAt: number;
+};
+
+export type AccountLoaderData = EntitlementLoaderData & {
 	user: User;
 };
 

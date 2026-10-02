@@ -9,7 +9,7 @@ import { API_BASE_URL } from "@/lib/api-config";
 import { ACCOUNT_SETTINGS_PATH } from "@/lib/account-settings";
 import { AUTH_BASE_URL } from "@/lib/api-config";
 import * as googleAuth from "@/lib/google-auth";
-import { appAction, appLoader, appShouldRevalidate } from "@/routes/app-data";
+import { appAction, appLoader, appShouldRevalidate, entitlementLoader } from "@/routes/app-data";
 import { accountSettingsAction, accountSettingsLoader } from "@/routes/account-settings-data";
 import { AccountSettingsFallbackRoute } from "@/routes/AccountSettingsRoute";
 import { loginAction, publicAuthLoader, registerAction } from "@/routes/auth-data";
@@ -58,6 +58,7 @@ function renderApp(initialEntries: string[]) {
 				shouldRevalidate: appShouldRevalidate,
 				HydrateFallback: () => null,
 				children: [
+					{ path: "resources/entitlement", loader: entitlementLoader },
 					{ index: true, element: <div>Kanban page</div> },
 					{ path: "documents", element: <div>Documents page</div> },
 					{

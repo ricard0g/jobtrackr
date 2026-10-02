@@ -29,6 +29,7 @@ import org.springframework.http.MediaType;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 
+import com.ricard0g.jobtrackr_api.billing.EntitlementService;
 import com.ricard0g.jobtrackr_api.dto.ApplicationDto.ApplicationCreateRequestDto;
 import com.ricard0g.jobtrackr_api.dto.ApplicationDto.ApplicationPatchRequestDto;
 import com.ricard0g.jobtrackr_api.dto.ApplicationDto.ApplicationPutRequestDto;
@@ -66,6 +67,9 @@ class ApplicationControllerTest {
 
     @MockitoBean
     private ApplicationService applicationService;
+
+    @MockitoBean
+    private EntitlementService entitlementService;
 
     @Test
     void getAllApplications_returns200() throws Exception {

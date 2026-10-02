@@ -20,7 +20,7 @@ import {
 import { useBoard } from "./useBoard";
 import { StatusColumn } from "./StatusColumn";
 
-export function KanbanBoard() {
+export function KanbanBoard({ canCreateApplications }: { canCreateApplications: boolean }) {
 	const {
 		applicationsByStatus,
 		allApplications,
@@ -145,6 +145,7 @@ export function KanbanBoard() {
 				{applicationStatusOptions.map((status) => (
 					<StatusColumn
 						key={status.value}
+						canCreateApplications={canCreateApplications}
 						status={status}
 						applications={applicationsByStatus[status.value]}
 						allApplications={allApplications}

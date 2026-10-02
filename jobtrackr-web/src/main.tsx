@@ -7,7 +7,7 @@ import App from "./App.tsx";
 import { captureRegistrationToken } from "@/lib/registration-token";
 import RootErrorBoundary from "@/routes/RootErrorBoundary";
 import RouteHydrateFallback from "@/routes/RouteHydrateFallback";
-import { appAction, appLoader, appShouldRevalidate, kanbanLoader } from "@/routes/app-data";
+import { appAction, appLoader, appShouldRevalidate, entitlementLoader, kanbanLoader } from "@/routes/app-data";
 import {
 	ApplicationDetailErrorBoundary,
 	ApplicationDetailRoute,
@@ -70,6 +70,7 @@ const router = createBrowserRouter([
 		ErrorBoundary: RootErrorBoundary,
 		HydrateFallback: RouteHydrateFallback,
 		children: [
+			{ path: "resources/entitlement", loader: entitlementLoader },
 			{
 				id: "kanban",
 				Component: KanbanRoute,

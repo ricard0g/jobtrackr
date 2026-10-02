@@ -17,6 +17,7 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
+import com.ricard0g.jobtrackr_api.billing.EntitlementService;
 import com.ricard0g.jobtrackr_api.dto.ApplicationDto.ApplicationCreateRequestDto;
 import com.ricard0g.jobtrackr_api.dto.ApplicationDto.ApplicationPatchRequestDto;
 import com.ricard0g.jobtrackr_api.dto.ApplicationDto.ApplicationPutRequestDto;
@@ -38,6 +39,7 @@ import lombok.RequiredArgsConstructor;
 public class ApplicationController {
 
     private final ApplicationService applicationService;
+    private final EntitlementService entitlementService;
 
     @GetMapping
     public ResponseEntity<List<ApplicationResponseDto>> getAllApplications(
@@ -58,6 +60,7 @@ public class ApplicationController {
             final Principal principal,
             @Valid @RequestBody final ApplicationCreateRequestDto request) {
         final UUID userId = AuthenticatedUserId.from(principal);
+        entitlementService.requireApplicationCreation(userId);
         return ResponseEntity.status(HttpStatus.CREATED)
                 .body(applicationService.createApplication(userId, request));
     }

@@ -3,6 +3,7 @@ package com.ricard0g.jobtrackr_api.billing;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.time.Instant;
+import java.time.temporal.ChronoUnit;
 import java.util.Optional;
 import java.util.UUID;
 import org.springframework.jdbc.core.simple.JdbcClient;
@@ -192,6 +193,20 @@ public class BillingRepository {
                         row.getBoolean("duplicate")))
                 .optional().orElseThrow(() -> new BillingException(org.springframework.http.HttpStatus.NOT_FOUND,
                         "CHECKOUT_NOT_FOUND", "Checkout was not found."));
+    }
+
+    public Optional<Instant> paidUntil(final UUID userId, final Instant now) {
+        return jdbc.sql("""
+                SELECT s.period_end FROM billing_subscriptions s
+                JOIN billing_customers b ON b.id = s.customer_id
+                JOIN billing_checkouts c ON c.id = s.checkout_id
+                WHERE b.user_id = :user AND c.state = 'PAID' AND s.status = 'active'
+                    AND s.period_start <= :now AND s.period_end > :now
+                    AND EXISTS (SELECT 1 FROM billing_payments p WHERE p.checkout_id = s.checkout_id
+                        AND p.outcome = 'paid' AND p.period_start = s.period_start AND p.period_end = s.period_end)
+                ORDER BY s.period_end DESC LIMIT 1
+                """).param("user", userId).param("now", timestamp(now.truncatedTo(ChronoUnit.MICROS)))
+                .query((row, index) -> row.getTimestamp("period_end").toInstant()).optional();
     }
 
     private java.sql.Timestamp timestamp(final Instant instant) {
