@@ -1,9 +1,10 @@
-import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { HttpResponse, http } from "msw";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { createMemoryRouter, RouterProvider } from "react-router";
+import { createMemoryRouter, Outlet, RouterProvider } from "react-router";
 
 vi.hoisted(() => {
+	HTMLElement.prototype.scrollIntoView = vi.fn();
 	vi.stubGlobal("ResizeObserver", class { observe() {} unobserve() {} disconnect() {} });
 	vi.stubGlobal("matchMedia", vi.fn(() => ({
 		matches: false, addListener() {}, removeListener() {},
@@ -16,10 +17,10 @@ import { api, login } from "@/lib/api";
 import { API_BASE_URL } from "@/lib/api-config";
 import { appLoader, appShouldRevalidate, entitlementLoader, kanbanLoader } from "@/routes/app-data";
 import { ApplicationDetailRoute } from "@/routes/ApplicationDetailRoute";
-import { applicationDetailLoader } from "@/routes/application-detail-data";
+import { applicationDetailAction, applicationDetailLoader, applicationDetailShouldRevalidate } from "@/routes/application-detail-data";
 import { DocumentsRoute } from "@/routes/DocumentsRoute";
-import { documentsLoader } from "@/routes/documents-data";
-import { applicationGenerateLoader } from "@/routes/application-generate-data";
+import { DOCUMENTS_RECENT_ROUTE_ID, documentsLoader, recentGeneratedCvsLoader } from "@/routes/documents-data";
+import { applicationGenerateAction, applicationGenerateLoader } from "@/routes/application-generate-data";
 import { KanbanRoute } from "@/routes/KanbanRoute";
 import { mswServer, startMsw } from "@/test/msw";
 
@@ -42,6 +43,7 @@ async function renderBoard() {
 			shouldRevalidate: appShouldRevalidate,
 			children: [
 				{
+					id: "kanban",
 					Component: KanbanRoute,
 					loader: kanbanLoader,
 					children: [
@@ -50,15 +52,18 @@ async function renderBoard() {
 							path: "applications/:applicationId",
 							Component: ApplicationDetailRoute,
 							loader: applicationDetailLoader,
+							action: applicationDetailAction,
+							shouldRevalidate: applicationDetailShouldRevalidate,
 							children: [
 								{ index: true },
-								{ id: "application-generate", path: "generate", loader: applicationGenerateLoader },
+								{ id: "application-generate", path: "generate", loader: applicationGenerateLoader, action: applicationGenerateAction },
 							],
 						},
 					],
 				},
 				{ path: "resources/entitlement", loader: entitlementLoader },
-				{ path: "documents", Component: DocumentsRoute, loader: documentsLoader },
+				{ id: DOCUMENTS_RECENT_ROUTE_ID, path: "documents", Component: Outlet, loader: recentGeneratedCvsLoader,
+					children: [{ index: true, Component: DocumentsRoute, loader: documentsLoader }] },
 			],
 		},
 	]);
@@ -93,6 +98,70 @@ describe("current entitlement in the signed-in app", () => {
         await screen.findByText("Paid access");
         expect(screen.queryByText(capability === "upload" ? /Base CV uploads require current paid access/ : /CV Generation requires current paid access/)).toBeNull();
     });
+	it.each(["expiry", "payment failure"])("keeps existing work usable after %s in the same session", async (reason) => {
+		let failed = false;
+		let paidUntil = Date.now() + 60_000;
+		mswServer.use(http.get(`${API_BASE_URL}/user/entitlement`, () => {
+			const paid = !failed && Date.now() < paidUntil;
+			return HttpResponse.json({
+				access: paid ? "PAID" : "LIMITED", canCreateApplications: paid,
+				paidUntil: paid ? new Date(paidUntil).toISOString() : null,
+			});
+		}));
+		const router = await renderBoard();
+		await screen.findByText("Paid access");
+		const application = (await api.getApplications())[0];
+		await act(async () => { await router.navigate(`/applications/${application.applicationId}`); });
+		await screen.findByRole("dialog", { name: application.applicationTitle });
+		if (reason === "expiry") paidUntil = Date.now();
+		else failed = true;
+		fireEvent(window, new Event("focus"));
+		await screen.findByText("Limited Access");
+
+		fireEvent.click(screen.getByRole("button", { name: /^Edit$/ }));
+		fireEvent.change(await screen.findByDisplayValue(application.applicationTitle), {
+			target: { value: "Continuing pursuit" },
+		});
+		const statusSelect = within(screen.getByRole("dialog")).getAllByRole("combobox")[0];
+		fireEvent.keyDown(statusSelect, { key: "ArrowDown", code: "ArrowDown" });
+		fireEvent.click(await screen.findByRole("option", { name: "Offer" }));
+		fireEvent.click(screen.getByRole("button", { name: /^Save$/ }));
+		await screen.findByRole("dialog", { name: "Continuing pursuit" });
+
+		fireEvent.click(screen.getByRole("button", { name: /^Add$/ }));
+		fireEvent.change(screen.getByRole("dialog").querySelector<HTMLInputElement>('input[name="interviewScheduledAt"]')!, { target: { value: "2030-01-09T10:00" } });
+		fireEvent.change(screen.getByRole("dialog").querySelector<HTMLTextAreaElement>('textarea[name="interviewNotes"]')!, { target: { value: "Interview for existing pursuit" } });
+		fireEvent.click(screen.getByRole("button", { name: /^Create$/ }));
+		await screen.findByText("Interview for existing pursuit");
+		await waitFor(() => { expect(screen.queryByRole("button", { name: /^Create$/ })).toBeNull(); });
+
+		fireEvent.click(screen.getByRole("button", { name: /Edit tags/ }));
+		fireEvent.click(await screen.findByRole("option", { name: "Add Tag" }));
+		fireEvent.change(await screen.findByRole("textbox", { name: "Tag name" }), { target: { value: "Follow up" } });
+		fireEvent.click(screen.getByRole("button", { name: "Create tag" }));
+		const checkbox = await screen.findByRole("checkbox", { name: "Follow up" });
+		await waitFor(() => { expect(checkbox.getAttribute("data-state")).toBe("checked"); });
+		expect((await api.getApplicationById(application.applicationId)).tags.some((tag) => tag.tagName === "Follow up")).toBe(false);
+		fireEvent.click(screen.getByRole("button", { name: /^Apply$/ }));
+		await waitFor(async () => {
+			expect((await api.getApplicationById(application.applicationId)).tags.some((tag) => tag.tagName === "Follow up")).toBe(true);
+		});
+		await waitFor(() => { expect(screen.queryByRole("button", { name: /^Apply$/ })).toBeNull(); });
+		fireEvent.keyDown(screen.getByRole("dialog", { name: "Continuing pursuit" }), { key: "Escape", code: "Escape" });
+		await waitFor(() => { expect(router.state.location.pathname).toBe("/"); });
+		expect(await screen.findByRole("link", { name: /Continuing pursuit/ })).toBeTruthy();
+		expect((await api.getApplicationById(application.applicationId)).applicationStatus).toBe("OFFER");
+
+		await act(async () => { await router.navigate("/documents"); });
+		const preview = await screen.findByRole("button", { name: /^Preview .* from Recent files$/ });
+		mswServer.use(http.get(`${API_BASE_URL}/generated-cvs/:id/preview`, () =>
+			new HttpResponse("# Previously Generated CV\n\nSaved candidate work.", { headers: { "Content-Type": "text/markdown" } }),
+		));
+		fireEvent.click(preview);
+		expect(await screen.findByRole("heading", { name: "Previously Generated CV" })).toBeTruthy();
+		expect(within(screen.getByRole("dialog")).getByText("Saved candidate work.")).toBeTruthy();
+	}, 15_000);
+
 	it("explains Limited Access and disables creation while keeping existing Applications visible", async () => {
 		mswServer.use(http.get(`${API_BASE_URL}/user/entitlement`, () =>
 			HttpResponse.json({ access: "LIMITED", canCreateApplications: false, paidUntil: null }),
@@ -100,6 +169,7 @@ describe("current entitlement in the signed-in app", () => {
 		await renderBoard();
 		expect(await screen.findByText("Limited Access")).toBeTruthy();
 		expect(screen.getByText(/Your existing Applications remain available/)).toBeTruthy();
+		expect(screen.getByText(/add Interviews, create and attach Tags, and preview saved Generated CVs/)).toBeTruthy();
 		for (const button of screen.getAllByRole("button", { name: /Create application in/ })) {
 			expect((button as HTMLButtonElement).disabled).toBe(true);
 		}

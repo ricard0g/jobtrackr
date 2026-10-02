@@ -8,6 +8,7 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.multipart;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -18,6 +19,7 @@ import java.time.Instant;
 import java.util.UUID;
 import java.util.List;
 import java.util.concurrent.Callable;
+import java.util.concurrent.atomic.AtomicInteger;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
 import java.util.concurrent.CountDownLatch;
@@ -67,6 +69,7 @@ class EntitlementIntegrationTest {
     private static final String ENTITLEMENT = "/api/v1/user/entitlement";
     private static final String APPLICATIONS = "/api/v1/applications";
     private static final String PASSWORD = "password123";
+    private static final AtomicInteger REGISTRATION_CLIENT = new AtomicInteger();
 
     @Container
     @SuppressWarnings("resource")
@@ -285,6 +288,78 @@ class EntitlementIntegrationTest {
         }
     }
 
+    @ParameterizedTest
+    @ValueSource(strings = {"expired", "past_due"})
+    void limitedSessionCanContinueExistingPursuitsAndPreviewSavedCvs(final String reason) throws Exception {
+        // given
+        final Session session = register();
+        when(clock.instant()).thenReturn(START.plusSeconds(1));
+        final int applicationId = applicationId(session);
+        final String objectKey = UUID.randomUUID().toString();
+        final String savedCv = "# Saved Generated CV\n\nJava developer";
+        final long generatedCvId = jdbc.sql("""
+                INSERT INTO application_cvs (application_cv_application_id, application_cv_version,
+                    application_cv_object_key, application_cv_original_filename, application_cv_format,
+                    application_cv_content_type, application_cv_byte_size, application_cv_sha256)
+                VALUES (:application, 1, :key, 'saved-cv.md', 'MARKDOWN', 'text/markdown', :size, repeat('a', 64))
+                RETURNING application_cv_id
+                """).param("application", applicationId).param("key", objectKey)
+                .param("size", savedCv.getBytes(StandardCharsets.UTF_8).length).query(Long.class).single();
+        when(storage.download(objectKey)).thenReturn(savedCv.getBytes(StandardCharsets.UTF_8));
+        // when
+        if ("expired".equals(reason)) {
+            when(clock.instant()).thenReturn(END);
+        } else {
+            subscriptionStatus(session, reason);
+        }
+        // then
+        limited(session);
+        create(session).andExpect(status().isForbidden());
+        http.perform(patch(APPLICATIONS + "/" + applicationId).header("Authorization", session.bearer())
+                .contentType(MediaType.APPLICATION_JSON).content("{\"applicationTitle\":\"Staff Engineer\"}"))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.applicationTitle").value("Staff Engineer"));
+        http.perform(patch(APPLICATIONS + "/" + applicationId + "/status")
+                .header("Authorization", session.bearer()).contentType(MediaType.APPLICATION_JSON)
+                .content("{\"applicationStatus\":\"INTERVIEW\"}"))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.applicationStatus").value("INTERVIEW"));
+        http.perform(patch(APPLICATIONS + "/" + applicationId).header("Authorization", session.bearer())
+                .contentType(MediaType.APPLICATION_JSON).content("{\"applicationKanbanOrder\":3}"))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.applicationKanbanOrder").value(3));
+        http.perform(post(APPLICATIONS + "/" + applicationId + "/interviews")
+                .header("Authorization", session.bearer()).contentType(MediaType.APPLICATION_JSON).content("""
+                        {"interviewType":"TECHNICAL","interviewScheduledAt":"2030-01-09T10:00:00Z",
+                         "interviewNotes":"Discuss the existing pursuit"}
+                        """))
+                .andExpect(status().isCreated());
+        http.perform(get(APPLICATIONS + "/" + applicationId + "/interviews")
+                .header("Authorization", session.bearer())).andExpect(status().isOk())
+                .andExpect(jsonPath("$[0].interviewNotes").value("Discuss the existing pursuit"));
+        final String tag = http.perform(post("/api/v1/tags").header("Authorization", session.bearer())
+                .contentType(MediaType.APPLICATION_JSON).content("""
+                        {"tagName":"Follow up","tagCategory":"OTHER","tagColor":"#123456"}
+                        """))
+                .andExpect(status().isCreated()).andReturn().getResponse().getContentAsString();
+        final int tagId = JsonPath.read(tag, "$.tagId");
+        http.perform(get(APPLICATIONS + "/" + applicationId).header("Authorization", session.bearer()))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.tags").isEmpty());
+        http.perform(patch(APPLICATIONS + "/" + applicationId).header("Authorization", session.bearer())
+                .contentType(MediaType.APPLICATION_JSON).content("{\"addTagIds\":[%d]}".formatted(tagId)))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.tags[0].tagName").value("Follow up"));
+        http.perform(get(APPLICATIONS + "/" + applicationId).header("Authorization", session.bearer()))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.applicationTitle").value("Staff Engineer"))
+                .andExpect(jsonPath("$.applicationStatus").value("INTERVIEW"))
+                .andExpect(jsonPath("$.applicationKanbanOrder").value(3))
+                .andExpect(jsonPath("$.tags[0].tagId").value(tagId));
+        http.perform(get(APPLICATIONS + "/" + applicationId + "/generated-cvs")
+                .header("Authorization", session.bearer())).andExpect(status().isOk())
+                .andExpect(jsonPath("$[0].generatedCvId").value(generatedCvId));
+        http.perform(get("/api/v1/generated-cvs").header("Authorization", session.bearer()))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.items[0].originalFilename").value("saved-cv.md"));
+        http.perform(get("/api/v1/generated-cvs/" + generatedCvId + "/preview")
+                .header("Authorization", session.bearer())).andExpect(status().isOk())
+                .andExpect(content().string(savedCv));
+    }
+
     private int applicationId(final Session session) throws Exception {
         return JsonPath.read(create(session).andExpect(status().isCreated())
                 .andReturn().getResponse().getContentAsString(), "$.applicationId");
@@ -318,7 +393,10 @@ class EntitlementIntegrationTest {
         final String email = "entitlement-" + UUID.randomUUID() + "@example.com";
         final String registration = PaidRegistrationFixture.withVerifiedPurchase(jdbc,
                 "{\"email\":\"%s\",\"password\":\"%s\",\"displayName\":\"Candidate\"}".formatted(email, PASSWORD));
-        final String response = http.perform(post("/api/v1/auth/register").contentType(MediaType.APPLICATION_JSON)
+        final String response = http.perform(post("/api/v1/auth/register").with(request -> {
+                    request.setRemoteAddr("192.0.2." + REGISTRATION_CLIENT.incrementAndGet());
+                    return request;
+                }).contentType(MediaType.APPLICATION_JSON)
                 .content(registration)).andExpect(status().isCreated()).andReturn().getResponse().getContentAsString();
         jdbc.sql("UPDATE billing_subscriptions SET period_start = :start, period_end = :end WHERE checkout_id IN "
                 + "(SELECT id FROM billing_checkouts WHERE checkout_email = CAST(:email AS citext))")

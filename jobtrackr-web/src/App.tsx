@@ -53,7 +53,8 @@ function App() {
 					) : (
 						<>
 							<strong>Limited Access</strong>{" — "}
-							Your existing Applications remain available to view and edit.
+							Your existing Applications remain available to view and edit. You can also
+							add Interviews, create and attach Tags, and preview saved Generated CVs.
 							Creating new Applications, uploading Base CVs, and starting CV Generation require current paid access.
 						</>
 					)}
