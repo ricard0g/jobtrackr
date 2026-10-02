@@ -6,6 +6,8 @@ import java.util.UUID;
 
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.security.authorization.method.HandleAuthorizationDenied;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -17,7 +19,6 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
-import com.ricard0g.jobtrackr_api.billing.EntitlementService;
 import com.ricard0g.jobtrackr_api.dto.ApplicationDto.ApplicationCreateRequestDto;
 import com.ricard0g.jobtrackr_api.dto.ApplicationDto.ApplicationPatchRequestDto;
 import com.ricard0g.jobtrackr_api.dto.ApplicationDto.ApplicationPutRequestDto;
@@ -26,6 +27,7 @@ import com.ricard0g.jobtrackr_api.dto.ApplicationDto.ApplicationResponseDto;
 import com.ricard0g.jobtrackr_api.dto.StatusHistoryDto.StatusHistoryResponseDto;
 import com.ricard0g.jobtrackr_api.dto.TagDto.CreateTagRequestDto;
 import com.ricard0g.jobtrackr_api.dto.TagDto.TagResponseDto;
+import com.ricard0g.jobtrackr_api.security.PaidAccessDeniedHandler;
 import com.ricard0g.jobtrackr_api.service.ApplicationService;
 
 import jakarta.validation.Valid;
@@ -36,10 +38,10 @@ import lombok.RequiredArgsConstructor;
 @RequestMapping("/api/v1/applications")
 @RequiredArgsConstructor
 @Validated
+@PreAuthorize("isAuthenticated()")
 public class ApplicationController {
 
     private final ApplicationService applicationService;
-    private final EntitlementService entitlementService;
 
     @GetMapping
     public ResponseEntity<List<ApplicationResponseDto>> getAllApplications(
@@ -56,11 +58,12 @@ public class ApplicationController {
     }
 
     @PostMapping
+    @PreAuthorize("isAuthenticated() and @entitlementService.canCreateApplications(authentication)")
+    @HandleAuthorizationDenied(handlerClass = PaidAccessDeniedHandler.class)
     public ResponseEntity<ApplicationResponseDto> createApplication(
             final Principal principal,
             @Valid @RequestBody final ApplicationCreateRequestDto request) {
         final UUID userId = AuthenticatedUserId.from(principal);
-        entitlementService.requireApplicationCreation(userId);
         return ResponseEntity.status(HttpStatus.CREATED)
                 .body(applicationService.createApplication(userId, request));
     }

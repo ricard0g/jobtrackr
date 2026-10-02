@@ -6,6 +6,10 @@ public record ErrorResponse(String code, String message, List<FieldError> fieldE
 
     public record FieldError(String field, String message) {}
 
+    public static ErrorResponse accessDenied() {
+        return of("ACCESS_DENIED", "You do not have permission to perform this action.");
+    }
+
     public static ErrorResponse of(final String code, final String message) {
         return new ErrorResponse(code, message, null);
     }

@@ -5,7 +5,7 @@ import java.time.Instant;
 import java.util.UUID;
 
 import org.springframework.beans.factory.ObjectProvider;
-import org.springframework.http.HttpStatus;
+import org.springframework.security.core.Authentication;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -25,11 +25,8 @@ public class EntitlementService {
     }
 
     @Transactional(readOnly = true)
-    public void requireApplicationCreation(final UUID userId) {
-        if (!current(userId).canCreateApplications()) {
-            throw new BillingException(HttpStatus.FORBIDDEN, "PAID_ACCESS_REQUIRED",
-                    "Creating a new Application requires current paid access. Your existing work remains available.");
-        }
+    public boolean canCreateApplications(final Authentication authentication) {
+        return current(UUID.fromString(authentication.getName())).canCreateApplications();
     }
 
     public enum Access { PAID, LIMITED }
