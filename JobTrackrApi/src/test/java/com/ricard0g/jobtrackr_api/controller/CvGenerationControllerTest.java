@@ -17,6 +17,8 @@ import java.util.List;
 import java.util.UUID;
 
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.BeforeEach;
+import org.springframework.security.core.Authentication;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.boot.webmvc.test.autoconfigure.WebMvcTest;
@@ -27,6 +29,8 @@ import org.springframework.security.test.context.support.WithMockUser;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 
+import com.ricard0g.jobtrackr_api.billing.EntitlementService;
+import com.ricard0g.jobtrackr_api.security.PaidAccessDeniedHandler;
 import com.ricard0g.jobtrackr_api.config.security.MethodSecurityConfig;
 import com.ricard0g.jobtrackr_api.dto.CvGenerationDto.CvGenerationDtos;
 import com.ricard0g.jobtrackr_api.dto.CvGenerationDto.JobDescriptionResponseDto;
@@ -38,7 +42,7 @@ import com.ricard0g.jobtrackr_api.service.CvGenerationService;
 
 @WebMvcTest(controllers = CvGenerationController.class)
 @AutoConfigureMockMvc(addFilters = false)
-@Import({GlobalExceptionHandler.class, MethodSecurityConfig.class})
+@Import({GlobalExceptionHandler.class, MethodSecurityConfig.class, PaidAccessDeniedHandler.class})
 @WithMockUser(username = CvGenerationControllerTest.USER_ID_VALUE)
 class CvGenerationControllerTest {
 
@@ -51,6 +55,14 @@ class CvGenerationControllerTest {
 
     @MockitoBean
     private CvGenerationService cvGenerationService;
+
+    @MockitoBean(name = "entitlementService")
+    private EntitlementService entitlementService;
+
+    @BeforeEach
+    void paidAccess() {
+        when(entitlementService.hasPaidAccess(any(Authentication.class))).thenReturn(true);
+    }
 
     @Test
     @WithAnonymousUser

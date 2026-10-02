@@ -65,6 +65,13 @@ public class CvGenerationException extends RuntimeException {
                 "Explicit consent is required before sending CV data to Google Gemini");
     }
 
+    public static CvGenerationException generationInProgress() {
+        return new CvGenerationException(
+                "GENERATION_IN_PROGRESS",
+                HttpStatus.CONFLICT,
+                "A CV Generation is already in progress for this Application");
+    }
+
     public static CvGenerationException generationLimitReached() {
         return new CvGenerationException(
                 "GENERATION_LIMIT_REACHED",

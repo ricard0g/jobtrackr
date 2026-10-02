@@ -1,17 +1,30 @@
 package com.ricard0g.jobtrackr_api.billing;
 
 import static org.mockito.Mockito.when;
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.multipart;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import java.sql.Timestamp;
+import java.nio.charset.StandardCharsets;
 import java.time.Clock;
 import java.time.Instant;
 import java.util.UUID;
+import java.util.List;
+import java.util.concurrent.Callable;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
 
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -19,6 +32,7 @@ import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.http.MediaType;
 import org.springframework.jdbc.core.simple.JdbcClient;
+import org.springframework.mock.web.MockMultipartFile;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
@@ -33,6 +47,7 @@ import org.testcontainers.postgresql.PostgreSQLContainer;
 import com.jayway.jsonpath.JsonPath;
 import com.ricard0g.jobtrackr_api.support.PaidRegistrationFixture;
 import com.ricard0g.jobtrackr_api.worker.CvGenerationScheduler;
+import com.ricard0g.jobtrackr_api.storage.R2ObjectStorage;
 
 @SpringBootTest
 @AutoConfigureMockMvc
@@ -72,6 +87,8 @@ class EntitlementIntegrationTest {
     private Clock clock;
     @MockitoBean
     private CvGenerationScheduler scheduler;
+    @MockitoBean
+    private R2ObjectStorage storage;
 
     @Test
     void paidPeriodIncludesStartAndExcludesEndForAnExistingSession() throws Exception {
@@ -156,6 +173,145 @@ class EntitlementIntegrationTest {
         limited(session);
         http.perform(get("/api/v1/user").header("Authorization", session.bearer())).andExpect(status().isOk());
         http.perform(get(ENTITLEMENT)).andExpect(status().isUnauthorized());
+    }
+
+    @Test
+    void limitedSessionCannotUploadBaseCvsAfterPaymentFailure() throws Exception {
+        // given
+        final Session session = register();
+        when(clock.instant()).thenReturn(START.plusSeconds(1));
+        subscriptionStatus(session, "past_due");
+        // when / then
+        http.perform(multipart("/api/v1/base-cvs")
+                .file(new MockMultipartFile("file", "cv.md", "text/markdown", "# Candidate\nJava developer".getBytes(StandardCharsets.UTF_8)))
+                .header("Authorization", session.bearer()))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.code").value("PAID_ACCESS_REQUIRED"));
+    }
+
+    @Test
+    void liveSessionCannotStartGenerationAtPaidPeriodEnd() throws Exception {
+        // given
+        final Session session = register();
+        when(clock.instant()).thenReturn(END);
+        // when / then
+        generate(session, 1, 1).andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.code").value("PAID_ACCESS_REQUIRED"));
+        http.perform(get("/api/v1/cv-generations").header("Authorization", session.bearer()))
+                .andExpect(status().isOk());
+        http.perform(get("/api/v1/base-cvs").header("Authorization", session.bearer()))
+                .andExpect(status().isOk());
+    }
+
+    @Test
+    void paidUserCanQueueAcrossApplicationsButOnlyOneGenerationPerApplication() throws Exception {
+        // given
+        final Session session = register();
+        when(clock.instant()).thenReturn(START.plusSeconds(1));
+        final long baseCvId = upload(session);
+        final int first = applicationId(session);
+        final int second = applicationId(session);
+        // when / then
+        generate(session, first, baseCvId).andExpect(status().isAccepted());
+        generate(session, first, baseCvId).andExpect(status().isConflict())
+                .andExpect(jsonPath("$.code").value("GENERATION_IN_PROGRESS"));
+        generate(session, second, baseCvId).andExpect(status().isAccepted());
+    }
+
+    @Test
+    void savedCapacityStaysAtTwentyAndDeletionFreesSpaceWithoutWeeklyCredits() throws Exception {
+        // given
+        final Session session = register();
+        when(clock.instant()).thenReturn(START.plusSeconds(1));
+        final long baseCvId = upload(session);
+        final int applicationId = applicationId(session);
+        jdbc.sql("""
+                INSERT INTO application_cvs (application_cv_application_id, application_cv_version,
+                    application_cv_object_key, application_cv_original_filename, application_cv_format,
+                    application_cv_content_type, application_cv_byte_size, application_cv_sha256)
+                SELECT :application, version, :prefix || version, 'cv.md', 'MARKDOWN', 'text/markdown', 10,
+                    repeat('a', 64) FROM generate_series(1, 20) AS version
+                """).param("application", applicationId).param("prefix", UUID.randomUUID().toString()).update();
+        // when / then
+        generate(session, applicationId, baseCvId).andExpect(status().isConflict())
+                .andExpect(jsonPath("$.code").value("GENERATION_LIMIT_REACHED"));
+        subscriptionStatus(session, "past_due");
+        final String saved = http.perform(get(APPLICATIONS + "/" + applicationId + "/generated-cvs")
+                .header("Authorization", session.bearer())).andExpect(status().isOk())
+                .andExpect(jsonPath("$.length()").value(20)).andReturn().getResponse().getContentAsString();
+        final int generatedCvId = JsonPath.read(saved, "$[0].generatedCvId");
+        http.perform(delete("/api/v1/generated-cvs/" + generatedCvId).header("Authorization", session.bearer()))
+                .andExpect(status().isNoContent());
+        generate(session, applicationId, baseCvId).andExpect(status().isForbidden());
+        subscriptionStatus(session, "active");
+        for (int attempt = 0; attempt < 21; attempt++) {
+            final String created = generate(session, applicationId, baseCvId).andExpect(status().isAccepted())
+                    .andReturn().getResponse().getContentAsString();
+            final int generationId = JsonPath.read(created, "$.cvGenerationId");
+            http.perform(post("/api/v1/cv-generations/" + generationId + "/cancel")
+                    .header("Authorization", session.bearer())).andExpect(status().isOk());
+        }
+    }
+
+    @ParameterizedTest
+    @ValueSource(booleans = {false, true})
+    void simultaneousRequestsCannotQueueTwoGenerationsForOneApplication(final boolean sameKey) throws Exception {
+        // given
+        final Session session = register();
+        when(clock.instant()).thenReturn(START.plusSeconds(1));
+        final long baseCvId = upload(session);
+        final int applicationId = applicationId(session);
+        final String sharedKey = UUID.randomUUID().toString();
+        final CountDownLatch ready = new CountDownLatch(2);
+        final CountDownLatch start = new CountDownLatch(1);
+        try (final ExecutorService requests = Executors.newVirtualThreadPerTaskExecutor()) {
+            final Callable<Integer> request = () -> {
+                ready.countDown();
+                start.await(10, TimeUnit.SECONDS);
+                return generate(session, applicationId, baseCvId, sameKey ? sharedKey : UUID.randomUUID().toString())
+                        .andReturn().getResponse().getStatus();
+            };
+            final Future<Integer> first = requests.submit(request);
+            final Future<Integer> second = requests.submit(request);
+            assertThat(ready.await(10, TimeUnit.SECONDS)).isTrue();
+            // when
+            start.countDown();
+            // then
+            assertThat(List.of(first.get(10, TimeUnit.SECONDS), second.get(10, TimeUnit.SECONDS)))
+                    .containsExactlyInAnyOrder(202, sameKey ? 202 : 409);
+            http.perform(get("/api/v1/cv-generations").param("applicationId", String.valueOf(applicationId))
+                    .header("Authorization", session.bearer())).andExpect(status().isOk())
+                    .andExpect(jsonPath("$.length()").value(1));
+        }
+    }
+
+    private int applicationId(final Session session) throws Exception {
+        return JsonPath.read(create(session).andExpect(status().isCreated())
+                .andReturn().getResponse().getContentAsString(), "$.applicationId");
+    }
+
+    private long upload(final Session session) throws Exception {
+        final String response = http.perform(multipart("/api/v1/base-cvs")
+                .file(new MockMultipartFile("file", "cv.md", "text/markdown",
+                        "# Candidate\nJava developer".getBytes(StandardCharsets.UTF_8)))
+                .header("Authorization", session.bearer()))
+                .andExpect(status().isCreated()).andReturn().getResponse().getContentAsString();
+        return ((Number) JsonPath.read(response, "$.baseCvId")).longValue();
+    }
+
+    private ResultActions generate(final Session session, final long applicationId, final long baseCvId)
+            throws Exception {
+        return generate(session, applicationId, baseCvId, UUID.randomUUID().toString());
+    }
+
+    private ResultActions generate(final Session session, final long applicationId, final long baseCvId,
+                                   final String idempotencyKey) throws Exception {
+        return http.perform(post("/api/v1/cv-generations").header("Authorization", session.bearer())
+                .header("Idempotency-Key", idempotencyKey)
+                .contentType(MediaType.APPLICATION_JSON).content("""
+                        {"applicationId":%d,"baseCvId":%d,"format":"MARKDOWN",
+                         "jobDescription":"Build Java APIs","consentAccepted":true}
+                        """.formatted(applicationId, baseCvId)));
     }
 
     private Session register() throws Exception {

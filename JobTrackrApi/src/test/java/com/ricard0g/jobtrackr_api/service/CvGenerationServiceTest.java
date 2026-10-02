@@ -82,7 +82,7 @@ class CvGenerationServiceTest {
 
         final Application application = mock(Application.class);
         when(application.getApplicationId()).thenReturn(3L);
-        when(applicationRepository.findForUser(3L, USER_ID)).thenReturn(Optional.of(application));
+        when(applicationRepository.findForUserWithLock(3L, USER_ID)).thenReturn(Optional.of(application));
 
         final BaseCv baseCv = mock(BaseCv.class);
         when(baseCvRepository.findByBaseCvIdAndUser_UserId(7L, USER_ID)).thenReturn(Optional.of(baseCv));

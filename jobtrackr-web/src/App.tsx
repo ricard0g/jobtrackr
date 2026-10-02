@@ -54,7 +54,7 @@ function App() {
 						<>
 							<strong>Limited Access</strong>{" — "}
 							Your existing Applications remain available to view and edit.
-							Creating new Applications requires current paid access.
+							Creating new Applications, uploading Base CVs, and starting CV Generation require current paid access.
 						</>
 					)}
 				</div>

@@ -24,6 +24,8 @@ public interface CvGenerationRepository extends JpaRepository<CvGeneration, Long
     List<CvGeneration> findAllByApplication_ApplicationIdAndUser_UserIdOrderByCreatedAtDesc(
             Long applicationId, UUID userId);
 
+    boolean existsByApplication_ApplicationIdAndStatusIn(Long applicationId, List<CvGenerationStatus> statuses);
+
     boolean existsByBaseCv_BaseCvIdAndStatusIn(Long baseCvId, List<CvGenerationStatus> statuses);
 
     @Query(

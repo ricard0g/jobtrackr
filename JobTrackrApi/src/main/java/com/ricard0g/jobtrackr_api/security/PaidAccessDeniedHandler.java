@@ -23,6 +23,7 @@ public class PaidAccessDeniedHandler implements MethodAuthorizationDeniedHandler
             throw new AuthorizationDeniedException("Access denied", authorizationResult);
         }
         throw new BillingException(HttpStatus.FORBIDDEN, "PAID_ACCESS_REQUIRED",
-                "Creating a new Application requires current paid access. Your existing work remains available.");
+                "Creating Applications, uploading Base CVs, and starting CV Generation require current paid access. "
+                        + "Your existing work remains available.");
     }
 }

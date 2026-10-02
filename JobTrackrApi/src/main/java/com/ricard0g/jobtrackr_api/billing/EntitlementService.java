@@ -29,6 +29,11 @@ public class EntitlementService {
         return current(UUID.fromString(authentication.getName())).canCreateApplications();
     }
 
+    @Transactional(readOnly = true)
+    public boolean hasPaidAccess(final Authentication authentication) {
+        return current(UUID.fromString(authentication.getName())).access() == Access.PAID;
+    }
+
     public enum Access { PAID, LIMITED }
 
     public record Entitlement(Access access, boolean canCreateApplications, Instant paidUntil) { }

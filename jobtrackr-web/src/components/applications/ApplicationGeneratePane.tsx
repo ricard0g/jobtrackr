@@ -7,7 +7,7 @@ import {
     Trash2,
     XCircle,
 } from "lucide-react";
-import { useEffect, useId, useRef, useState } from "react";
+import { useContext, useEffect, useId, useRef, useState } from "react";
 import {
     useFetcher,
     useLocation,
@@ -16,6 +16,7 @@ import {
     useRouteLoaderData,
 } from "react-router";
 
+import { EntitlementContext } from "@/lib/entitlement";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
@@ -273,6 +274,7 @@ function ApplicationGenerateForm({
     data: ApplicationGenerateLoaderData;
     applicationId: number;
 }) {
+    const canGenerate = useContext(EntitlementContext)?.access === "PAID";
     const createFetcher = useFetcher<ApplicationGenerateActionData>();
     const formId = useId();
     const panelId = useId();
@@ -299,7 +301,7 @@ function ApplicationGenerateForm({
     const submitting = createFetcher.state !== "idle";
     const needsConsent = !consent.current;
     const submitDisabled =
-        submitting || atLimit || baseCvs.length === 0 || !disclosure.canSubmit;
+        !canGenerate || submitting || atLimit || baseCvs.length === 0 || !disclosure.canSubmit;
 
     useEffect(() => {
         setExpanded(disclosure.defaultExpanded);
@@ -307,6 +309,10 @@ function ApplicationGenerateForm({
 
     const onSubmit = (event: React.FormEvent<HTMLFormElement>) => {
         setClientError(null);
+        if (!canGenerate) {
+            event.preventDefault();
+            return;
+        }
         if (!disclosure.canSubmit) {
             event.preventDefault();
             setClientError("A CV Generation is already in progress for this Application.");
@@ -344,6 +350,11 @@ function ApplicationGenerateForm({
 
 	return (
 		<div className="rounded-lg border border-light-gray bg-off-white">
+            {!canGenerate ? (
+                <p role="status" className="px-3 py-2 text-sm text-amber-800">
+                    Limited Access: CV Generation requires current paid access. Saved Generated CVs remain available.
+                </p>
+            ) : null}
 			<button
 				type="button"
 				className="flex w-full items-center justify-between gap-3 px-3 py-3 text-left text-sm font-medium text-dark-gray"

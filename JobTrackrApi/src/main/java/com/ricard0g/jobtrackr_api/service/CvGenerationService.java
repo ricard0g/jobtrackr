@@ -2,6 +2,7 @@ package com.ricard0g.jobtrackr_api.service;
 
 import java.time.OffsetDateTime;
 import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
 
 import org.springframework.dao.DataIntegrityViolationException;
@@ -35,6 +36,9 @@ import lombok.extern.slf4j.Slf4j;
 @Slf4j
 public class CvGenerationService {
 
+    private static final List<CvGenerationStatus> ACTIVE_STATUSES =
+            List.of(CvGenerationStatus.PENDING, CvGenerationStatus.PROCESSING);
+
     private final UserRepository userRepository;
     private final ApplicationRepository applicationRepository;
     private final BaseCvRepository baseCvRepository;
@@ -67,7 +71,17 @@ public class CvGenerationService {
         ensureConsent(user, request.consentAccepted());
         validateTextLimits(request);
 
-        final Application application = requireApplication(userId, request.applicationId());
+        final Application application = applicationRepository.findForUserWithLock(request.applicationId(), userId)
+                .orElseThrow(() -> new ApplicationNotFoundException(userId, request.applicationId()));
+        final Optional<CvGeneration> existingAfterLock =
+                cvGenerationRepository.findByUser_UserIdAndIdempotencyKey(userId, normalizedKey);
+        if (existingAfterLock.isPresent()) {
+            return CvGenerationDtos.Response.from(existingAfterLock.get());
+        }
+        if (cvGenerationRepository.existsByApplication_ApplicationIdAndStatusIn(
+                application.getApplicationId(), ACTIVE_STATUSES)) {
+            throw CvGenerationException.generationInProgress();
+        }
         final BaseCv baseCv = baseCvRepository
                 .findByBaseCvIdAndUser_UserId(request.baseCvId(), userId)
                 .orElseThrow(CvGenerationException::baseCvUnavailable);

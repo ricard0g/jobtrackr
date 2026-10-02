@@ -17,9 +17,13 @@ import { API_BASE_URL } from "@/lib/api-config";
 import { appLoader, appShouldRevalidate, entitlementLoader, kanbanLoader } from "@/routes/app-data";
 import { ApplicationDetailRoute } from "@/routes/ApplicationDetailRoute";
 import { applicationDetailLoader } from "@/routes/application-detail-data";
+import { DocumentsRoute } from "@/routes/DocumentsRoute";
+import { documentsLoader } from "@/routes/documents-data";
 import { applicationGenerateLoader } from "@/routes/application-generate-data";
 import { KanbanRoute } from "@/routes/KanbanRoute";
 import { mswServer, startMsw } from "@/test/msw";
+
+vi.mock("react-pdf", () => ({ Document: () => null, Page: () => null, pdfjs: { GlobalWorkerOptions: {}, version: "5" } }));
 
 startMsw();
 afterEach(() => {
@@ -54,6 +58,7 @@ async function renderBoard() {
 					],
 				},
 				{ path: "resources/entitlement", loader: entitlementLoader },
+				{ path: "documents", Component: DocumentsRoute, loader: documentsLoader },
 			],
 		},
 	]);
@@ -62,6 +67,32 @@ async function renderBoard() {
 }
 
 describe("current entitlement in the signed-in app", () => {
+    it.each(["upload", "generation"])("updates the %s capability in a live session after failure and recovery", async (capability) => {
+        let paid = true;
+        mswServer.use(http.get(`${API_BASE_URL}/user/entitlement`, () =>
+            HttpResponse.json({ access: paid ? "PAID" : "LIMITED", canCreateApplications: paid, paidUntil: null }),
+        ));
+        const router = await renderBoard();
+        await screen.findByText("Paid access");
+        const application = (await api.getApplications())[0];
+        await act(async () => {
+            await router.navigate(capability === "upload" ? "/documents?tab=base" : `/applications/${application.applicationId}/generate`);
+        });
+        if (capability === "upload") {
+            expect((await screen.findByRole("button", { name: "Upload a Base CV" })).getAttribute("aria-disabled")).toBe("false");
+        }
+        paid = false;
+        fireEvent(window, new Event("focus"));
+        await screen.findByText("Limited Access");
+        expect(await screen.findByText(capability === "upload" ? /Base CV uploads require current paid access/ : /CV Generation requires current paid access/)).toBeTruthy();
+        if (capability === "upload") {
+            expect(screen.getByRole("button", { name: "Upload a Base CV" }).getAttribute("aria-disabled")).toBe("true");
+        }
+        paid = true;
+        fireEvent(window, new Event("focus"));
+        await screen.findByText("Paid access");
+        expect(screen.queryByText(capability === "upload" ? /Base CV uploads require current paid access/ : /CV Generation requires current paid access/)).toBeNull();
+    });
 	it("explains Limited Access and disables creation while keeping existing Applications visible", async () => {
 		mswServer.use(http.get(`${API_BASE_URL}/user/entitlement`, () =>
 			HttpResponse.json({ access: "LIMITED", canCreateApplications: false, paidUntil: null }),

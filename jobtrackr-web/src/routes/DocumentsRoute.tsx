@@ -13,6 +13,7 @@ import {
 import { Tabs } from "radix-ui";
 import {
     useCallback,
+    useContext,
     useEffect,
     useMemo,
     useRef,
@@ -65,6 +66,7 @@ import {
     ToastTitle,
     ToastViewport,
 } from "@/components/ui/toast";
+import { EntitlementContext } from "@/lib/entitlement";
 import { api } from "@/lib/api";
 import type { BaseCv } from "@/types/base-cv";
 import type { GeneratedCvSummary } from "@/types/generated-cv";
@@ -853,6 +855,7 @@ function BaseCvSection({
     error: string | null;
     onPreview: (baseCv: BaseCv) => void;
 }) {
+    const canUpload = useContext(EntitlementContext)?.access === "PAID";
     const uploadFetcher = useFetcher<DocumentsActionData>();
     const revalidator = useRevalidator();
     const location = useLocation();
@@ -865,6 +868,7 @@ function BaseCvSection({
     const nextToastIdRef = useRef(0);
     const uploading = uploadFetcher.state !== "idle";
     const atLimit = error == null && items.length >= MAX_BASE_CVS;
+    const uploadDisabled = !canUpload || uploading || atLimit;
     const normalizedState = normalizeDocumentsState(location.search);
     const urlState: Extract<DocumentsUrlState, { tab: "base" }> =
         normalizedState.tab === "base"
@@ -909,6 +913,7 @@ function BaseCvSection({
 
     const upload = (file: File | undefined) => {
         setClientError(null);
+        if (!canUpload) return;
         if (!file) {
             setClientError("Choose one file to upload.");
             return;
@@ -946,7 +951,7 @@ function BaseCvSection({
     const onDrop = (event: DragEvent<HTMLDivElement>) => {
         event.preventDefault();
         setDragging(false);
-        if (uploading || atLimit) return;
+        if (uploadDisabled) return;
         if (event.dataTransfer.files.length !== 1) {
             setClientError("Drop one file at a time.");
             return;
@@ -955,7 +960,7 @@ function BaseCvSection({
     };
 
     const onKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
-        if ((event.key === "Enter" || event.key === " ") && !uploading && !atLimit) {
+        if ((event.key === "Enter" || event.key === " ") && !uploadDisabled) {
             event.preventDefault();
             inputRef.current?.click();
         }
@@ -1037,9 +1042,11 @@ function BaseCvSection({
         },
     ];
 
-    const dropZoneState = visibleUploadError
-        ? "border-red-600 bg-red-50"
-        : atLimit
+    const dropZoneState = !canUpload
+        ? "cursor-not-allowed border-amber-600 bg-amber-50"
+        : visibleUploadError
+            ? "border-red-600 bg-red-50"
+            : atLimit
             ? "cursor-not-allowed border-amber-600 bg-amber-50"
             : uploading
                 ? "cursor-wait border-dark-accent bg-lightest-accent"
@@ -1055,18 +1062,18 @@ function BaseCvSection({
                 </h2>
                 <div
                     role="button"
-                    tabIndex={atLimit || uploading ? -1 : 0}
-                    aria-disabled={atLimit || uploading}
+                    tabIndex={uploadDisabled ? -1 : 0}
+                    aria-disabled={uploadDisabled}
                     aria-label="Upload a Base CV"
-                    onClick={() => !atLimit && !uploading && inputRef.current?.click()}
+                    onClick={() => !uploadDisabled && inputRef.current?.click()}
                     onKeyDown={onKeyDown}
                     onDragEnter={(event) => {
                         event.preventDefault();
-                        if (!atLimit && !uploading) setDragging(true);
+                        if (!uploadDisabled) setDragging(true);
                     }}
                     onDragOver={(event) => {
                         event.preventDefault();
-                        if (!atLimit && !uploading) setDragging(true);
+                        if (!uploadDisabled) setDragging(true);
                     }}
                     onDragLeave={(event) => {
                         const relatedTarget = event.relatedTarget;
@@ -1109,13 +1116,17 @@ function BaseCvSection({
                         type="file"
                         accept=".pdf,.docx,.md,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,text/markdown,text/plain"
                         onChange={onChange}
-                        disabled={atLimit || uploading}
+                        disabled={uploadDisabled}
                         className="sr-only"
                         tabIndex={-1}
                     />
                 </div>
                 <div className="min-h-9 py-2" aria-live="polite">
-                    {atLimit ? (
+                    {!canUpload ? (
+                        <p className="text-sm text-amber-800">
+                            Limited Access: Base CV uploads require current paid access.
+                        </p>
+                    ) : atLimit ? (
                         <p className="text-sm text-amber-800">
                             Delete a Base CV to make room for another upload.
                         </p>

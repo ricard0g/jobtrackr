@@ -8,6 +8,7 @@ import {
 	type RouteObject,
 } from "react-router";
 
+import { EntitlementContext } from "@/lib/entitlement";
 import { api, ApiError, clearAccessToken, setAccessToken } from "@/lib/api";
 import { DocumentsRoute, DocumentsRouteHydrateFallback } from "@/routes/DocumentsRoute";
 import {
@@ -162,6 +163,7 @@ const renderDocuments = (
 	data: DocumentsRouteTestData = {},
 	action?: (args: { request: Request }) => Promise<unknown>,
 	initialEntry = "/documents",
+	paid = true,
 ) => {
 	const {
 		recentGeneratedCvs = [],
@@ -205,7 +207,11 @@ const renderDocuments = (
 		],
 		{ initialEntries: [initialEntry] },
 	);
-	render(<RouterProvider router={router} />);
+	render(
+        <EntitlementContext value={{ access: paid ? "PAID" : "LIMITED", canCreateApplications: paid, paidUntil: null }}>
+            <RouterProvider router={router} />
+        </EntitlementContext>,
+    );
 	return router;
 };
 
@@ -213,6 +219,17 @@ const renderBaseDocuments = (
 	data: DocumentsRouteTestData = {},
 	action?: (args: { request: Request }) => Promise<unknown>,
 ) => renderDocuments(data, action, "/documents?tab=base");
+
+it("disables every Base CV upload path during Limited Access while retaining saved documents", async () => {
+    const action = vi.fn();
+    renderDocuments({ baseCvs: [baseCv()] }, action, "/documents?tab=base", false);
+    const upload = await screen.findByRole("button", { name: "Upload a Base CV" });
+    expect(upload.getAttribute("aria-disabled")).toBe("true");
+    expect(screen.getByText(/Base CV uploads require current paid access/)).toBeTruthy();
+    fireEvent.drop(upload, { dataTransfer: { files: [new File(["Candidate"], "cv.md")] } });
+    expect(action).not.toHaveBeenCalled();
+    expect(screen.getByRole("table", { name: "Base CVs" })).toBeTruthy();
+});
 
 describe("DocumentsRoute", () => {
 	it("opens Generated CVs by default in an accessible tab shell", async () => {
