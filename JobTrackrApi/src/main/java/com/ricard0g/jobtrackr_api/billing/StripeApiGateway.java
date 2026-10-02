@@ -59,7 +59,10 @@ public class StripeApiGateway implements StripeGateway {
                         null, null, session.getPaymentStatus(), null, null, null, session.getStatus());
             }
             final Subscription subscription = Subscription.retrieve(session.getSubscription(), options(null));
-            final Invoice invoice = initialInvoice(session, subscription);
+            if (subscription.getLatestInvoice() == null) {
+                throw BillingException.unavailable();
+            }
+            final Invoice invoice = Invoice.retrieve(subscription.getLatestInvoice(), options(null));
             final SubscriptionItem item = subscription.getItems().getData().getFirst();
             final InvoiceLineItem.Period period = invoice.getLines().getData().getFirst().getPeriod();
             final String email = session.getCustomerDetails().getEmail();
@@ -115,19 +118,6 @@ public class StripeApiGateway implements StripeGateway {
         } catch (final StripeException exception) {
             throw BillingException.unavailable();
         }
-    }
-
-    private Invoice initialInvoice(final Session session, final Subscription subscription) throws StripeException {
-        if (session.getInvoice() != null) {
-            return Invoice.retrieve(session.getInvoice(), options(null));
-        }
-        for (final Invoice invoice : Invoice.list(Map.of("subscription", subscription.getId()), options(null))
-                .autoPagingIterable()) {
-            if ("subscription_create".equals(invoice.getBillingReason())) {
-                return invoice;
-            }
-        }
-        throw BillingException.unavailable();
     }
 
     private void validatePrice() throws StripeException {
