@@ -14,3 +14,4 @@ Former subscribers need to buy another paid week without registering again or lo
 - Reserve returning Checkout durably, reject live subscriptions and racing attempts, and recover expired or ended attempts safely.
 - Restore paid access through verified payment events without creating a Registration Claim or another User.
 - Add HTTP and React Router coverage for cancellation, payment restoration, Customer reuse, retained work, duplicate prevention, and retry behavior.
+- Confirm before Checkout when Profile edits are unsaved, and refresh resubscription eligibility alongside entitlement checks while Account Settings stays open.

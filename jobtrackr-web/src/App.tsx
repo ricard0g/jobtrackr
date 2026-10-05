@@ -50,7 +50,7 @@ function App() {
 				<main className="min-h-0 flex-1 overflow-hidden">
 					<Outlet />
 				</main>
-				{accountSettingsOpen ? <AccountSettingsDialog /> : null}
+				{accountSettingsOpen ? <AccountSettingsDialog entitlementCheckedAt={latestData.entitlementCheckedAt} /> : null}
 			</section>
 		</EntitlementContext>
 	);

@@ -104,6 +104,62 @@ describe("Account Settings routed dialog", () => {
 		expect(screen.getByDisplayValue(demoCredentials.email)).toBeTruthy();
 	});
 
+	it("confirms unsaved Profile edits before starting Checkout", async () => {
+		let checkoutRequests = 0;
+		mswServer.use(http.get(`${API_BASE_URL}/billing/subscription`, () =>
+			HttpResponse.json({ canResubscribe: true }),
+		));
+		mswServer.use(http.get(`${API_BASE_URL}/user/entitlement`, () =>
+			HttpResponse.json({ access: "LIMITED", canCreateApplications: false, paidUntil: null }),
+		));
+		mswServer.use(http.post(`${API_BASE_URL}/billing/resubscribe`, () => {
+			checkoutRequests++;
+			return HttpResponse.json({ code: "BILLING_UNAVAILABLE", message: "Checkout unavailable." }, { status: 503 });
+		}));
+		await authenticateDemoUser();
+		renderApp([ACCOUNT_SETTINGS_PATH]);
+		const dialog = await screen.findByRole("dialog", { name: "Account Settings" });
+		fireEvent.change(within(dialog).getByLabelText("Display name"), { target: { value: "Unsaved name" } });
+		fireEvent.click(await screen.findByRole("button", { name: "Resubscribe" }));
+		const confirmation = await screen.findByRole("alertdialog", { name: "Discard unsaved Profile changes?" });
+		expect(checkoutRequests).toBe(0);
+		fireEvent.click(within(confirmation).getByRole("button", { name: "Keep editing" }));
+		expect(within(dialog).getByLabelText("Display name")).toHaveProperty("value", "Unsaved name");
+		expect(checkoutRequests).toBe(0);
+		fireEvent.click(screen.getByRole("button", { name: "Resubscribe" }));
+		fireEvent.click(within(await screen.findByRole("alertdialog")).getByRole("button", { name: "Discard" }));
+		expect(await screen.findByRole("alert")).toHaveProperty("textContent", "Checkout unavailable.");
+		expect(checkoutRequests).toBe(1);
+		expect(within(dialog).getByLabelText("Display name")).toHaveProperty("value", "Demo User");
+	});
+
+	it.each([
+		{ path: ACCOUNT_SETTINGS_PATH, initialAccess: "PAID" },
+		{ path: "/", initialAccess: "PAID" },
+		{ path: ACCOUNT_SETTINGS_PATH, initialAccess: "LIMITED" },
+	])("refreshes resubscription after cancellation from $initialAccess at $path", async ({ path, initialAccess }) => {
+		let canceled = false;
+		mswServer.use(http.get(`${API_BASE_URL}/billing/subscription`, () =>
+			HttpResponse.json({ canResubscribe: canceled }),
+		));
+		mswServer.use(http.get(`${API_BASE_URL}/user/entitlement`, () => {
+			const access = canceled ? "LIMITED" : initialAccess;
+			return HttpResponse.json({ access, canCreateApplications: access === "PAID", paidUntil: null });
+		}));
+		await authenticateDemoUser();
+		renderApp([path]);
+		if (path === "/") await screen.findByText("Kanban page");
+		const dialog = path === "/" ? await openAccountSettings() : await screen.findByRole("dialog", { name: "Account Settings" });
+		await screen.findByRole("heading", { name: "Sign-in Methods" });
+		expect(screen.queryByRole("button", { name: "Resubscribe" })).toBeNull();
+		fireEvent.change(within(dialog).getByLabelText("Display name"), { target: { value: "Unsaved name" } });
+		canceled = true;
+		fireEvent(window, new Event("focus"));
+		expect(await screen.findByRole("button", { name: "Resubscribe" })).toBeTruthy();
+		expect(screen.getByText("Limited Access")).toBeTruthy();
+		expect(within(dialog).getByLabelText("Display name")).toHaveProperty("value", "Unsaved name");
+	});
+
 	it("waits for payment after returning and restores paid access in the existing session", async () => {
 		let paid = false;
 		mswServer.use(http.get(`${API_BASE_URL}/billing/subscription`, () =>
