@@ -158,7 +158,8 @@ class CheckoutIntegrationTest {
         final Started checkout = start("unpaid");
         when(stripe.retrievePurchase("cs_unpaid")).thenReturn(new StripeGateway.Purchase(
                 "cs_unpaid", "cus_unpaid", "unpaid@example.com", "sub_unpaid", "incomplete", "in_unpaid", "open",
-                "price_weekly", Instant.now(), Instant.now().plusSeconds(WEEK_SECONDS), "complete"));
+                "price_weekly", Instant.now(), Instant.now().plusSeconds(WEEK_SECONDS), "complete", "open",
+                new StripeGateway.InitialInvoice("in_unpaid", Instant.now(), Instant.now().plusSeconds(WEEK_SECONDS))));
         // when / then
         http.perform(post(WEBHOOK).contentType(MediaType.APPLICATION_JSON)
                 .header("Stripe-Signature", "t=1,v1=forged").content("{}"))
@@ -177,7 +178,9 @@ class CheckoutIntegrationTest {
         when(stripe.retrievePurchase("cs_unpaid_attempt")).thenReturn(new StripeGateway.Purchase(
                 "cs_unpaid_attempt", "cus_unpaid_attempt", "retry@example.com", "sub_unpaid_attempt", "incomplete",
                 "in_unpaid_attempt", "open", "price_weekly", Instant.now(),
-                Instant.now().plusSeconds(WEEK_SECONDS), "open"));
+                Instant.now().plusSeconds(WEEK_SECONDS), "open", "open",
+                new StripeGateway.InitialInvoice("in_unpaid_attempt", Instant.now(),
+                        Instant.now().plusSeconds(WEEK_SECONDS))));
         webhook("evt_unpaid_attempt", "invoice.payment_failed", "{\"id\":\"in_unpaid_attempt\",\"parent\":{"
                 + "\"subscription_details\":{\"metadata\":{\"checkout_id\":\"" + unpaid.requestId() + "\"}}}}")
                 .andExpect(status().isOk());
@@ -207,7 +210,8 @@ class CheckoutIntegrationTest {
         when(stripe.retrievePurchase("cs_ended_original")).thenReturn(new StripeGateway.Purchase(
                 originalPayment.sessionId(), originalPayment.customerId(), originalPayment.email(),
                 originalPayment.subscriptionId(), "canceled", originalPayment.invoiceId(), "paid", "price_weekly",
-                originalPayment.periodStart(), originalPayment.periodEnd(), "complete"));
+                originalPayment.periodStart(), originalPayment.periodEnd(), "complete", "paid",
+                originalPayment.initialInvoice()));
         final String subscriptionObject = "{\"id\":\"sub_ended_original\",\"metadata\":{\"checkout_id\":\""
                 + original.requestId() + "\"}}";
         webhook("evt_ended_original_updated", "customer.subscription.updated", subscriptionObject)
@@ -256,7 +260,9 @@ class CheckoutIntegrationTest {
         when(stripe.retrievePurchase("cs_late")).thenReturn(new StripeGateway.Purchase(
                 "cs_late", "cus_late", "late@example.com", "sub_late", "active", "in_late", "paid",
                 "price_weekly", Instant.parse("2026-09-01T00:00:00Z"), Instant.parse("2026-09-08T00:00:00Z"),
-                "complete"));
+                "complete", "paid",
+                new StripeGateway.InitialInvoice("in_late", Instant.parse("2026-09-01T00:00:00Z"),
+                        Instant.parse("2026-09-08T00:00:00Z"))));
         // when / then
         sessionEvent("evt_late", "checkout.session.completed", "late").andExpect(status().isOk());
         checkoutStatus(checkout).andExpect(status().isOk())
@@ -299,7 +305,8 @@ class CheckoutIntegrationTest {
         // given
         final Started checkout = start("expired");
         when(stripe.retrievePurchase("cs_expired")).thenReturn(new StripeGateway.Purchase(
-                "cs_expired", null, null, null, null, null, "unpaid", null, null, null, "expired"));
+                "cs_expired", null, null, null, null, null, "unpaid", null, null, null, "expired", "unpaid",
+                null));
         // when / then
         sessionEvent("evt_expired", "checkout.session.expired", "expired").andExpect(status().isOk());
         checkoutStatus(checkout).andExpect(status().isOk())
@@ -316,7 +323,8 @@ class CheckoutIntegrationTest {
                 "cs_delayed_expiry", "https://checkout.stripe.com/c/pay/delayed", Instant.now().minusSeconds(60)));
         begin(requestId).andExpect(status().isCreated());
         when(stripe.retrievePurchase("cs_delayed_expiry")).thenReturn(new StripeGateway.Purchase(
-                "cs_delayed_expiry", null, null, null, null, null, "unpaid", null, null, null, "expired"));
+                "cs_delayed_expiry", null, null, null, null, null, "unpaid", null, null, null, "expired", "unpaid",
+                null));
         // when / then
         begin(requestId).andExpect(status().isConflict())
                 .andExpect(jsonPath("$.code").value("CHECKOUT_EXPIRED"));
@@ -394,7 +402,8 @@ class CheckoutIntegrationTest {
     private StripeGateway.Purchase paidPurchase(final String suffix, final String email) {
         final Instant start = Instant.now().minusSeconds(60).truncatedTo(ChronoUnit.SECONDS);
         return new StripeGateway.Purchase("cs_" + suffix, "cus_" + suffix, email, "sub_" + suffix, "active",
-                "in_" + suffix, "paid", "price_weekly", start, start.plusSeconds(WEEK_SECONDS), "complete");
+                "in_" + suffix, "paid", "price_weekly", start, start.plusSeconds(WEEK_SECONDS), "complete", "paid",
+                new StripeGateway.InitialInvoice("in_" + suffix, start, start.plusSeconds(WEEK_SECONDS)));
     }
 
     private ResultActions sessionEvent(final String id, final String type, final String suffix) throws Exception {

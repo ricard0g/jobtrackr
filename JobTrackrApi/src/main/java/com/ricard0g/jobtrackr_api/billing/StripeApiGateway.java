@@ -56,17 +56,22 @@ public class StripeApiGateway implements StripeGateway {
             final Session session = Session.retrieve(sessionId, options(null));
             if (session.getSubscription() == null) {
                 return new Purchase(session.getId(), session.getCustomer(), session.getCustomerEmail(), null,
-                        null, null, session.getPaymentStatus(), null, null, null, session.getStatus());
+                        null, null, session.getPaymentStatus(), null, null, null, session.getStatus(),
+                        session.getPaymentStatus(), null);
             }
             final Subscription subscription = Subscription.retrieve(session.getSubscription(), options(null));
-            final Invoice invoice = initialInvoice(session, subscription);
+            if (subscription.getLatestInvoice() == null) {
+                throw BillingException.unavailable();
+            }
+            final Invoice invoice = Invoice.retrieve(subscription.getLatestInvoice(), options(null));
             final SubscriptionItem item = subscription.getItems().getData().getFirst();
             final InvoiceLineItem.Period period = invoice.getLines().getData().getFirst().getPeriod();
             final String email = session.getCustomerDetails().getEmail();
             return new Purchase(session.getId(), subscription.getCustomer(), email, subscription.getId(),
                     subscription.getStatus(), invoice.getId(), invoice.getStatus(), item.getPrice().getId(),
                     Instant.ofEpochSecond(period.getStart()),
-                    Instant.ofEpochSecond(period.getEnd()), session.getStatus());
+                    Instant.ofEpochSecond(period.getEnd()), session.getStatus(), session.getPaymentStatus(),
+                    initialInvoice(session, subscription, invoice));
         } catch (final StripeException exception) {
             throw BillingException.unavailable();
         }
@@ -117,17 +122,26 @@ public class StripeApiGateway implements StripeGateway {
         }
     }
 
-    private Invoice initialInvoice(final Session session, final Subscription subscription) throws StripeException {
-        if (session.getInvoice() != null) {
-            return Invoice.retrieve(session.getInvoice(), options(null));
-        }
-        for (final Invoice invoice : Invoice.list(Map.of("subscription", subscription.getId()), options(null))
-                .autoPagingIterable()) {
-            if ("subscription_create".equals(invoice.getBillingReason())) {
-                return invoice;
+    private InitialInvoice initialInvoice(final Session session, final Subscription subscription,
+                                          final Invoice currentInvoice) throws StripeException {
+        String invoiceId = session.getInvoice();
+        if (invoiceId == null) {
+            for (final Invoice invoice : Invoice.list(Map.of("subscription", subscription.getId()), options(null))
+                    .autoPagingIterable()) {
+                if ("subscription_create".equals(invoice.getBillingReason())) {
+                    invoiceId = invoice.getId();
+                    break;
+                }
             }
         }
-        throw BillingException.unavailable();
+        if (invoiceId == null) {
+            throw BillingException.unavailable();
+        }
+        final Invoice invoice = invoiceId.equals(currentInvoice.getId()) ? currentInvoice
+                : Invoice.retrieve(invoiceId, options(null));
+        final InvoiceLineItem.Period period = invoice.getLines().getData().getFirst().getPeriod();
+        return new InitialInvoice(invoice.getId(), Instant.ofEpochSecond(period.getStart()),
+                Instant.ofEpochSecond(period.getEnd()));
     }
 
     private void validatePrice() throws StripeException {
