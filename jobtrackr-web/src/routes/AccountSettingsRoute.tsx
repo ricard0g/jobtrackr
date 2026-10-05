@@ -1,5 +1,5 @@
 import { X } from "lucide-react";
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import { useContext, useEffect, useRef, useState, type ReactNode } from "react";
 import {
 	useBlocker,
 	useFetcher,
@@ -16,6 +16,7 @@ import {
 	formatSignInTimestamp,
 	isAccountSettingsLocation,
 } from "@/lib/account-settings";
+import { EntitlementContext } from "@/lib/entitlement";
 import { type AccountLoaderData } from "@/lib/api";
 import { oauthResultMessage, redirectToGoogleAuthorization } from "@/lib/google-auth";
 import {
@@ -49,11 +50,61 @@ import type {
 	AccountSettingsLoaderData,
 } from "@/routes/account-settings-data";
 
+function SubscriptionSection({ loaderData, entitlementCheckedAt, confirmIfProfileDirty }: {
+	loaderData: AccountSettingsLoaderData | undefined;
+	entitlementCheckedAt: number;
+	confirmIfProfileDirty: (proceed: () => void) => void;
+}) {
+	const entitlement = useContext(EntitlementContext);
+	const fetcher = useFetcher<AccountSettingsActionData>();
+	const subscriptionFetcher = useFetcher<AccountSettingsLoaderData>();
+	const { load } = subscriptionFetcher;
+	const previousCheck = useRef(entitlementCheckedAt);
+	useEffect(() => {
+		if (previousCheck.current === entitlementCheckedAt) return;
+		previousCheck.current = entitlementCheckedAt;
+		void load(ACCOUNT_SETTINGS_PATH);
+	}, [entitlementCheckedAt, load]);
+	const paid = entitlement?.access === "PAID";
+	const canResubscribe = subscriptionFetcher.data?.canResubscribe ?? loaderData?.canResubscribe;
+	if (!canResubscribe && !loaderData?.resubscribeReturned) return null;
+	return (
+		<section className="mt-6 grid gap-3" aria-labelledby="subscription-heading">
+			<h2 id="subscription-heading" className="font-display text-base font-semibold">Subscription</h2>
+			<p className="text-sm text-muted-foreground">
+				{paid ? "Paid access restored. Your Applications and documents are ready to use."
+					: loaderData?.resubscribeReturned
+						? "Waiting for verified payment. Paid features will return once payment is confirmed."
+						: "Resubscribe for €10.99 per week, recurring, including applicable tax. Your Applications and documents stay with this User."}
+			</p>
+			{canResubscribe && !paid ? (
+				<fetcher.Form
+					method="post"
+					action={ACCOUNT_SETTINGS_PATH}
+					onSubmit={(event) => {
+						event.preventDefault();
+						const form = event.currentTarget;
+						confirmIfProfileDirty(() => {
+							void fetcher.submit(form, { method: "post", action: ACCOUNT_SETTINGS_PATH });
+						});
+					}}
+				>
+					<input type="hidden" name="intent" value="resubscribe" />
+					<Button type="submit" disabled={fetcher.state !== "idle"}>
+						{fetcher.state === "idle" ? "Resubscribe" : "Opening Checkout…"}
+					</Button>
+				</fetcher.Form>
+			) : null}
+			{fetcher.data?.ok === false ? <p role="alert" className="text-sm text-destructive">{fetcher.data.formError}</p> : null}
+		</section>
+	);
+}
+
 export function AccountSettingsFallbackRoute() {
 	return <div className="h-full bg-bg" />;
 }
 
-export function AccountSettingsDialog() {
+export function AccountSettingsDialog({ entitlementCheckedAt }: { entitlementCheckedAt: number }) {
 	const { user } = useRouteLoaderData("app") as AccountLoaderData;
 	const navigate = useNavigate();
 	const location = useLocation();
@@ -231,6 +282,12 @@ export function AccountSettingsDialog() {
 							</div>
 						</fetcher.Form>
 					</section>
+
+					<SubscriptionSection
+						loaderData={loaderData}
+						entitlementCheckedAt={entitlementCheckedAt}
+						confirmIfProfileDirty={confirmIfProfileDirty}
+					/>
 
 					<SignInMethodsSection
 						primaryEmail={user.userEmail}

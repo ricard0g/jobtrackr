@@ -19,6 +19,7 @@ Subproject-specific documentation lives in:
 - `JobTrackrApi/docs/`
 - `jobtrackr-web/docs/`
 
+- [Resubscription](resubscription.md): signed-in Checkout using the same Billing Customer and verified restoration of paid access.
 - [Subscription lifecycle](subscription-lifecycle.md): renewal reconciliation, cancellation, failed-payment access, and Stripe retry setup.
 - [Stripe hosted Checkout](stripe-checkout.md): test/live configuration and the durable initial-purchase boundary.
 

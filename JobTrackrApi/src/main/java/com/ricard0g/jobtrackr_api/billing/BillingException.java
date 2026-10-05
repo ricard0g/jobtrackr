@@ -14,6 +14,16 @@ public class BillingException extends RuntimeException {
         this.code = code;
     }
 
+    public static BillingException resubscriptionConflict() {
+        return new BillingException(HttpStatus.CONFLICT, "SUBSCRIPTION_ALREADY_EXISTS",
+                "An existing subscription or Checkout must finish before you can resubscribe.");
+    }
+
+    public static BillingException customerRequired() {
+        return new BillingException(HttpStatus.CONFLICT, "BILLING_CUSTOMER_REQUIRED",
+                "No existing Billing Customer is linked to this User. Please contact support.");
+    }
+
     public static BillingException unavailable() {
         return new BillingException(HttpStatus.SERVICE_UNAVAILABLE, "BILLING_UNAVAILABLE",
                 "Checkout is temporarily unavailable. Please try again later.");

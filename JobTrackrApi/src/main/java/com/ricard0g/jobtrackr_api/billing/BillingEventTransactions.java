@@ -51,7 +51,10 @@ public class BillingEventTransactions {
                 && (purchase.subscriptionId() == null || (purchase.customerId() != null
                 && purchase.email() != null && !purchase.email().isBlank()
                 && properties.weeklyPriceId().equals(purchase.priceId())));
-        if (!matchingPurchase) {
+        final boolean matchingCustomer = checkout.returningUserId() == null
+                || checkout.stripeCustomerId().equals(purchase.customerId());
+        final boolean purchaseMismatch = !matchingPurchase || !matchingCustomer;
+        if (purchaseMismatch) {
             throw new BillingException(HttpStatus.BAD_REQUEST, "STRIPE_PURCHASE_MISMATCH",
                     "Stripe purchase does not match the reserved Checkout.");
         }

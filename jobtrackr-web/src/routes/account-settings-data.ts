@@ -1,5 +1,5 @@
 import type { ActionFunctionArgs, LoaderFunctionArgs } from "react-router";
-import { redirect } from "react-router";
+import { redirect, redirectDocument } from "react-router";
 
 import { DISPLAY_NAME_MAX_LENGTH } from "@/lib/account-settings";
 import { ApiError, api, getAuthProviders, requireSession } from "@/lib/api";
@@ -16,6 +16,7 @@ import {
 import type { SignInMethods } from "@/types/sign-in-methods";
 
 export type AccountSettingsActionIntent =
+	| "resubscribe"
 	| "profile"
 	| "google-link"
 	| "google-reauth"
@@ -36,6 +37,8 @@ export type AccountSettingsLoaderData = {
 	oauthResult: OAuthResultCode | null;
 	createPasswordReady: boolean;
 	googleEnabled: boolean;
+	canResubscribe: boolean;
+	resubscribeReturned: boolean;
 };
 
 export async function accountSettingsLoader({
@@ -52,24 +55,30 @@ export async function accountSettingsLoader({
 		throw redirect(createPassword.redirectHref);
 	}
 
-	const [signInMethods, providers] = await Promise.all([
+	const [signInMethods, providers, subscription] = await Promise.all([
 		api.getSignInMethods(),
 		getAuthProviders(),
+		api.getSubscriptionStatus(),
 	]);
 	return {
 		signInMethods,
 		oauthResult: oauth.result,
 		createPasswordReady: createPassword.ready,
 		googleEnabled: providers.google === true,
+		canResubscribe: subscription.canResubscribe,
+		resubscribeReturned: url.searchParams.get("resubscribe") === "returned",
 	};
 }
 
 export async function accountSettingsAction({
 	request,
-}: ActionFunctionArgs): Promise<AccountSettingsActionData> {
+}: ActionFunctionArgs): Promise<AccountSettingsActionData | Response> {
 	await requireSession(request);
 	const formData = await request.formData();
 	const intent = String(formData.get("intent") ?? "profile");
+	if (intent === "resubscribe") {
+		return resubscribe();
+	}
 	if (intent === "google-link") {
 		return beginGoogleLink(formData);
 	}
@@ -86,6 +95,31 @@ export async function accountSettingsAction({
 		return createPassword(formData);
 	}
 	return saveProfile(formData);
+}
+
+async function resubscribe(): Promise<AccountSettingsActionData | Response> {
+	const user = await api.getCurrentUser();
+	return startResubscriptionCheckout(user.userId);
+}
+
+async function startResubscriptionCheckout(userId: string, retryExpired = true): Promise<AccountSettingsActionData | Response> {
+	const key = `jobtrackr-resubscribe-${userId}`;
+	const requestId = window.sessionStorage.getItem(key) ?? crypto.randomUUID();
+	window.sessionStorage.setItem(key, requestId);
+	try {
+		const checkout = await api.resubscribe(requestId);
+		return redirectDocument(checkout.url);
+	} catch (error) {
+		if (error instanceof ApiError && error.code === "CHECKOUT_EXPIRED") {
+			window.sessionStorage.removeItem(key);
+			if (retryExpired) return startResubscriptionCheckout(userId, false);
+		}
+		return {
+			ok: false,
+			intent: "resubscribe",
+			formError: error instanceof Error ? error.message : "Could not start Checkout. Please try again.",
+		};
+	}
 }
 
 async function saveProfile(formData: FormData): Promise<AccountSettingsActionData> {

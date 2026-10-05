@@ -1,6 +1,8 @@
 package com.ricard0g.jobtrackr_api.billing;
 
+import java.security.Principal;
 import java.util.UUID;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.http.CacheControl;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -18,9 +20,25 @@ import lombok.RequiredArgsConstructor;
 @RequiredArgsConstructor
 public class BillingController {
     private final CheckoutService checkoutService;
+    private final BillingTransactions transactions;
     private final StripeWebhookVerifier verifier;
     private final BillingWebhookService webhookService;
     private final BillingStatusService statusService;
+
+    @GetMapping("/subscription")
+    @PreAuthorize("isAuthenticated()")
+    public ResponseEntity<BillingTransactions.SubscriptionStatus> subscription(final Principal principal) {
+        return ResponseEntity.ok().cacheControl(CacheControl.noStore())
+                .body(transactions.subscriptionStatus(UUID.fromString(principal.getName())));
+    }
+
+    @PostMapping("/resubscribe")
+    @ResponseStatus(HttpStatus.CREATED)
+    @PreAuthorize("isAuthenticated()")
+    public CheckoutService.CheckoutResponse resubscribe(final Principal principal,
+                                                       @RequestHeader("Idempotency-Key") final UUID requestId) {
+        return checkoutService.resubscribe(requestId, UUID.fromString(principal.getName()));
+    }
 
     @PostMapping("/webhook")
     public void webhook(@RequestBody final String body,
