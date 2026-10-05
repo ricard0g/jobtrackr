@@ -45,3 +45,28 @@ cd JobTrackrApi
 ```
 
 The credentials remain blank and Checkout disabled in committed templates. Complete the existing seller/policy launch requirements before enabling live payments.
+
+## Account Settings billing management
+
+Configure a [Stripe Customer Portal configuration](https://docs.stripe.com/api/customer_portal/configurations/create)
+with payment method updates, invoice history, and subscription cancellation enabled. Set cancellation mode to
+`at_period_end`. Put its `bpc_...` ID in `STRIPE_PORTAL_CONFIGURATION_ID` and set `STRIPE_APP_ORIGIN` to
+`http://localhost:5173` for host development or `https://app.jobtrakcr.com` in production. Full Compose development
+may use `http://localhost:18080`. The configuration ID must belong to the same Stripe mode as the secret key.
+Spring validates these portal features before creating each session and rejects immediate cancellation settings.
+
+Account Settings exposes **Manage billing** without a separate billing tab. Its authenticated
+`POST /api/v1/billing/portal` action resolves the Billing Customer from the signed-in User, including Users with
+Limited Access. Customer IDs and return destinations supplied by clients cannot select a different customer or
+return path. Missing linked customers return `BILLING_CUSTOMER_MISSING`; Stripe failures or an absent/unsafe portal
+configuration return `BILLING_UNAVAILABLE`. Portal session responses are not cached.
+
+Stripe returns to `/settings/account` at the configured app origin. This full-page return runs the app loader again
+and reads current durable billing capability state. Existing signed subscription webhooks and the periodic/focus
+capability refresh handle cancellation updates that arrive after the return. A redirect itself never changes access.
+
+For a test-mode smoke check, sign in after a paid registration, open Manage billing, inspect invoices and update a
+payment method, then cancel renewal. Return to Account Settings and verify paid features remain available until the
+paid period ends. Verify Limited Access Users can still open the portal. Run the fake Stripe HTTP coverage with
+`./mvnw test -Dtest=RenewalIntegrationTest` and the route coverage with
+`npm test -- src/routes/AccountSettingsRoute.test.tsx` in `jobtrackr-web`.

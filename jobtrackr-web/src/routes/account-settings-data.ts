@@ -1,5 +1,5 @@
 import type { ActionFunctionArgs, LoaderFunctionArgs } from "react-router";
-import { redirect } from "react-router";
+import { redirect, redirectDocument } from "react-router";
 
 import { DISPLAY_NAME_MAX_LENGTH } from "@/lib/account-settings";
 import { ApiError, api, getAuthProviders, requireSession } from "@/lib/api";
@@ -16,6 +16,7 @@ import {
 import type { SignInMethods } from "@/types/sign-in-methods";
 
 export type AccountSettingsActionIntent =
+	| "billing"
 	| "profile"
 	| "google-link"
 	| "google-reauth"
@@ -70,6 +71,21 @@ export async function accountSettingsAction({
 	await requireSession(request);
 	const formData = await request.formData();
 	const intent = String(formData.get("intent") ?? "profile");
+	if (intent === "billing") {
+		let portal: { url: string };
+		try {
+			portal = await api.createBillingPortal();
+		} catch (error) {
+			return {
+				ok: false,
+				intent: "billing",
+				formError: error instanceof Error
+					? error.message
+					: "Could not open billing. Check your connection and try again.",
+			};
+		}
+		throw redirectDocument(portal.url);
+	}
 	if (intent === "google-link") {
 		return beginGoogleLink(formData);
 	}

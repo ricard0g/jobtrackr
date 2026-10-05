@@ -416,6 +416,7 @@ export type Entitlement = {
 };
 
 export const api = {
+	createBillingPortal: () => apiRequest<{ url: string }>("/billing/portal", { method: "POST" }),
 	getEntitlement: () => apiRequest<Entitlement>("/user/entitlement"),
 	getCurrentUser: () => apiRequest<User>("/user"),
 	patchUser: (request: UserPatchRequest) =>

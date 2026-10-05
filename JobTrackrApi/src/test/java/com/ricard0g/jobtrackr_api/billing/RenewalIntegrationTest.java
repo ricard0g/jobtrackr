@@ -18,6 +18,7 @@ import java.util.Map;
 import java.util.HashMap;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.atomic.AtomicInteger;
 import javax.crypto.Mac;
 import javax.crypto.spec.SecretKeySpec;
 import org.junit.jupiter.api.AfterAll;
@@ -57,7 +58,9 @@ import com.ricard0g.jobtrackr_api.worker.CvGenerationScheduler;
         "jobtrackr.stripe.enabled=true", "jobtrackr.stripe.secret-key=sk_test_fake",
         "jobtrackr.stripe.webhook-secret=" + RenewalIntegrationTest.WEBHOOK_SECRET,
         "jobtrackr.stripe.weekly-price-id=price_weekly",
-        "jobtrackr.stripe.landing-origin=http://localhost:4321"
+        "jobtrackr.stripe.landing-origin=http://localhost:4321",
+        "jobtrackr.stripe.app-origin=http://localhost:5173",
+        "jobtrackr.stripe.portal-configuration-id=bpc_jobtrackr"
 })
 class RenewalIntegrationTest {
     static final String WEBHOOK_SECRET = "whsec_test";
@@ -68,6 +71,7 @@ class RenewalIntegrationTest {
     private static final Map<String, String> STRIPE_RESPONSES = new ConcurrentHashMap<>();
     private static final Map<String, String> STRIPE_PAYMENT_INTENTS = new ConcurrentHashMap<>();
     private static final Map<String, Long> STRIPE_REFUNDS = new ConcurrentHashMap<>();
+    private static final AtomicInteger REGISTRATION_CLIENT = new AtomicInteger();
     private static HttpServer stripeServer;
     private static String originalApiBase;
 
@@ -105,6 +109,16 @@ class RenewalIntegrationTest {
                         exchange.getRequestBody().readAllBytes(), StandardCharsets.UTF_8));
                 STRIPE_REFUNDS.merge(request.get("payment_intent"), Long.parseLong(request.get("amount")), Long::sum);
             }
+            if ("/v1/billing_portal/sessions".equals(path)) {
+                final Map<String, String> request = parameters(new String(
+                        exchange.getRequestBody().readAllBytes(), StandardCharsets.UTF_8));
+                final boolean validReturn = "http://localhost:5173/settings/account".equals(request.get("return_url"))
+                        && "bpc_jobtrackr".equals(request.get("configuration"));
+                if (validReturn) {
+                    response = "{\"id\":\"bps_test\",\"object\":\"billing_portal.session\",\"url\":"
+                            + "\"https://billing.stripe.com/p/session/" + request.get("customer") + "\"}";
+                }
+            }
             final byte[] body = (response == null ? "{}" : response).getBytes(StandardCharsets.UTF_8);
             exchange.getResponseHeaders().set("Content-Type", "application/json");
             exchange.sendResponseHeaders(response == null ? 404 : 200, body.length);
@@ -130,6 +144,53 @@ class RenewalIntegrationTest {
     private Clock clock;
     @MockitoBean
     private CvGenerationScheduler scheduler;
+
+    @Test
+    void portalUsesOnlyTheAuthenticatedUsersCustomerAndAFixedReturnPath() throws Exception {
+        // given
+        final Session owner = register();
+        final Session other = register();
+        STRIPE_RESPONSES.put("/v1/billing_portal/configurations/bpc_jobtrackr", """
+                {"id":"bpc_jobtrackr","object":"billing_portal.configuration","active":true,
+                 "features":{"payment_method_update":{"enabled":true},"invoice_history":{"enabled":true},
+                 "subscription_cancel":{"enabled":true,"mode":"at_period_end"}}}
+                """);
+        // when / then
+        http.perform(post("/api/v1/billing/portal").header("Authorization", owner.bearer())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"customerId\":\"" + other.customer() + "\",\"returnUrl\":\"https://evil.example\"}"))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.url").value("https://billing.stripe.com/p/session/" + owner.customer()));
+        when(clock.instant()).thenReturn(END);
+        http.perform(post("/api/v1/billing/portal").header("Authorization", other.bearer()))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.url").value("https://billing.stripe.com/p/session/" + other.customer()));
+        http.perform(post("/api/v1/billing/portal").header("Authorization", "Bearer invalid"))
+                .andExpect(status().isUnauthorized());
+    }
+
+    @Test
+    void portalRejectsMissingCustomersAndUnsafeCancellationConfiguration() throws Exception {
+        // given
+        final Session session = register();
+        STRIPE_RESPONSES.put("/v1/billing_portal/configurations/bpc_jobtrackr", """
+                {"id":"bpc_jobtrackr","object":"billing_portal.configuration","active":true,
+                 "features":{"payment_method_update":{"enabled":true},"invoice_history":{"enabled":true},
+                 "subscription_cancel":{"enabled":true,"mode":"immediately"}}}
+                """);
+        // when / then
+        http.perform(post("/api/v1/billing/portal").header("Authorization", session.bearer()))
+                .andExpect(status().isServiceUnavailable())
+                .andExpect(jsonPath("$.code").value("BILLING_UNAVAILABLE"));
+        STRIPE_RESPONSES.remove("/v1/billing_portal/configurations/bpc_jobtrackr");
+        http.perform(post("/api/v1/billing/portal").header("Authorization", session.bearer()))
+                .andExpect(status().isServiceUnavailable());
+        jdbc.sql("UPDATE billing_customers SET user_id = NULL WHERE stripe_customer_id = :customer")
+                .param("customer", session.customer()).update();
+        http.perform(post("/api/v1/billing/portal").header("Authorization", session.bearer()))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.code").value("BILLING_CUSTOMER_MISSING"));
+    }
 
     @Test
     void paidRenewalExtendsAccessForTheSameSessionDespiteDuplicateAndDelayedEvents() throws Exception {
@@ -338,7 +399,11 @@ class RenewalIntegrationTest {
         final String registration = PaidRegistrationFixture.withVerifiedPurchase(jdbc,
                 "{\"email\":\"%s\",\"password\":\"password123\"}".formatted(email));
         final String response = http.perform(post("/api/v1/auth/register")
-                .contentType(MediaType.APPLICATION_JSON).content(registration))
+                .contentType(MediaType.APPLICATION_JSON).content(registration)
+                .with(request -> {
+                    request.setRemoteAddr("192.0.2." + REGISTRATION_CLIENT.incrementAndGet());
+                    return request;
+                }))
                 .andExpect(status().isCreated()).andReturn().getResponse().getContentAsString();
         final UUID checkout = jdbc.sql("SELECT id FROM billing_checkouts WHERE checkout_email = CAST(:email AS citext)")
                 .param("email", email).query(UUID.class).single();

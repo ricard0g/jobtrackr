@@ -199,6 +199,11 @@ public class BillingRepository {
                         "CHECKOUT_NOT_FOUND", "Checkout was not found."));
     }
 
+    public Optional<String> stripeCustomerForUser(final UUID userId) {
+        return jdbc.sql("SELECT stripe_customer_id FROM billing_customers WHERE user_id = :user")
+                .param("user", userId).query(String.class).optional();
+    }
+
     public Optional<Instant> paidUntil(final UUID userId, final Instant now) {
         return jdbc.sql("""
                 SELECT s.period_end FROM billing_subscriptions s

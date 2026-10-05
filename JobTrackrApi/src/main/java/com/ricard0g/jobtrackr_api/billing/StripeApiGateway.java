@@ -20,6 +20,8 @@ import lombok.RequiredArgsConstructor;
 @Component
 @RequiredArgsConstructor
 public class StripeApiGateway implements StripeGateway {
+    private static final String PORTAL_CANCELLATION_MODE = "at_period_end";
+    private static final String ACCOUNT_SETTINGS_PATH = "/settings/account";
     private static final long WEEKLY_AMOUNT_CENTS = 1099L;
     private static final int CONNECT_TIMEOUT_MS = 5000;
     private static final int READ_TIMEOUT_MS = 10000;
@@ -46,6 +48,37 @@ public class StripeApiGateway implements StripeGateway {
                     Instant.ofEpochSecond(session.getExpiresAt()));
         } catch (final StripeException exception) {
             throw BillingException.unavailable();
+        }
+    }
+
+    @Override
+    public String createPortal(final String customerId) {
+        properties.requireEnabled();
+        final String configurationId = properties.portalConfigurationId();
+        if (configurationId == null || configurationId.isBlank()) {
+            throw BillingException.portalUnavailable();
+        }
+        try {
+            final com.stripe.model.billingportal.Configuration configuration =
+                    com.stripe.model.billingportal.Configuration.retrieve(configurationId, options(null));
+            final com.stripe.model.billingportal.Configuration.Features features = configuration.getFeatures();
+            final boolean validPortal = Boolean.TRUE.equals(configuration.getActive())
+                    && Boolean.TRUE.equals(features.getPaymentMethodUpdate().getEnabled())
+                    && Boolean.TRUE.equals(features.getInvoiceHistory().getEnabled())
+                    && Boolean.TRUE.equals(features.getSubscriptionCancel().getEnabled())
+                    && PORTAL_CANCELLATION_MODE.equals(features.getSubscriptionCancel().getMode());
+            if (!validPortal) {
+                throw BillingException.portalUnavailable();
+            }
+            final com.stripe.model.billingportal.Session session =
+                    com.stripe.model.billingportal.Session.create(Map.of(
+                            "customer", customerId,
+                            "configuration", configurationId,
+                            "return_url", properties.appOrigin().replaceAll("/$", "") + ACCOUNT_SETTINGS_PATH
+                    ), options(null));
+            return session.getUrl();
+        } catch (final StripeException exception) {
+            throw BillingException.portalUnavailable();
         }
     }
 

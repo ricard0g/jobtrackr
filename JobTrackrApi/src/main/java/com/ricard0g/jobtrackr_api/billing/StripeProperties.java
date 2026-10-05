@@ -5,7 +5,7 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
 
 @ConfigurationProperties(prefix = "jobtrackr.stripe")
 public record StripeProperties(boolean enabled, String secretKey, String webhookSecret, String weeklyPriceId,
-                               String landingOrigin) {
+                               String landingOrigin, String appOrigin, String portalConfigurationId) {
     public void requireEnabled() {
         if (!enabled) {
             throw BillingException.unavailable();
@@ -22,7 +22,12 @@ public record StripeProperties(boolean enabled, String secretKey, String webhook
             throw new IllegalStateException(
                     "Stripe requires STRIPE_SECRET_KEY, STRIPE_WEBHOOK_SECRET and STRIPE_WEEKLY_PRICE_ID");
         }
-        final URI origin = URI.create(landingOrigin);
+        validateOrigin(landingOrigin, "STRIPE_LANDING_ORIGIN");
+        validateOrigin(appOrigin, "STRIPE_APP_ORIGIN");
+    }
+
+    private void validateOrigin(final String value, final String setting) {
+        final URI origin = URI.create(value);
         final boolean validOrigin = origin.getHost() != null && origin.getRawQuery() == null
                 && origin.getRawFragment() == null && origin.getUserInfo() == null
                 && (origin.getPath().isEmpty() || origin.getPath().equals("/"))
@@ -30,7 +35,7 @@ public record StripeProperties(boolean enabled, String secretKey, String webhook
                 && ("localhost".equals(origin.getHost()) || "127.0.0.1".equals(origin.getHost()))));
         if (!validOrigin) {
             throw new IllegalStateException(
-                    "STRIPE_LANDING_ORIGIN must be an HTTPS origin (HTTP allowed on localhost)");
+                    setting + " must be an HTTPS origin (HTTP allowed on localhost)");
         }
     }
 }

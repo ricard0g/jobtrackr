@@ -6,6 +6,8 @@ import java.util.UUID;
 public interface StripeGateway {
     CheckoutSession createCheckout(UUID checkoutId, String returnToken);
 
+    String createPortal(String customerId);
+
     Purchase retrievePurchase(String sessionId);
 
     String reverseDuplicate(UUID checkoutId, String subscriptionId, String invoiceId);
