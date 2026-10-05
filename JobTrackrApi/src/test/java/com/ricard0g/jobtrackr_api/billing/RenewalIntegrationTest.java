@@ -4,8 +4,10 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.multipart;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
+import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.csrf;
 
 import java.net.InetSocketAddress;
 import java.net.URLDecoder;
@@ -17,6 +19,12 @@ import java.util.HexFormat;
 import java.util.Map;
 import java.util.HashMap;
 import java.util.UUID;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
 import java.util.concurrent.ConcurrentHashMap;
 import javax.crypto.Mac;
 import javax.crypto.spec.SecretKeySpec;
@@ -36,6 +44,8 @@ import org.springframework.test.context.DynamicPropertySource;
 import org.springframework.test.context.TestPropertySource;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.mock.web.MockMultipartFile;
+import com.ricard0g.jobtrackr_api.storage.R2ObjectStorage;
 import org.springframework.test.web.servlet.ResultActions;
 import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
@@ -57,7 +67,8 @@ import com.ricard0g.jobtrackr_api.worker.CvGenerationScheduler;
         "jobtrackr.stripe.enabled=true", "jobtrackr.stripe.secret-key=sk_test_fake",
         "jobtrackr.stripe.webhook-secret=" + RenewalIntegrationTest.WEBHOOK_SECRET,
         "jobtrackr.stripe.weekly-price-id=price_weekly",
-        "jobtrackr.stripe.landing-origin=http://localhost:4321"
+        "jobtrackr.stripe.landing-origin=http://localhost:4321",
+        "jobtrackr.stripe.app-origin=http://localhost:5173"
 })
 class RenewalIntegrationTest {
     static final String WEBHOOK_SECRET = "whsec_test";
@@ -65,9 +76,13 @@ class RenewalIntegrationTest {
     private static final Instant START = Instant.parse("2030-01-01T00:00:00Z");
     private static final Instant END = Instant.parse("2030-01-08T00:00:00Z");
     private static final Instant RENEWED_END = Instant.parse("2030-01-15T00:00:00Z");
+    private static final java.util.concurrent.atomic.AtomicInteger NEXT_CLIENT =
+            new java.util.concurrent.atomic.AtomicInteger(1);
     private static final Map<String, String> STRIPE_RESPONSES = new ConcurrentHashMap<>();
     private static final Map<String, String> STRIPE_PAYMENT_INTENTS = new ConcurrentHashMap<>();
     private static final Map<String, Long> STRIPE_REFUNDS = new ConcurrentHashMap<>();
+    private static final Map<String, Map<String, String>> CHECKOUT_REQUESTS = new ConcurrentHashMap<>();
+    private static final Map<String, Long> CHECKOUT_EXPIRATIONS = new ConcurrentHashMap<>();
     private static HttpServer stripeServer;
     private static String originalApiBase;
 
@@ -84,12 +99,31 @@ class RenewalIntegrationTest {
 
     @BeforeAll
     static void fakeStripe() throws Exception {
+        STRIPE_RESPONSES.put("/v1/prices/price_weekly", """
+                {"id":"price_weekly","object":"price","active":true,"currency":"eur","unit_amount":1099,
+                 "tax_behavior":"inclusive","recurring":{"interval":"week","interval_count":1}}
+                """);
         originalApiBase = Stripe.getApiBase();
         stripeServer = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
         stripeServer.createContext("/v1/", exchange -> {
             final String path = exchange.getRequestURI().getPath();
             String response = STRIPE_RESPONSES.getOrDefault(exchange.getRequestMethod() + " " + path,
                     STRIPE_RESPONSES.get(path));
+            final boolean checkoutCreation = "/v1/checkout/sessions".equals(path)
+                    && "POST".equals(exchange.getRequestMethod());
+            if (checkoutCreation) {
+                final Map<String, String> request = parameters(new String(
+                        exchange.getRequestBody().readAllBytes(), StandardCharsets.UTF_8));
+                CHECKOUT_REQUESTS.put(request.get("client_reference_id"), request);
+                if (request.containsKey("customer")) {
+                    response = """
+                            {"id":"cs_%s","object":"checkout.session","url":"https://checkout.stripe.com/test",
+                             "expires_at":%d}
+                            """.formatted(request.get("client_reference_id"),
+                                    CHECKOUT_EXPIRATIONS.getOrDefault(request.get("client_reference_id"),
+                                            RENEWED_END.getEpochSecond()));
+                }
+            }
             if ("/v1/invoice_payments".equals(path)) {
                 final String invoice = parameters(exchange.getRequestURI().getRawQuery()).get("invoice");
                 final String intent = STRIPE_PAYMENT_INTENTS.get(invoice);
@@ -130,6 +164,185 @@ class RenewalIntegrationTest {
     private Clock clock;
     @MockitoBean
     private CvGenerationScheduler scheduler;
+    @MockitoBean
+    private R2ObjectStorage storage;
+
+    @Test
+    void canceledUserResubscribesWithTheSameCustomerAndRetainsExistingWork() throws Exception {
+        // given
+        final Session original = register();
+        final int applicationId = JsonPath.read(create(original).andExpect(status().isCreated())
+                .andReturn().getResponse().getContentAsString(), "$.applicationId");
+        final String document = http.perform(multipart("/api/v1/base-cvs")
+                .file(new MockMultipartFile("file", "cv.md", "text/markdown",
+                        "# Candidate\nJava developer".getBytes(StandardCharsets.UTF_8)))
+                .header("Authorization", original.bearer())).andExpect(status().isCreated())
+                .andReturn().getResponse().getContentAsString();
+        final Number baseCvId = JsonPath.read(document, "$.baseCvId");
+        final String user = http.perform(get("/api/v1/user").header("Authorization", original.bearer()))
+                .andExpect(status().isOk()).andReturn().getResponse().getContentAsString();
+        when(clock.instant()).thenReturn(END.plusSeconds(1));
+        stripeState(original, "canceled", "paid", START, END);
+        webhook(original, "canceled", "customer.subscription.deleted").andExpect(status().isOk());
+        limited(original);
+        final String login = http.perform(post("/api/v1/auth/login").contentType(MediaType.APPLICATION_JSON)
+                .content("{\"email\":\"%s\",\"password\":\"password123\"}".formatted(
+                        (String) JsonPath.read(user, "$.userEmail"))))
+                .andExpect(status().isOk()).andReturn().getResponse().getContentAsString();
+        final Session signedIn = new Session(original.checkout(), original.customer(),
+                "Bearer " + JsonPath.read(login, "$.accessToken"), original.companyId());
+        final UUID checkout = UUID.randomUUID();
+        // when
+        final String response = resubscribe(signedIn, checkout).andExpect(status().isCreated())
+                .andReturn().getResponse().getContentAsString();
+        // then
+        final Map<String, String> request = CHECKOUT_REQUESTS.get(checkout.toString());
+        assertThat(request.get("customer")).isEqualTo(original.customer());
+        assertThat(request.get("success_url")).isEqualTo("http://localhost:5173/settings/account?resubscribe=returned");
+        assertThat(request.get("cancel_url")).isEqualTo("http://localhost:5173/settings/account");
+        limited(original);
+        final Session replacement = new Session(checkout, original.customer(), original.bearer(), original.companyId());
+        final String email = JsonPath.read(user, "$.userEmail");
+        STRIPE_RESPONSES.put("/v1/checkout/sessions/cs_" + checkout, """
+                {"id":"cs_%s","object":"checkout.session","customer_details":{"email":"%s"},
+                 "subscription":"sub_%s","invoice":"in_initial_%s","status":"complete","payment_status":"paid"}
+                """.formatted(checkout, email, checkout, checkout));
+        invoice("in_initial_" + checkout, "paid", END, RENEWED_END);
+        stripeState(replacement, "active", "paid", END, RENEWED_END);
+        webhook(replacement, "resubscribed", "checkout.session.completed").andExpect(status().isOk());
+        paid(original, RENEWED_END);
+        http.perform(get("/api/v1/user").header("Authorization", original.bearer()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.userId").value((String) JsonPath.read(user, "$.userId")));
+        http.perform(get("/api/v1/applications/" + applicationId).header("Authorization", original.bearer()))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.applicationId").value(applicationId));
+        http.perform(get("/api/v1/base-cvs").header("Authorization", original.bearer()))
+                .andExpect(status().isOk()).andExpect(jsonPath("$[0].baseCvId").value(baseCvId.intValue()));
+        http.perform(get("/api/v1/billing/checkouts/status")
+                .header("X-Checkout-Token", (String) JsonPath.read(response, "$.checkoutToken")))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.registrationEligible").value(false));
+        create(original).andExpect(status().isCreated());
+        stripeState(replacement, "canceled", "paid", END, RENEWED_END);
+        webhook(replacement, "canceled_again", "customer.subscription.deleted").andExpect(status().isOk());
+        resubscribe(original, checkout).andExpect(status().isConflict())
+                .andExpect(jsonPath("$.code").value("CHECKOUT_EXPIRED"));
+        resubscribe(original, UUID.randomUUID()).andExpect(status().isCreated());
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"active", "past_due", "unpaid"})
+    void refusesResubscriptionWhileAnExistingSubscriptionCanStillRenew(final String subscriptionStatus)
+            throws Exception {
+        // given
+        final Session session = register();
+        stripeState(session, subscriptionStatus, "paid", START, END);
+        webhook(session, "still_live", "customer.subscription.updated").andExpect(status().isOk());
+        // when / then
+        resubscribe(session, UUID.randomUUID()).andExpect(status().isConflict())
+                .andExpect(jsonPath("$.code").value("SUBSCRIPTION_ALREADY_EXISTS"));
+        http.perform(get("/api/v1/billing/subscription").header("Authorization", session.bearer()))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.canResubscribe").value(false));
+    }
+
+    @Test
+    void concurrentResubscriptionsReserveOnlyOneCheckoutAndCannotBeReadThroughPublicCheckout() throws Exception {
+        // given
+        final Session session = canceledUser();
+        try (final ExecutorService executor = Executors.newFixedThreadPool(4)) {
+            final CountDownLatch ready = new CountDownLatch(4);
+            final CountDownLatch go = new CountDownLatch(1);
+            final List<Future<Integer>> requests = new ArrayList<>();
+            final Map<UUID, Integer> statuses = new ConcurrentHashMap<>();
+            for (int index = 0; index < 4; index++) {
+                final UUID checkout = UUID.randomUUID();
+                requests.add(executor.submit(() -> {
+                    ready.countDown();
+                    go.await();
+                    final int status = resubscribe(session, checkout).andReturn().getResponse().getStatus();
+                    statuses.put(checkout, status);
+                    return status;
+                }));
+            }
+            // when
+            ready.await();
+            go.countDown();
+            final List<Integer> results = new ArrayList<>();
+            for (final Future<Integer> request : requests) {
+                results.add(request.get());
+            }
+            // then
+            assertThat(results).containsExactlyInAnyOrder(201, 409, 409, 409);
+            final UUID winningCheckout = statuses.entrySet().stream().filter(entry -> entry.getValue() == 201)
+                    .findFirst().orElseThrow().getKey();
+            resubscribe(session, winningCheckout).andExpect(status().isCreated());
+            http.perform(post("/api/v1/billing/checkouts").header("Idempotency-Key", winningCheckout))
+                    .andExpect(status().isConflict());
+            final Session other = canceledUser();
+            resubscribe(other, winningCheckout).andExpect(status().isConflict());
+            limited(session);
+        }
+    }
+
+    @Test
+    void refusesAnotherCustomerInAVerifiedResubscriptionEvent() throws Exception {
+        // given
+        final Session original = canceledUser();
+        final UUID checkout = UUID.randomUUID();
+        resubscribe(original, checkout).andExpect(status().isCreated());
+        final String email = "different-" + checkout + "@example.com";
+        STRIPE_RESPONSES.put("/v1/checkout/sessions/cs_" + checkout, """
+                {"id":"cs_%s","object":"checkout.session","customer_details":{"email":"%s"},
+                 "subscription":"sub_%s","invoice":"in_initial_%s","status":"complete","payment_status":"paid"}
+                """.formatted(checkout, email, checkout, checkout));
+        final Session mismatched = new Session(checkout, "cus_other", original.bearer(), original.companyId());
+        invoice("in_initial_" + checkout, "paid", END, RENEWED_END);
+        stripeState(mismatched, "active", "paid", END, RENEWED_END);
+        // when / then
+        webhook(mismatched, "wrong_customer", "checkout.session.completed").andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("STRIPE_PURCHASE_MISMATCH"));
+        limited(original);
+    }
+
+    @Test
+    void expiredReturningCheckoutAllowsAFreshAttemptEvenBeforeTheExpiryWebhook() throws Exception {
+        // given
+        final Session original = canceledUser();
+        final UUID expired = UUID.randomUUID();
+        final Instant expiresAt = END.plusSeconds(3600);
+        CHECKOUT_EXPIRATIONS.put(expired.toString(), expiresAt.getEpochSecond());
+        resubscribe(original, expired).andExpect(status().isCreated());
+        STRIPE_RESPONSES.put("/v1/checkout/sessions/cs_" + expired, """
+                {"id":"cs_%s","object":"checkout.session","customer":"%s","status":"expired",
+                 "payment_status":"unpaid"}
+                """.formatted(expired, original.customer()));
+        when(clock.instant()).thenReturn(expiresAt.minusSeconds(1));
+        resubscribe(original, expired).andExpect(status().isCreated());
+        // when / then
+        when(clock.instant()).thenReturn(expiresAt);
+        resubscribe(original, UUID.randomUUID()).andExpect(status().isCreated());
+        limited(original);
+    }
+
+    @Test
+    void resubscriptionRequiresAnAuthenticatedUser() throws Exception {
+        // when / then
+        http.perform(get("/api/v1/billing/subscription")).andExpect(status().isUnauthorized());
+        http.perform(post("/api/v1/billing/resubscribe").with(csrf())
+                .header("Idempotency-Key", UUID.randomUUID())).andExpect(status().isUnauthorized());
+    }
+
+    private Session canceledUser() throws Exception {
+        final Session session = register();
+        when(clock.instant()).thenReturn(END.plusSeconds(1));
+        stripeState(session, "canceled", "paid", START, END);
+        webhook(session, "canceled", "customer.subscription.deleted").andExpect(status().isOk());
+        return session;
+    }
+
+    private ResultActions resubscribe(final Session session, final UUID checkout) throws Exception {
+        return http.perform(post("/api/v1/billing/resubscribe").header("Authorization", session.bearer())
+                .header("Idempotency-Key", checkout));
+    }
 
     @Test
     void paidRenewalExtendsAccessForTheSameSessionDespiteDuplicateAndDelayedEvents() throws Exception {
@@ -337,7 +550,10 @@ class RenewalIntegrationTest {
         final String email = "renewal-" + UUID.randomUUID() + "@example.com";
         final String registration = PaidRegistrationFixture.withVerifiedPurchase(jdbc,
                 "{\"email\":\"%s\",\"password\":\"password123\"}".formatted(email));
-        final String response = http.perform(post("/api/v1/auth/register")
+        final String response = http.perform(post("/api/v1/auth/register").with(request -> {
+                    request.setRemoteAddr("203.0.113." + NEXT_CLIENT.getAndIncrement());
+                    return request;
+                })
                 .contentType(MediaType.APPLICATION_JSON).content(registration))
                 .andExpect(status().isCreated()).andReturn().getResponse().getContentAsString();
         final UUID checkout = jdbc.sql("SELECT id FROM billing_checkouts WHERE checkout_email = CAST(:email AS citext)")

@@ -1,4 +1,4 @@
-import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { HttpResponse, http } from "msw";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { createMemoryRouter, RouterProvider } from "react-router";
@@ -85,6 +85,61 @@ async function openAccountSettings() {
 }
 
 describe("Account Settings routed dialog", () => {
+	it("offers canceled Users resubscription and reports Checkout errors without registration", async () => {
+		mswServer.use(http.get(`${API_BASE_URL}/billing/subscription`, () =>
+			HttpResponse.json({ canResubscribe: true }),
+		));
+		mswServer.use(http.get(`${API_BASE_URL}/user/entitlement`, () =>
+			HttpResponse.json({ access: "LIMITED", canCreateApplications: false, paidUntil: null }),
+		));
+		mswServer.use(http.post(`${API_BASE_URL}/billing/resubscribe`, () =>
+			HttpResponse.json({ code: "BILLING_UNAVAILABLE", message: "Checkout is temporarily unavailable." }, { status: 503 }),
+		));
+		await authenticateDemoUser();
+		const router = renderApp([ACCOUNT_SETTINGS_PATH]);
+		const button = await screen.findByRole("button", { name: "Resubscribe" });
+		fireEvent.click(button);
+		expect(await screen.findByRole("alert")).toHaveProperty("textContent", "Checkout is temporarily unavailable.");
+		expect(router.state.location.pathname).toBe(ACCOUNT_SETTINGS_PATH);
+		expect(screen.getByDisplayValue(demoCredentials.email)).toBeTruthy();
+	});
+
+	it("waits for payment after returning and restores paid access in the existing session", async () => {
+		let paid = false;
+		mswServer.use(http.get(`${API_BASE_URL}/billing/subscription`, () =>
+			HttpResponse.json({ canResubscribe: !paid }),
+		));
+		mswServer.use(http.get(`${API_BASE_URL}/user/entitlement`, () =>
+			HttpResponse.json({ access: paid ? "PAID" : "LIMITED", canCreateApplications: paid, paidUntil: null }),
+		));
+		await authenticateDemoUser();
+		renderApp([`${ACCOUNT_SETTINGS_PATH}?resubscribe=returned`]);
+		expect(await screen.findByText(/Waiting for verified payment/)).toBeTruthy();
+		expect(screen.getByText("Limited Access")).toBeTruthy();
+		paid = true;
+		fireEvent(window, new Event("focus"));
+		expect(await screen.findByText(/Paid access restored/)).toBeTruthy();
+		expect(screen.queryByRole("button", { name: "Resubscribe" })).toBeNull();
+		expect(screen.queryByText("Limited Access")).toBeNull();
+		expect(screen.getByDisplayValue(demoCredentials.email)).toBeTruthy();
+	});
+
+	it("hides resubscription for an active subscription and when returning unpaid with an existing subscription", async () => {
+		mswServer.use(http.get(`${API_BASE_URL}/billing/subscription`, () =>
+			HttpResponse.json({ canResubscribe: false }),
+		));
+		await authenticateDemoUser();
+		const router = renderApp([ACCOUNT_SETTINGS_PATH]);
+		await screen.findByRole("dialog", { name: "Account Settings" });
+		expect(screen.queryByRole("button", { name: "Resubscribe" })).toBeNull();
+		mswServer.use(http.get(`${API_BASE_URL}/user/entitlement`, () =>
+			HttpResponse.json({ access: "LIMITED", canCreateApplications: false, paidUntil: null }),
+		));
+		await act(async () => { await router.navigate(`${ACCOUNT_SETTINGS_PATH}?resubscribe=returned`); });
+		await screen.findByText(/Waiting for verified payment/);
+		expect(screen.queryByRole("button", { name: "Resubscribe" })).toBeNull();
+	});
+
 	it("opens from Kanban with a masked canonical path and restores Kanban on close", async () => {
 		await authenticateDemoUser();
 		const router = renderApp(["/"]);

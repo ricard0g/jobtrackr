@@ -561,6 +561,11 @@ export const handlers = [
 		return HttpResponse.json(auth.user);
 	}),
 
+	http.get(`${API_BASE_URL}/billing/subscription`, ({ request }) => {
+		const auth = requireAuth(request, loadState());
+		if (auth instanceof Response) return auth;
+		return HttpResponse.json({ canResubscribe: false });
+	}),
 	http.get(`${API_BASE_URL}/user/sign-in-methods`, ({ request }) => {
 		const state = loadState();
 		const auth = requireAuth(request, state);
