@@ -434,17 +434,17 @@ describe("DocumentsRoute", () => {
 			expect(router.state.location.search).toBe(
 				"?tab=base&page=2&sort=name&direction=asc",
 			);
+			expect(screen.getByText("2 of 2")).toBeTruthy();
+			expect(within(table).getByText("profile-11")).toBeTruthy();
 		});
-		expect(screen.getByText("2 of 2")).toBeTruthy();
-		expect(within(table).getByText("profile-11")).toBeTruthy();
 
 		fireEvent.click(within(table).getByRole("button", { name: "Name" }));
 		await waitFor(() => {
 			expect(router.state.location.search).toBe(
 				"?tab=base&page=1&sort=name&direction=desc",
 			);
+			expect(within(table).getByText("profile-12")).toBeTruthy();
 		});
-		expect(within(table).getByText("profile-12")).toBeTruthy();
 
 		for (const [column, sort] of [
 			["Type", "type"],

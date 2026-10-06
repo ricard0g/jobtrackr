@@ -91,6 +91,7 @@ export async function accountSettingsAction({
 			};
 		}
 		throw redirectDocument(portal.url);
+	}
 	if (intent === "resubscribe") {
 		return resubscribe();
 	}

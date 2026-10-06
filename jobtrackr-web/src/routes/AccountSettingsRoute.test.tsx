@@ -153,6 +153,8 @@ describe("Account Settings routed dialog", () => {
 		fireEvent.click(within(dialog).getByRole("button", { name: "Manage billing" }));
 		expect(await within(dialog).findByRole("alert")).toHaveProperty("textContent", "Billing is temporarily unavailable.");
 		expect(within(dialog).getByRole("button", { name: "Manage billing" }).hasAttribute("disabled")).toBe(false);
+	});
+
 	it("offers canceled Users resubscription and reports Checkout errors without registration", async () => {
 		mswServer.use(http.get(`${API_BASE_URL}/billing/subscription`, () =>
 			HttpResponse.json({ canResubscribe: true }),
