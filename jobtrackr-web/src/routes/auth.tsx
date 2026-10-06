@@ -8,7 +8,7 @@ import {
 	useLocation,
 	useNavigation,
 } from "react-router";
-import { BriefcaseBusiness, Loader2 } from "lucide-react";
+import { Loader2 } from "lucide-react";
 
 import { ContinueWithGoogleButton } from "@/components/auth/ContinueWithGoogleButton";
 import { Button } from "@/components/ui/button";
@@ -42,9 +42,11 @@ function AuthShell({
 		<main className="min-h-screen bg-off-white px-4 py-8 text-dark-gray">
 			<section className="mx-auto flex min-h-[calc(100vh-4rem)] w-full max-w-md flex-col justify-center">
 				<div className="mb-6 flex items-center gap-3">
-					<div className="flex h-10 w-10 items-center justify-center rounded-md bg-darkest-accent text-white">
-						<BriefcaseBusiness size={20} />
-					</div>
+					<img
+						src="/jobtrackr-logo.webp"
+						alt="JobTrackr logo"
+						className="-m-2 h-14 w-14 shrink-0"
+					/>
 					<div>
 						<h1 className="font-display text-2xl font-bold">JobTrackr</h1>
 						<p className="text-sm text-medium-gray">{subtitle}</p>
