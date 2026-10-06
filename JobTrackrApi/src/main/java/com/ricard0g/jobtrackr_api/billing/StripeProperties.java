@@ -24,7 +24,6 @@ public record StripeProperties(boolean enabled, String secretKey, String webhook
         }
         validateOrigin(landingOrigin, "STRIPE_LANDING_ORIGIN");
         validateOrigin(appOrigin, "STRIPE_APP_ORIGIN");
-        validateOrigin(appOrigin, "JOBTRACKR_PUBLIC_ORIGIN");
     }
 
     private void validateOrigin(final String value, final String setting) {
