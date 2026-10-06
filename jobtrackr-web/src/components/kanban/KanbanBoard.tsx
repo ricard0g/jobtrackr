@@ -141,7 +141,7 @@ export function KanbanBoard({ canCreateApplications }: { canCreateApplications: 
 			onDragOver={handleDragOver}
 			onDragEnd={handleDragEnd}
 		>
-			<div className="flex h-full gap-x-4 overflow-x-scroll px-8 py-8">
+			<div className="grid grid-rows-1 grid-flow-col-dense h-full gap-x-4 overflow-x-scroll px-8 py-8">
 				{applicationStatusOptions.map((status) => (
 					<StatusColumn
 						key={status.value}

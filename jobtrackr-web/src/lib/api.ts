@@ -416,6 +416,7 @@ export type Entitlement = {
 };
 
 export const api = {
+	createBillingPortal: () => apiRequest<{ url: string }>("/billing/portal", { method: "POST" }),
 	getSubscriptionStatus: () => apiRequest<{ canResubscribe: boolean }>("/billing/subscription"),
 	resubscribe: (requestId: string) => apiRequest<{ url: string; checkoutToken: string }>("/billing/resubscribe", {
 		method: "POST",

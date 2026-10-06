@@ -228,7 +228,7 @@ export function AccountSettingsDialog({ entitlementCheckedAt }: { entitlementChe
 					<DialogHeader>
 						<DialogTitle>Account Settings</DialogTitle>
 						<DialogDescription>
-							Edit your display name and review how you sign in. Primary Email stays read-only.
+							Edit your display name, manage billing, and review how you sign in. Primary Email stays read-only.
 						</DialogDescription>
 					</DialogHeader>
 
@@ -283,6 +283,7 @@ export function AccountSettingsDialog({ entitlementCheckedAt }: { entitlementChe
 						</fetcher.Form>
 					</section>
 
+					<BillingSection confirmIfProfileDirty={confirmIfProfileDirty} />
 					<SubscriptionSection
 						loaderData={loaderData}
 						entitlementCheckedAt={entitlementCheckedAt}
@@ -319,6 +320,33 @@ export function AccountSettingsDialog({ entitlementCheckedAt }: { entitlementChe
 				</AlertDialogContent>
 			</AlertDialog>
 		</>
+	);
+}
+
+function BillingSection({ confirmIfProfileDirty }: {
+	confirmIfProfileDirty: (proceed: () => void) => void;
+}) {
+	const fetcher = useFetcher<AccountSettingsActionData>();
+	return (
+		<section className="mt-6 grid gap-3 border-t pt-6" aria-labelledby="billing-heading">
+			<h2 id="billing-heading" className="font-display text-base font-semibold">Billing</h2>
+			<p className="text-sm text-muted-foreground">
+				Manage payment methods, invoices, and subscription cancellation in Stripe.
+			</p>
+			<fetcher.Form method="post" action={ACCOUNT_SETTINGS_PATH} onSubmit={(event) => {
+				event.preventDefault();
+				confirmIfProfileDirty(() => {
+					void fetcher.submit({ intent: "billing" }, { method: "post", action: ACCOUNT_SETTINGS_PATH });
+				});
+			}}>
+				<Button type="submit" variant="outline" disabled={fetcher.state !== "idle"}>
+					{fetcher.state !== "idle" ? "Opening billing…" : "Manage billing"}
+				</Button>
+			</fetcher.Form>
+			{fetcher.data?.ok === false && fetcher.data.formError ? (
+				<p role="alert" className="text-sm text-destructive">{fetcher.data.formError}</p>
+			) : null}
+		</section>
 	);
 }
 

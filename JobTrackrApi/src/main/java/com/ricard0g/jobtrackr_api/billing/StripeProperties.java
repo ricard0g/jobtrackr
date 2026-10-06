@@ -5,7 +5,7 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
 
 @ConfigurationProperties(prefix = "jobtrackr.stripe")
 public record StripeProperties(boolean enabled, String secretKey, String webhookSecret, String weeklyPriceId,
-                               String landingOrigin, String appOrigin) {
+                               String landingOrigin, String appOrigin, String portalConfigurationId) {
     public void requireEnabled() {
         if (!enabled) {
             throw BillingException.unavailable();
@@ -23,6 +23,7 @@ public record StripeProperties(boolean enabled, String secretKey, String webhook
                     "Stripe requires STRIPE_SECRET_KEY, STRIPE_WEBHOOK_SECRET and STRIPE_WEEKLY_PRICE_ID");
         }
         validateOrigin(landingOrigin, "STRIPE_LANDING_ORIGIN");
+        validateOrigin(appOrigin, "STRIPE_APP_ORIGIN");
         validateOrigin(appOrigin, "JOBTRACKR_PUBLIC_ORIGIN");
     }
 

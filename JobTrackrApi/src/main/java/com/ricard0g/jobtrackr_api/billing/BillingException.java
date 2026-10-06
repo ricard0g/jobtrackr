@@ -29,6 +29,16 @@ public class BillingException extends RuntimeException {
                 "Checkout is temporarily unavailable. Please try again later.");
     }
 
+    public static BillingException portalUnavailable() {
+        return new BillingException(HttpStatus.SERVICE_UNAVAILABLE, "BILLING_UNAVAILABLE",
+                "Billing management is temporarily unavailable. Please try again later.");
+    }
+
+    public static BillingException customerMissing() {
+        return new BillingException(HttpStatus.CONFLICT, "BILLING_CUSTOMER_MISSING",
+                "No Billing Customer is linked to this User. Please contact support.");
+    }
+
     public static BillingException expired() {
         return new BillingException(HttpStatus.CONFLICT, "CHECKOUT_EXPIRED", "Starting a fresh Stripe Checkout.");
     }

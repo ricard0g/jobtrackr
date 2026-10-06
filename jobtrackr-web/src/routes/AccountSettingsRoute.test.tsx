@@ -85,6 +85,74 @@ async function openAccountSettings() {
 }
 
 describe("Account Settings routed dialog", () => {
+	it("returns a full-page redirect to Stripe after creating a portal session", async () => {
+		await authenticateDemoUser();
+		const url = "https://billing.stripe.com/p/session/test_portal";
+		mswServer.use(http.post(`${API_BASE_URL}/billing/portal`, () => HttpResponse.json({ url })));
+		const formData = new FormData();
+		formData.set("intent", "billing");
+		const result = await accountSettingsAction({
+			request: new Request(`http://localhost${ACCOUNT_SETTINGS_PATH}`, { method: "POST", body: formData }),
+			params: {}, context: {},
+			url: new URL(`http://localhost${ACCOUNT_SETTINGS_PATH}`),
+			pattern: ACCOUNT_SETTINGS_PATH,
+		}).catch((error: unknown) => error);
+		expect(result).toBeInstanceOf(Response);
+		const response = result as Response;
+		expect(response.status).toBe(302);
+		expect(response.headers.get("Location")).toBe(url);
+		expect(response.headers.get("X-Remix-Reload-Document")).toBe("true");
+	});
+
+	it("reloads visible capabilities when returning from Stripe to Account Settings", async () => {
+		await authenticateDemoUser();
+		let paid = true;
+		mswServer.use(http.get(`${API_BASE_URL}/user/entitlement`, () => HttpResponse.json({
+			access: paid ? "PAID" : "LIMITED", canCreateApplications: paid, paidUntil: null,
+		})));
+		const router = renderApp(["/"]);
+		await screen.findByText("Kanban page");
+		expect(screen.queryByText("Limited Access")).toBeNull();
+		paid = false;
+		router.dispose();
+		cleanup();
+		renderApp([ACCOUNT_SETTINGS_PATH]);
+		await screen.findByRole("dialog", { name: "Account Settings" });
+		expect(await screen.findByText("Limited Access")).toBeTruthy();
+		expect(screen.getByRole("button", { name: "Manage billing" }).hasAttribute("disabled")).toBe(false);
+	});
+
+	it("confirms unsaved Profile edits before opening billing", async () => {
+		await authenticateDemoUser();
+		let requested = false;
+		mswServer.use(http.post(`${API_BASE_URL}/billing/portal`, () => {
+			requested = true;
+			return HttpResponse.json({ message: "Try again later." }, { status: 503 });
+		}));
+		renderApp([ACCOUNT_SETTINGS_PATH]);
+		await screen.findByRole("dialog", { name: "Account Settings" });
+		fireEvent.change(screen.getByLabelText("Display name"), { target: { value: "Unsaved" } });
+		fireEvent.click(screen.getByRole("button", { name: "Manage billing" }));
+		await screen.findByRole("alertdialog");
+		expect(requested).toBe(false);
+		fireEvent.click(screen.getByRole("button", { name: "Keep editing" }));
+		expect(requested).toBe(false);
+		fireEvent.click(screen.getByRole("button", { name: "Manage billing" }));
+		fireEvent.click(await screen.findByRole("button", { name: "Discard" }));
+		expect(await screen.findByRole("alert")).toHaveProperty("textContent", "Try again later.");
+	});
+
+	it("opens billing from Account Settings and shows a recoverable provider error", async () => {
+		await authenticateDemoUser();
+		mswServer.use(http.post(`${API_BASE_URL}/billing/portal`, () =>
+			HttpResponse.json({ code: "BILLING_UNAVAILABLE", message: "Billing is temporarily unavailable." }, { status: 503 }),
+		));
+		renderApp([ACCOUNT_SETTINGS_PATH]);
+		const dialog = await screen.findByRole("dialog", { name: "Account Settings" });
+		expect(within(dialog).queryByRole("tab", { name: /billing/i })).toBeNull();
+		fireEvent.click(within(dialog).getByRole("button", { name: "Manage billing" }));
+		expect(await within(dialog).findByRole("alert")).toHaveProperty("textContent", "Billing is temporarily unavailable.");
+		expect(within(dialog).getByRole("button", { name: "Manage billing" }).hasAttribute("disabled")).toBe(false);
 	it("offers canceled Users resubscription and reports Checkout errors without registration", async () => {
 		mswServer.use(http.get(`${API_BASE_URL}/billing/subscription`, () =>
 			HttpResponse.json({ canResubscribe: true }),
