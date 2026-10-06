@@ -7,6 +7,7 @@ public interface StripeGateway {
     CheckoutSession createCheckout(UUID checkoutId, String returnToken);
 
     String createPortal(String customerId);
+    CheckoutSession createResubscriptionCheckout(UUID checkoutId, String customerId);
 
     Purchase retrievePurchase(String sessionId);
 

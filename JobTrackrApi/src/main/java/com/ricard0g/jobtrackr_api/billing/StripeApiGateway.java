@@ -1,6 +1,7 @@
 package com.ricard0g.jobtrackr_api.billing;
 
 import java.time.Instant;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -30,20 +31,38 @@ public class StripeApiGateway implements StripeGateway {
 
     @Override
     public CheckoutSession createCheckout(final UUID checkoutId, final String returnToken) {
+        final String origin = properties.landingOrigin().replaceAll("/$", "");
+        return createCheckout(checkoutId, null, origin + "/checkout-return/#" + returnToken,
+                origin + "/#pricing-section");
+    }
+
+    @Override
+    public CheckoutSession createResubscriptionCheckout(final UUID checkoutId, final String customerId) {
+        final String origin = properties.appOrigin().replaceAll("/$", "");
+        return createCheckout(checkoutId, customerId, origin + "/settings/account?resubscribe=returned",
+                origin + "/settings/account");
+    }
+
+    private CheckoutSession createCheckout(final UUID checkoutId, final String customerId,
+                                           final String successUrl, final String cancelUrl) {
         properties.requireEnabled();
         try {
             validatePrice();
-            final String origin = properties.landingOrigin().replaceAll("/$", "");
-            final Session session = Session.create(Map.of(
+            final Map<String, Object> parameters = new HashMap<>(Map.of(
                     "mode", "subscription",
                     "client_reference_id", checkoutId.toString(),
                     "subscription_data", Map.of("metadata", Map.of("checkout_id", checkoutId.toString())),
                     "payment_method_types", List.of("card"),
                     "line_items", List.of(Map.of("price", properties.weeklyPriceId(), "quantity", 1)),
                     "automatic_tax", Map.of("enabled", true),
-                    "success_url", origin + "/checkout-return/#" + returnToken,
-                    "cancel_url", origin + "/#pricing-section"
-            ), options("checkout-" + checkoutId));
+                    "success_url", successUrl,
+                    "cancel_url", cancelUrl
+            ));
+            if (customerId != null) {
+                parameters.put("customer", customerId);
+                parameters.put("customer_update", Map.of("address", "auto"));
+            }
+            final Session session = Session.create(parameters, options("checkout-" + checkoutId));
             return new CheckoutSession(session.getId(), session.getUrl(),
                     Instant.ofEpochSecond(session.getExpiresAt()));
         } catch (final StripeException exception) {

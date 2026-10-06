@@ -417,6 +417,11 @@ export type Entitlement = {
 
 export const api = {
 	createBillingPortal: () => apiRequest<{ url: string }>("/billing/portal", { method: "POST" }),
+	getSubscriptionStatus: () => apiRequest<{ canResubscribe: boolean }>("/billing/subscription"),
+	resubscribe: (requestId: string) => apiRequest<{ url: string; checkoutToken: string }>("/billing/resubscribe", {
+		method: "POST",
+		headers: { "Idempotency-Key": requestId },
+	}),
 	getEntitlement: () => apiRequest<Entitlement>("/user/entitlement"),
 	getCurrentUser: () => apiRequest<User>("/user"),
 	patchUser: (request: UserPatchRequest) =>

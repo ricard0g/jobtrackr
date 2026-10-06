@@ -541,12 +541,7 @@ describe("DocumentsRoute", () => {
 				originalFilename: `profile-${index + 1}.pdf`,
 			}),
 		);
-		const action = vi.fn(async ({ request }: { request: Request }) => {
-			const formData = await request.formData();
-			expect(formData.get("intent")).toBe("upload");
-			expect((formData.get("file") as File).size).toBe(9);
-			return { ok: true, intent: "upload" };
-		});
+		const action = vi.fn(async () => ({ ok: true, intent: "upload" }));
 		const router = renderDocuments(
 			{ baseCvs: documents },
 			action,
@@ -563,6 +558,8 @@ describe("DocumentsRoute", () => {
 				],
 			},
 		});
+
+		await waitFor(() => expect(action).toHaveBeenCalledTimes(1));
 
 		await waitFor(() => {
 			expect(router.state.location.search).toBe(

@@ -33,6 +33,60 @@ public class BillingRepository {
         return checkout(requestId).orElseThrow();
     }
 
+    public Optional<Customer> customerForUser(final UUID userId) {
+        return jdbc.sql("SELECT id, stripe_customer_id, checkout_email FROM billing_customers WHERE user_id = :user")
+                .param("user", userId).query((row, index) -> new Customer(row.getObject("id", UUID.class),
+                        row.getString("stripe_customer_id"), row.getString("checkout_email"))).optional();
+    }
+
+    public void lockCustomer(final UUID customerId) {
+        jdbc.sql("SELECT id FROM billing_customers WHERE id = :id FOR UPDATE")
+                .param("id", customerId).query(UUID.class).single();
+    }
+
+    public boolean hasLiveSubscription(final UUID customerId) {
+        return jdbc.sql("""
+                SELECT EXISTS (SELECT 1 FROM billing_subscriptions
+                    WHERE customer_id = :customer AND status NOT IN ('canceled', 'incomplete_expired'))
+                """).param("customer", customerId).query(Boolean.class).single();
+    }
+
+    public Optional<Checkout> openResubscription(final UUID userId) {
+        return jdbc.sql(CHECKOUT_SELECT + " WHERE c.returning_user_id = :user AND c.state = 'OPEN'")
+                .param("user", userId).query(this::mapCheckout).optional();
+    }
+
+    public Checkout reserveResubscription(final UUID requestId, final UUID userId, final Customer customer) {
+        final Optional<Checkout> existing = checkout(requestId);
+        if (existing.isPresent()) {
+            if (!userId.equals(existing.get().returningUserId())) {
+                throw BillingException.resubscriptionConflict();
+            }
+            lockCheckout(requestId);
+            return checkout(requestId).orElseThrow();
+        }
+        final boolean reserved = jdbc.sql("""
+                SELECT EXISTS (SELECT 1 FROM billing_checkouts WHERE returning_user_id = :user
+                    AND state IN ('PENDING', 'OPEN', 'PAID'))
+                """).param("user", userId).query(Boolean.class).single();
+        if (reserved) {
+            throw BillingException.resubscriptionConflict();
+        }
+        jdbc.sql("""
+                INSERT INTO billing_checkouts (id, return_token, returning_user_id, customer_id, checkout_email)
+                VALUES (:id, :token, :user, :customer, :email) ON CONFLICT (id) DO NOTHING
+                """).param("id", requestId).param("token", UUID.randomUUID().toString() + UUID.randomUUID())
+                .param("user", userId).param("customer", customer.id()).param("email", customer.email()).update();
+        lockCheckout(requestId);
+        final Checkout checkout = checkout(requestId).orElseThrow();
+        if (!userId.equals(checkout.returningUserId())) {
+            throw BillingException.resubscriptionConflict();
+        }
+        return checkout;
+    }
+
+    public record Customer(UUID id, String stripeCustomerId, String email) { }
+
     public Optional<Checkout> checkout(final UUID id) {
         return jdbc.sql(CHECKOUT_SELECT + " WHERE c.id = :id").param("id", id).query(this::mapCheckout).optional();
     }
@@ -145,7 +199,8 @@ public class BillingRepository {
                 : initialPaymentConfirmed ? CheckoutState.PAID : CheckoutState.OPEN;
         jdbc.sql("UPDATE billing_checkouts SET state = :state WHERE id = :id")
                 .param("state", state.name()).param("id", checkout.id()).update();
-        if (paid) {
+        final boolean registrationEligible = paid && checkout.returningUserId() == null;
+        if (registrationEligible) {
             jdbc.sql("""
                     INSERT INTO registration_claims (id, checkout_id, paid_period_start, expires_at)
                     VALUES (:id, :checkout, :start, :end) ON CONFLICT (checkout_id) DO NOTHING
@@ -232,10 +287,11 @@ public class BillingRepository {
                 CheckoutState.valueOf(row.getString("state")),
                 row.getTimestamp("created_at").toInstant(),
                 row.getTimestamp("session_expires_at") == null ? null
-                        : row.getTimestamp("session_expires_at").toInstant());
+                        : row.getTimestamp("session_expires_at").toInstant(),
+                row.getObject("returning_user_id", UUID.class));
     }
 
     public record Checkout(UUID id, UUID customerId, String email, String stripeCustomerId, String returnToken,
                            String sessionId, String url, CheckoutState state, Instant createdAt,
-                           Instant sessionExpiresAt) { }
+                           Instant sessionExpiresAt, UUID returningUserId) { }
 }
