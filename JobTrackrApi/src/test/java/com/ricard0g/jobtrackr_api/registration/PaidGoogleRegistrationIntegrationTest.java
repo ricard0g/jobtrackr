@@ -70,7 +70,7 @@ import jakarta.servlet.http.Cookie;
 @SpringBootTest
 @AutoConfigureMockMvc
 @ActiveProfiles("test")
-@Testcontainers
+@Testcontainers(disabledWithoutDocker = true)
 @TestPropertySource(properties = {
         "jwt.signing-key=test-signing-key-with-at-least-32-characters",
         "spring.jpa.show-sql=false",
