@@ -1,0 +1,185 @@
+---
+import SiteLayout from "../layouts/SiteLayout.astro";
+const apiOrigin =
+  import.meta.env.PUBLIC_API_ORIGIN ?? "https://app.jobtrakcr.com";
+---
+
+<SiteLayout
+  title="Complete your registration | JobTrackr"
+  description="Confirm your JobTrackr payment and get your registration email."
+>
+  <main class="section-wrap [max-width:640px] [width:calc(100%_-_2rem)] [min-height:55vh] [margin:11rem_auto_7rem]">
+    <p
+      id="payment-status"
+      data-api-origin={apiOrigin}
+      role="status"
+      aria-live="polite"
+      class="inline-flex items-center [column-gap:0.5rem] text-sm [font-weight:600] text-accent-dark"
+    >
+      Confirming your payment…
+    </p>
+    <h1
+      id="page-title"
+      class="font-display [font-size:2.5rem] [line-height:1.15] font-semibold text-ink [margin-top:0.75rem] under-768:[font-size:2rem]"
+    >
+      Checking your payment
+    </h1>
+    <p id="page-lead" class="text-lg text-dark-gray [margin-top:1rem]">
+      This usually takes a few seconds. Please keep this page open.
+    </p>
+    <button
+      id="verify-email"
+      type="button"
+      hidden
+      class="[margin-top:2rem] [padding:0.875rem_2rem] border-0 bg-accent-main text-accent-darkest text-lg [font-weight:600] rounded-card cursor-pointer [box-shadow:var(--shadow-accent-light)] [transition:all_300ms_ease] hover:[box-shadow:var(--shadow-accent-strong)] disabled:opacity-50 disabled:cursor-wait under-768:[width:100%]"
+    >
+      Send my registration email
+    </button>
+    <a
+      id="sign-in"
+      hidden
+      href="https://app.jobtrakcr.com/auth/login"
+      class="[margin-top:2rem] [padding:0.875rem_2rem] bg-accent-main text-accent-darkest text-lg [font-weight:600] no-underline rounded-card [box-shadow:var(--shadow-accent-light)] [transition:all_300ms_ease] hover:[box-shadow:var(--shadow-accent-strong)] [&:not([hidden])]:inline-block under-768:[width:100%] under-768:text-center"
+    >
+      Sign in to JobTrackr
+    </a>
+    <p
+      id="email-status"
+      role="status"
+      aria-live="polite"
+      class="text-base text-dark-gray [margin-top:1rem]"
+    >
+    </p>
+    <div
+      class="[margin-top:4rem] [padding-top:1.5rem] [border-top:1px_solid_var(--color-light-gray)] text-sm text-medium-gray"
+    >
+      <p id="paid-period"></p>
+      <p class="[margin-top:0.5rem]">
+        Need help? Contact{" "}
+        <a href="mailto:support@jobtrakcr.com" class="text-medium-gray underline">
+          support@jobtrakcr.com
+        </a>{" "}
+        from your Checkout Email.
+      </p>
+    </div>
+  </main>
+</SiteLayout>
+
+<script>
+  const message =
+    document.querySelector<HTMLParagraphElement>("#payment-status")!;
+  const title = document.querySelector<HTMLHeadingElement>("#page-title")!;
+  const lead = document.querySelector<HTMLParagraphElement>("#page-lead")!;
+  const period = document.querySelector<HTMLParagraphElement>("#paid-period")!;
+  const fragment = location.hash.slice(1);
+  history.replaceState(null, "", location.pathname);
+  if (fragment) sessionStorage.setItem("jobtrackr-checkout-token", fragment);
+  const token = fragment || sessionStorage.getItem("jobtrackr-checkout-token");
+  const verifyButton =
+    document.querySelector<HTMLButtonElement>("#verify-email")!;
+  const emailStatus =
+    document.querySelector<HTMLParagraphElement>("#email-status")!;
+  const signIn = document.querySelector<HTMLAnchorElement>("#sign-in")!;
+  function show(status: string, heading: string, text: string) {
+    message.textContent = status;
+    title.textContent = heading;
+    lead.textContent = text;
+  }
+  verifyButton.addEventListener("click", async () => {
+    if (!token) return;
+    verifyButton.disabled = true;
+    emailStatus.textContent = "Sending…";
+    try {
+      const response = await fetch(
+        `${message.dataset.apiOrigin}/api/v1/auth/registration/verification`,
+        {
+          method: "POST",
+          headers: { "X-Checkout-Token": token },
+        },
+      );
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(
+          error.message ||
+            "Could not send the registration email. Please try again.",
+        );
+      }
+      emailStatus.textContent =
+        "Email sent. Open the link in your inbox to create your account. It expires in 30 minutes.";
+      verifyButton.textContent = "Resend registration email";
+    } catch (error) {
+      emailStatus.textContent =
+        error instanceof Error
+          ? error.message
+          : "Could not send the registration email. Please try again.";
+    } finally {
+      verifyButton.disabled = false;
+    }
+  });
+  async function checkPayment(attempt = 0): Promise<void> {
+    if (!token) {
+      show(
+        "",
+        "We couldn't find your purchase",
+        "Returning to this page alone doesn't confirm payment. Use the link from Stripe Checkout or contact support.",
+      );
+      return;
+    }
+    try {
+      const response = await fetch(
+        `${message.dataset.apiOrigin}/api/v1/billing/checkouts/status`,
+        {
+          headers: { "X-Checkout-Token": token },
+          cache: "no-store",
+        },
+      );
+      if (!response.ok) throw new Error("Payment status unavailable");
+      const body = await response.json();
+      if (body.duplicate) {
+        show(
+          "",
+          "You already have a JobTrackr subscription",
+          "You weren't subscribed twice. This payment is cancelled and refunded automatically; the refund can take a few days to reach your bank.",
+        );
+        signIn.hidden = false;
+        period.textContent =
+          "Haven't created your account yet? Open the registration email from your first purchase.";
+        return;
+      }
+      if (body.registrationEligible) {
+        show(
+          "✓ Payment confirmed",
+          "One more step: get your registration email",
+          "We'll send a secure link to your Checkout Email. Open it to create your account and start using JobTrackr.",
+        );
+        verifyButton.hidden = false;
+        period.textContent = `Your paid week runs from ${new Date(body.paidPeriodStart).toLocaleString()} until ${new Date(body.expiresAt).toLocaleString()}. It started at Stripe billing; registering later doesn't extend it.`;
+        return;
+      }
+      if (body.expiresAt && new Date(body.expiresAt).getTime() <= Date.now()) {
+        show(
+          "",
+          "This paid week has ended",
+          "Registration requires a new purchase.",
+        );
+        return;
+      }
+      if (attempt < 45) {
+        window.setTimeout(() => void checkPayment(attempt + 1), 2000);
+        return;
+      }
+      show(
+        "",
+        "We're still confirming your payment",
+        "Revisit this page in a few minutes or contact support. Please avoid making another purchase.",
+      );
+    } catch {
+      show(
+        "",
+        "Payment status is temporarily unavailable",
+        "Refresh this page or contact support. Please avoid making another purchase.",
+      );
+    }
+  }
+  void checkPayment();
+</script>

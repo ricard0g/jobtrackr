@@ -5,6 +5,7 @@ import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doNothing;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
@@ -24,10 +25,13 @@ import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.boot.webmvc.test.autoconfigure.WebMvcTest;
 import org.springframework.context.annotation.Import;
 import org.springframework.http.MediaType;
+import org.springframework.security.test.context.support.WithAnonymousUser;
+import org.springframework.security.test.context.support.WithMockUser;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 
 import com.ricard0g.jobtrackr_api.config.SpringDataWebConfig;
+import com.ricard0g.jobtrackr_api.config.security.MethodSecurityConfig;
 import com.ricard0g.jobtrackr_api.dto.CompanyDto.CompanyCreateRequestDto;
 import com.ricard0g.jobtrackr_api.dto.CompanyDto.CompanyPageResponseDto;
 import com.ricard0g.jobtrackr_api.dto.CompanyDto.CompanyPutRequestDto;
@@ -41,10 +45,11 @@ import com.ricard0g.jobtrackr_api.service.CompanyService;
 
 @WebMvcTest(controllers = CompanyController.class)
 @AutoConfigureMockMvc(addFilters = false)
-@Import({GlobalExceptionHandler.class, SpringDataWebConfig.class})
+@Import({GlobalExceptionHandler.class, SpringDataWebConfig.class, MethodSecurityConfig.class})
+@WithMockUser(username = CompanyControllerTest.USER_ID_VALUE)
 class CompanyControllerTest {
 
-    private static final String USER_ID_VALUE = "11111111-1111-1111-1111-111111111111";
+    static final String USER_ID_VALUE = "11111111-1111-1111-1111-111111111111";
     private static final UUID USER_ID = UUID.fromString(USER_ID_VALUE);
     private static final String BASE_PATH = "/api/v1/companies";
     private static final OffsetDateTime TIMESTAMP = OffsetDateTime.parse("2026-06-04T12:00:00Z");
@@ -54,6 +59,26 @@ class CompanyControllerTest {
 
     @MockitoBean
     private CompanyService companyService;
+
+    @Test
+    @WithAnonymousUser
+    void read_withoutAuthentication_isDeniedByMethodSecurity() throws Exception {
+        // when / then
+        mockMvc.perform(get(BASE_PATH).principal(authenticatedUser()))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.code").value("ACCESS_DENIED"));
+        verifyNoInteractions(companyService);
+    }
+
+    @Test
+    @WithAnonymousUser
+    void mutation_withoutAuthentication_isDeniedByMethodSecurity() throws Exception {
+        // when / then
+        mockMvc.perform(delete(BASE_PATH + "/1").principal(authenticatedUser()))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.code").value("ACCESS_DENIED"));
+        verifyNoInteractions(companyService);
+    }
 
     @Test
     void getAllCompanies_returns200() throws Exception {

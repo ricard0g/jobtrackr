@@ -8,6 +8,7 @@ import { accountSettingsAction } from "@/routes/account-settings-data";
 
 afterEach(() => {
 	clearAccessToken();
+	window.sessionStorage.clear();
 	vi.restoreAllMocks();
 });
 
@@ -31,6 +32,36 @@ function actionArgs(formData: FormData): ActionFunctionArgs {
 }
 
 describe("accountSettingsAction", () => {
+	it("retries a failed Checkout with the same key and redirects directly to Stripe", async () => {
+		setAccessToken("test-token");
+		vi.spyOn(api, "getCurrentUser").mockResolvedValue({ userId: "existing-user" } as Awaited<ReturnType<typeof api.getCurrentUser>>);
+		const checkout = vi.spyOn(api, "resubscribe")
+			.mockRejectedValueOnce(new ApiError("Checkout is temporarily unavailable.", 503, "BILLING_UNAVAILABLE"))
+			.mockResolvedValue({ url: "https://checkout.stripe.com/existing-user", checkoutToken: "return-token" });
+		const error = await accountSettingsAction(actionArgs(createFormData({ intent: "resubscribe" })));
+		expect(error).toEqual({ ok: false, intent: "resubscribe", formError: "Checkout is temporarily unavailable." });
+		const result = await accountSettingsAction(actionArgs(createFormData({ intent: "resubscribe" })));
+		expect(result).toBeInstanceOf(Response);
+		const response = result as Response;
+		expect(response.headers.get("Location")).toBe("https://checkout.stripe.com/existing-user");
+		expect(response.status).toBe(302);
+		expect(checkout.mock.calls[0][0]).toBe(checkout.mock.calls[1][0]);
+	});
+
+	it("starts a fresh Checkout when the saved attempt has expired or ended", async () => {
+		setAccessToken("test-token");
+		vi.spyOn(api, "getCurrentUser").mockResolvedValue({ userId: "existing-user" } as Awaited<ReturnType<typeof api.getCurrentUser>>);
+		window.sessionStorage.setItem("jobtrackr-resubscribe-existing-user", "stale-key");
+		const checkout = vi.spyOn(api, "resubscribe")
+			.mockRejectedValueOnce(new ApiError("Starting a fresh Stripe Checkout.", 409, "CHECKOUT_EXPIRED"))
+			.mockResolvedValue({ url: "https://checkout.stripe.com/fresh", checkoutToken: "fresh-token" });
+		const result = await accountSettingsAction(actionArgs(createFormData({ intent: "resubscribe" })));
+		expect(result).toBeInstanceOf(Response);
+		expect((result as Response).headers.get("Location")).toBe("https://checkout.stripe.com/fresh");
+		expect(checkout.mock.calls[0][0]).toBe("stale-key");
+		expect(checkout.mock.calls[1][0]).not.toBe("stale-key");
+	});
+
 	it("saves Profile display name", async () => {
 		setAccessToken("test-token");
 		const patchUser = vi.spyOn(api, "patchUser").mockResolvedValue({

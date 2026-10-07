@@ -5,6 +5,7 @@ import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doNothing;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
@@ -23,9 +24,12 @@ import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.boot.webmvc.test.autoconfigure.WebMvcTest;
 import org.springframework.context.annotation.Import;
 import org.springframework.http.MediaType;
+import org.springframework.security.test.context.support.WithAnonymousUser;
+import org.springframework.security.test.context.support.WithMockUser;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 
+import com.ricard0g.jobtrackr_api.config.security.MethodSecurityConfig;
 import com.ricard0g.jobtrackr_api.dto.TagDto.CreateTagRequestDto;
 import com.ricard0g.jobtrackr_api.dto.TagDto.TagPutRequestDto;
 import com.ricard0g.jobtrackr_api.dto.TagDto.TagResponseDto;
@@ -37,10 +41,11 @@ import com.ricard0g.jobtrackr_api.service.TagService;
 
 @WebMvcTest(controllers = TagController.class)
 @AutoConfigureMockMvc(addFilters = false)
-@Import(GlobalExceptionHandler.class)
+@Import({GlobalExceptionHandler.class, MethodSecurityConfig.class})
+@WithMockUser(username = TagControllerTest.USER_ID_VALUE)
 class TagControllerTest {
 
-    private static final String USER_ID_VALUE = "11111111-1111-1111-1111-111111111111";
+    static final String USER_ID_VALUE = "11111111-1111-1111-1111-111111111111";
     private static final UUID USER_ID = UUID.fromString(USER_ID_VALUE);
 
     @Autowired
@@ -48,6 +53,26 @@ class TagControllerTest {
 
     @MockitoBean
     private TagService tagService;
+
+    @Test
+    @WithAnonymousUser
+    void read_withoutAuthentication_isDeniedByMethodSecurity() throws Exception {
+        // when / then
+        mockMvc.perform(get("/api/v1/tags").principal(authenticatedUser()))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.code").value("ACCESS_DENIED"));
+        verifyNoInteractions(tagService);
+    }
+
+    @Test
+    @WithAnonymousUser
+    void mutation_withoutAuthentication_isDeniedByMethodSecurity() throws Exception {
+        // when / then
+        mockMvc.perform(delete("/api/v1/tags/1").principal(authenticatedUser()))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.code").value("ACCESS_DENIED"));
+        verifyNoInteractions(tagService);
+    }
 
     @Test
     void getAllTags_returns200() throws Exception {

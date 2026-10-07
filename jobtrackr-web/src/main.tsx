@@ -4,9 +4,10 @@ import { createBrowserRouter, Outlet, RouterProvider } from "react-router";
 
 import "./index.css";
 import App from "./App.tsx";
+import { captureRegistrationToken } from "@/lib/registration-token";
 import RootErrorBoundary from "@/routes/RootErrorBoundary";
 import RouteHydrateFallback from "@/routes/RouteHydrateFallback";
-import { appAction, appLoader, appShouldRevalidate, kanbanLoader } from "@/routes/app-data";
+import { appAction, appLoader, appShouldRevalidate, entitlementLoader, kanbanLoader } from "@/routes/app-data";
 import {
 	ApplicationDetailErrorBoundary,
 	ApplicationDetailRoute,
@@ -40,6 +41,8 @@ import {
 } from "@/routes/AccountSettingsRoute";
 import { generateHubRedirectLoader } from "@/routes/generate-hub-redirect";
 
+captureRegistrationToken();
+
 const router = createBrowserRouter([
 	{
 		path: "/auth/login",
@@ -67,6 +70,7 @@ const router = createBrowserRouter([
 		ErrorBoundary: RootErrorBoundary,
 		HydrateFallback: RouteHydrateFallback,
 		children: [
+			{ path: "resources/entitlement", loader: entitlementLoader },
 			{
 				id: "kanban",
 				Component: KanbanRoute,

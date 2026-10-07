@@ -519,6 +519,12 @@ export const handlers = [
 		return new HttpResponse(null, { status: 204 });
 	}),
 
+	http.get(`${API_BASE_URL}/user/entitlement`, ({ request }) => {
+		const auth = requireAuth(request, loadState());
+		if (auth instanceof Response) return auth;
+		return HttpResponse.json({ access: "PAID", canCreateApplications: true, paidUntil: "2100-01-01T00:00:00Z" });
+	}),
+
 	http.get(`${API_BASE_URL}/user`, ({ request }) => {
 		const state = loadState();
 		const auth = requireAuth(request, state);
@@ -555,6 +561,11 @@ export const handlers = [
 		return HttpResponse.json(auth.user);
 	}),
 
+	http.get(`${API_BASE_URL}/billing/subscription`, ({ request }) => {
+		const auth = requireAuth(request, loadState());
+		if (auth instanceof Response) return auth;
+		return HttpResponse.json({ canResubscribe: false });
+	}),
 	http.get(`${API_BASE_URL}/user/sign-in-methods`, ({ request }) => {
 		const state = loadState();
 		const auth = requireAuth(request, state);

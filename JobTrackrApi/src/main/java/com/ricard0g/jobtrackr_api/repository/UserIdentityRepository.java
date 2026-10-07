@@ -3,6 +3,7 @@ package com.ricard0g.jobtrackr_api.repository;
 import java.util.Optional;
 import java.util.UUID;
 
+import org.springframework.data.jpa.repository.EntityGraph;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
@@ -23,5 +24,6 @@ public interface UserIdentityRepository extends JpaRepository<UserIdentity, UUID
             @Param("provider") IdentityProvider provider,
             @Param("subject") String subject);
 
+    @EntityGraph(attributePaths = "user")
     Optional<UserIdentity> findByUser_UserIdAndProvider(UUID userId, IdentityProvider provider);
 }

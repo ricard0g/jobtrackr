@@ -119,6 +119,7 @@ export type DocumentsActionData = {
 };
 
 const errorMessages: Record<string, string> = {
+	PAID_ACCESS_REQUIRED: "Limited Access: Base CV uploads require current paid access.",
 	INVALID_BASE_CV_FORMAT: "Choose a PDF, DOCX, or Markdown file with the correct file extension.",
 	BASE_CV_TOO_LARGE: "The file is larger than the 10 MB limit.",
 	MALFORMED_BASE_CV: "This document is malformed or has no meaningful extractable text.",

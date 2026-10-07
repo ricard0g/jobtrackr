@@ -57,18 +57,31 @@ class GoogleSignInServiceTest {
     }
 
     @Test
-    void resolveGoogleSignIn_reusesConcurrentWinnerWhenEmailAppearsBeforeIdentityLookup() {
+    void resolveGoogleSignIn_returnsTheLinkedUserForAKnownSubject() {
         // given
         when(userIdentityRepository.findByProviderAndSubject(IdentityProvider.GOOGLE, SUBJECT))
-                .thenReturn(Optional.empty())
                 .thenReturn(Optional.of(winnerIdentity));
-        when(userRepository.existsByUserEmail(EMAIL)).thenReturn(true);
 
         // when
         final User signedIn = googleSignInService.resolveGoogleSignIn(SUBJECT, EMAIL);
 
         // then
         assertThat(signedIn).isSameAs(winner);
+    }
+
+    @Test
+    void resolveGoogleSignIn_refusesToCreateAUserForAnUnknownSubject() {
+        // given
+        when(userIdentityRepository.findByProviderAndSubject(IdentityProvider.GOOGLE, SUBJECT))
+                .thenReturn(Optional.empty());
+        when(userRepository.existsByUserEmail(EMAIL)).thenReturn(false);
+
+        // when / then
+        assertThatThrownBy(() -> googleSignInService.resolveGoogleSignIn(SUBJECT, EMAIL))
+                .isInstanceOf(GoogleSignInRejectedException.class)
+                .extracting(exception -> ((GoogleSignInRejectedException) exception).resultCode())
+                .isEqualTo(OAuthResultCode.NOT_REGISTERED);
+        verify(userRepository, never()).saveAndFlush(any());
         verify(transactionTemplate, never()).execute(any());
     }
 

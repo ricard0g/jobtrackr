@@ -6,6 +6,7 @@ public final class OAuthSession {
     public static final String COOKIE_PATH = "/api/v1";
     public static final String PURPOSE_ATTRIBUTE = "jobtrackr.oauth.purpose";
     public static final String USER_ID_ATTRIBUTE = "jobtrackr.oauth.userId";
+    public static final String CLAIM_ID_ATTRIBUTE = "jobtrackr.oauth.claimId";
     public static final String RETURN_TO_ATTRIBUTE = "jobtrackr.oauth.returnTo";
     public static final String FAILURE_PATH_ATTRIBUTE = "jobtrackr.oauth.failurePath";
     public static final String ISSUED_AT_ATTRIBUTE = "jobtrackr.oauth.issuedAt";

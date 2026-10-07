@@ -1,0 +1,125 @@
+---
+import PublicDemoFrame from "./PublicDemoFrame.astro";
+
+// Inline Lucide icons (briefcase-business, calendar-check, file-text).
+const featureTags = [
+  {
+    label: "Applications",
+    icon: '<path d="M12 12h.01"></path><path d="M16 6V4a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v2"></path><path d="M22 13a18.15 18.15 0 0 1-20 0"></path><rect width="20" height="14" x="2" y="6" rx="2"></rect>',
+  },
+  {
+    label: "Interviews",
+    icon: '<path d="M8 2v4"></path><path d="M16 2v4"></path><rect width="18" height="18" x="3" y="4" rx="2"></rect><path d="M3 10h18"></path><path d="m9 16 2 2 4-4"></path>',
+  },
+  {
+    label: "Generated CVs",
+    icon: '<path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"></path><path d="M14 2v4a2 2 0 0 0 2 2h4"></path><path d="M10 9H8"></path><path d="M16 13H8"></path><path d="M16 17H8"></path>',
+  },
+];
+---
+
+<section
+  class="hero__container [scroll-margin-top:9rem] under-768:[scroll-margin-top:5rem] flex [flex-flow:column_nowrap] justify-center items-center [row-gap:1.5rem] [height:auto] [max-width:1100px] [width:100%] [margin:0_auto_8rem_auto] [padding-bottom:8rem] [border-bottom:1px_solid_var(--color-light-gray)]"
+  id="home-section"
+>
+  <div class="hero__content-wrapper flex [flex-flow:column_nowrap] justify-center items-center [row-gap:0.625rem] [margin-top:18vh] under-1100:[max-width:90%] under-768:[row-gap:1.125rem]">
+    <span class="badge block [max-width:fit-content] [font-size:0.75rem] uppercase text-silver bg-off-white [padding:0.125rem_1.5rem] rounded-pill [border:1px_solid_var(--color-light-gray)]">
+      SIMPLE AND CLEAR
+    </span>
+    <h1 class="hero__heading font-display [font-size:3.5rem] [font-weight:500] text-center under-768:[font-size:2.5rem] under-768:[line-height:1.25]">
+      Your job search. <br />
+      Organized.
+    </h1>
+    <p class="hero__subheading font-text text-medium-gray [font-size:0.9rem] [font-weight:500] text-center [max-width:600px] under-768:[font-size:0.875rem]">
+      Keep every Application in view, from your first submission to the final
+      decision. Track your progress and the details that matter in one place.
+    </p>
+    <div class="hero__btn-wrapper flex justify-center items-center [column-gap:1rem] [margin:1.125rem_0] under-768:[flex-flow:column_nowrap] under-768:[row-gap:1rem] under-768:[width:100%]">
+      <a
+        class="cta-btn hero-cta block [padding:0.5rem_1.5rem] text-accent-darkest [font-weight:500] capitalize bg-accent-main no-underline [box-shadow:var(--shadow-accent-light)] rounded-card [transition:all_300ms_ease] hover:[box-shadow:var(--shadow-accent-strong)] under-768:block under-768:[width:100%] under-768:text-center under-768:[padding:0.75rem_0]"
+        href="#pricing-section"
+      >
+        Subscribe
+      </a>
+      <a
+        class="secondary-btn group/secondary flex justify-center items-center [column-gap:0.25rem] [padding:0.5rem_1.5rem] text-accent-darkest [font-weight:400] capitalize [background-color:transparent] no-underline rounded-card [border:1px_solid_var(--color-silver)] [transition:all_300ms_ease] hover:[box-shadow:var(--shadow-inner-light)] under-768:block under-768:[width:100%] under-768:text-center under-768:[padding:0.75rem_0]"
+        href="#features-section"
+      >
+        <span>How it works</span>
+        <span class="secondary-btn-svg [width:0] [height:1rem] [opacity:0] [transition:all_200ms_ease] group-hover/secondary:[width:1rem] group-hover/secondary:[opacity:1] under-768:hidden">
+          <svg
+            class="lucide lucide-chevron-down-icon lucide-chevron-down"
+            fill="none"
+            height="16"
+            stroke="currentColor"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+            stroke-width="2"
+            viewBox="0 0 24 24"
+            width="16"
+            xmlns="http://www.w3.org/2000/svg"
+          >
+            <path d="m6 9 6 6 6-6"></path>
+          </svg>{" "}
+        </span>
+      </a>
+    </div>
+    <ul class="hero__feature-tags flex flex-wrap justify-center items-center [gap:0.75rem] [list-style:none] [margin:2.5rem_0_0_0] [padding:0] under-768:[margin-top:1.5rem]">
+      {featureTags.map((tag) => (
+        <li class="hero__feature-tag flex items-center [column-gap:0.5rem] [padding:0.375rem_1rem_0.375rem_0.375rem] text-dark-gray [font-size:0.9rem] [font-weight:500] bg-off-white rounded-pill [border:1px_solid_var(--color-light-gray)] [box-shadow:var(--shadow-cool-light)] [transition:all_300ms_ease] hover:[transform:translateY(-2px)] under-768:[font-size:0.8125rem]">
+          <span class="flex justify-center items-center [width:1.75rem] [height:1.75rem] text-medium-gray bg-page rounded-pill [border:1px_solid_var(--color-light-gray)] [box-shadow:var(--shadow-cool-light)]">
+            <svg
+              aria-hidden="true"
+              fill="none"
+              height="15"
+              stroke="currentColor"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              stroke-width="2"
+              viewBox="0 0 24 24"
+              width="15"
+              xmlns="http://www.w3.org/2000/svg"
+              set:html={tag.icon}
+            />
+          </span>
+          {tag.label}
+        </li>
+      ))}
+    </ul>
+    <div class="hero__demo-pointer flex [flex-flow:column_nowrap] items-center [row-gap:0.5rem] [margin-top:2.5rem] text-accent-medium under-768:[margin-top:2rem]">
+      <svg
+        aria-hidden="true"
+        fill="none"
+        height="44"
+        stroke="currentColor"
+        stroke-linecap="round"
+        stroke-width="2.5"
+        viewBox="0 0 40 44"
+        width="40"
+        xmlns="http://www.w3.org/2000/svg"
+      >
+        <path d="M20 2C11 14 29 28 20 42"></path>
+      </svg>
+      <p class="[margin:0] [font-size:0.875rem] [font-weight:500] text-medium-gray text-center">
+        Check the ATS-optimized CVs in the{" "}
+        <span class="text-dark-gray [font-weight:600]">Documents</span> tab
+      </p>
+      <svg
+        aria-hidden="true"
+        fill="none"
+        height="56"
+        stroke="currentColor"
+        stroke-linecap="round"
+        stroke-linejoin="round"
+        stroke-width="2.5"
+        viewBox="0 0 40 56"
+        width="40"
+        xmlns="http://www.w3.org/2000/svg"
+      >
+        <path d="M20 2C29 16 11 32 20 52"></path>
+        <path d="M12.5 44.5 20 53l6.5-9.5"></path>
+      </svg>
+    </div>
+  </div>
+  <PublicDemoFrame />
+</section>

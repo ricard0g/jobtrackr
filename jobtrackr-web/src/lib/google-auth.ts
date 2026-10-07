@@ -9,6 +9,9 @@ export const OAUTH_RESULT_CODES = [
 	"failed",
 	"conflict",
 	"mismatch",
+	"not_registered",
+	"registration_used",
+	"registration_expired",
 ] as const;
 
 export type OAuthResultCode = (typeof OAUTH_RESULT_CODES)[number];
@@ -21,6 +24,21 @@ const oauthResultMessages: Record<OAuthResultCode, string> = {
 	conflict:
 		"This Google identity is not linked to your JobTrackr User. Sign in with your password to connect it.",
 	mismatch: "That Google identity does not match your Primary Email.",
+	not_registered:
+		"No JobTrackr User uses this Google account. Buy the weekly subscription to register, or sign in with your password.",
+	registration_used:
+		"This purchase was already used to create a User. Sign in instead.",
+	registration_expired:
+		"This purchase can no longer create a User because its paid week has ended or payment is no longer current. Registration requires a new purchase.",
+};
+
+const registrationResultMessages: Partial<Record<OAuthResultCode, string>> = {
+	mismatch:
+		"That Google account's verified email does not match your Checkout Email. Choose the Google account that uses your Checkout Email.",
+	conflict:
+		"A JobTrackr User already uses this email or Google account. Sign in instead; registration never links existing Users.",
+	not_registered:
+		"Start Google registration from your payment confirmation or registration email.",
 };
 
 export function parseOAuthResult(value: string | null | undefined): OAuthResultCode | null {
@@ -32,8 +50,14 @@ export function parseOAuthResult(value: string | null | undefined): OAuthResultC
 		: null;
 }
 
-export function oauthResultMessage(code: OAuthResultCode): string {
-	return oauthResultMessages[code];
+export function oauthResultMessage(
+	code: OAuthResultCode,
+	screen: "login" | "register" = "login",
+): string {
+	return (
+		(screen === "register" ? registrationResultMessages[code] : undefined) ??
+		oauthResultMessages[code]
+	);
 }
 
 const OAUTH_RESULT_FLASH_KEY = "jobtrackr.oauthResult";

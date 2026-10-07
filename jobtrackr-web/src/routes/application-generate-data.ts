@@ -49,6 +49,8 @@ const isGeneratedFormat = (value: string): value is GeneratedCvFormat =>
 	generatedFormats.includes(value as GeneratedCvFormat);
 
 const errorMessages: Record<string, string> = {
+	GENERATION_IN_PROGRESS: "A CV Generation is already in progress for this Application.",
+	PAID_ACCESS_REQUIRED: "Limited Access: CV Generation requires current paid access.",
 	MISSING_JOB_DESCRIPTION: "A Job Description is required to generate a CV.",
 	JOB_DESCRIPTION_TOO_LONG: "Job Description must not exceed 50,000 characters.",
 	ADDITIONAL_INFORMATION_TOO_LONG: "Additional information must not exceed 5,000 characters.",

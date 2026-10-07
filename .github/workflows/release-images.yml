@@ -4,7 +4,15 @@ on:
   push:
     branches:
       - main
+    paths-ignore:
+      - '**.md'
+      - 'docs/**'
+      - 'LICENSE'
   pull_request:
+    paths-ignore:
+      - '**.md'
+      - 'docs/**'
+      - 'LICENSE'
   workflow_dispatch:
 
 concurrency:
@@ -45,6 +53,7 @@ jobs:
 
   backend-image:
     name: Build backend image
+    if: github.event_name != 'pull_request' || github.base_ref == 'main'
     runs-on: ubuntu-latest
     timeout-minutes: 45
     steps:
@@ -73,6 +82,7 @@ jobs:
 
   frontend-image:
     name: Build frontend image
+    if: github.event_name != 'pull_request' || github.base_ref == 'main'
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
@@ -101,6 +111,7 @@ jobs:
 
   cv-generation-image:
     name: Build CV Generation image
+    if: github.event_name != 'pull_request' || github.base_ref == 'main'
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:

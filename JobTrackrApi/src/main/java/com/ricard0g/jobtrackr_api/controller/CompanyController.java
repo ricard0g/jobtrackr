@@ -4,6 +4,7 @@ import java.security.Principal;
 import java.util.UUID;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.web.PageableDefault;
 import org.springframework.validation.annotation.Validated;
@@ -31,6 +32,7 @@ import lombok.RequiredArgsConstructor;
 @RequestMapping("/api/v1/companies")
 @RequiredArgsConstructor
 @Validated
+@PreAuthorize("isAuthenticated()")
 public class CompanyController {
 
     private final CompanyService companyService;

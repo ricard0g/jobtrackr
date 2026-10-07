@@ -13,6 +13,7 @@ export interface LoginRequest {
 }
 
 export interface RegisterRequest extends LoginRequest {
+	verificationToken: string;
 	displayName?: string;
 }
 
@@ -22,7 +23,9 @@ export interface PasswordChangeRequest {
 }
 
 export type AuthActionData = {
+	recoveryRequested?: boolean;
 	formError?: string;
 	fieldErrors?: Record<string, string>;
 	values?: Partial<LoginRequest & RegisterRequest>;
+	googleAuthorizationHref?: string;
 };

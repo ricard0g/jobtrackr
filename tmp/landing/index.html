@@ -1,0 +1,1101 @@
+<!doctype html>
+<html lang="en">
+	<head>
+		<meta charset="UTF-8" />
+		<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+		<link rel="preconnect" href="https://fonts.googleapis.com" />
+		<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+		<link
+			href="https://fonts.googleapis.com/css2?family=Inter:ital,opsz,wght@0,14..32,100..900;1,14..32,100..900&family=Nunito:ital,wght@0,200..1000;1,200..1000&display=swap"
+			rel="stylesheet"
+		/>
+		<link rel="stylesheet" href="./styles/reset.css" />
+		<link rel="stylesheet" href="./styles/styles.css" />
+		<link rel="icon" href="./assets/jobtrackr-favicon.png" />
+		<title>JobTrackr</title>
+		<script src="./scripts/script.js" defer></script>
+	</head>
+	<body>
+		<header class="header__container">
+			<!-- Desktop Navbar -->
+			<nav class="header__navbar">
+				<ul class="header__outer-list">
+					<li class="logo">
+						<img
+							src="./assets/jobtrackr-logo.webp"
+							alt="Logo Jobtrackr"
+							class="logo-image"
+						/>
+						<span>JobTrackr</span>
+					</li>
+					<li class="header__inner-list-container">
+						<ul class="header__inner-list">
+							<li>
+								<a href="#home-section">Inicio</a>
+							</li>
+							<li>
+								<a href="#problem-section">Problema</a>
+							</li>
+							<li>
+								<a href="#features-section">Funcionalidades</a>
+							</li>
+							<li>
+								<a href="#pricing-section">Precios</a>
+							</li>
+							<li>
+								<a href="#faq-section">FAQ</a>
+							</li>
+						</ul>
+					</li>
+					<li>
+						<a class="cta-btn" href="https://ricardoguzdev.com"
+							>Probar JobTrackr</a
+						>
+					</li>
+				</ul>
+			</nav>
+
+			<!-- Mobile Navbar -->
+			<nav class="header__navbar-mobile">
+				<ul class="header__outer-list">
+					<li class="logo">
+						<a href="#home-section" class="logo__link">
+							<img
+								src="./assets/jobtrackr-logo.webp"
+								alt="Logo Jobtrackr"
+								class="logo-image"
+							/>
+							<span>JobTrackr</span>
+						</a>
+					</li>
+					<li class="header__button-mobile">
+						<button id="mobile-button">
+							<svg
+								xmlns="http://www.w3.org/2000/svg"
+								width="28"
+								height="28"
+								viewBox="0 0 24 24"
+								fill="none"
+								stroke="#000"
+								stroke-width="2"
+								stroke-linecap="round"
+								stroke-linejoin="round"
+								class="lucide lucide-menu-icon lucide-menu"
+							>
+								<path d="M4 5h16" />
+								<path d="M4 12h16" />
+								<path d="M4 19h16" />
+							</svg>
+						</button>
+						<ul class="header__inner-list-mobile">
+							<li>
+								<a href="#home-section">Inicio</a>
+							</li>
+							<li>
+								<a href="#problem-section">Problema</a>
+							</li>
+							<li>
+								<a href="#features-section">Funcionalidades</a>
+							</li>
+							<li>
+								<a href="#pricing-section">Precios</a>
+							</li>
+							<li>
+								<a href="#faq-section">FAQ</a>
+							</li>
+							<li>
+								<a
+									class="cta-btn"
+									href="https://ricardoguzdev.com"
+									>Probar JobTrackr</a
+								>
+							</li>
+						</ul>
+					</li>
+				</ul>
+			</nav>
+		</header>
+		<main>
+			<!-- Hero Section -->
+			<section id="home-section" class="hero__container">
+				<div class="hero__content-wrapper">
+					<span class="badge">FACIL Y SENCILLO</span>
+					<h1 class="hero__heading">
+						Tu Búsqueda de Empleo. <br />Organizada.
+					</h1>
+					<p class="hero__subheading">
+						JobTrackr es una herramienta para que nunca pierdas el
+						hilo de tus candidaturas. Sigue cada proceso, desde el
+						primer envío hasta la oferta final.
+					</p>
+					<div class="hero__btn-wrapper">
+						<a
+							class="cta-btn hero-cta"
+							href="https://ricardoguzdev.com"
+							>probar jobtrackr</a
+						>
+						<a href="#features-section" class="secondary-btn"
+							><span>Cómo Funciona</span
+							><span class="secondary-btn-svg">
+								<svg
+									xmlns="http://www.w3.org/2000/svg"
+									width="16"
+									height="16"
+									viewBox="0 0 24 24"
+									fill="none"
+									stroke="currentColor"
+									stroke-width="2"
+									stroke-linecap="round"
+									stroke-linejoin="round"
+									class="lucide lucide-chevron-down-icon lucide-chevron-down"
+								>
+									<path d="m6 9 6 6 6-6" />
+								</svg> </span
+						></a>
+					</div>
+					<div class="hero__social-proof-wrapper">
+						<span>
+							<svg
+								width="88"
+								height="14"
+								viewBox="0 0 88 14"
+								fill="none"
+								xmlns="http://www.w3.org/2000/svg"
+							>
+								<path
+									d="M7.36081 0L5.62197 5.34741H0L4.54877 8.65258L2.81209 14L7.36086 10.6948L11.9096 14L10.1729 8.65258L14.7217 5.34741H9.09975L7.36081 0Z"
+									fill="black"
+								/>
+								<path
+									d="M25.5835 0L23.8446 5.34741H18.2227L22.7714 8.65258L21.0347 14L25.5835 10.6948L30.1323 14L28.3956 8.65258L32.9444 5.34741H27.3224L25.5835 0Z"
+									fill="black"
+								/>
+								<path
+									d="M43.8042 0L42.0653 5.34741H36.4434L40.9921 8.65258L39.2554 14L43.8042 10.6948L48.353 14L46.6163 8.65258L51.1651 5.34741H45.5431L43.8042 0Z"
+									fill="black"
+								/>
+								<path
+									d="M62.0268 0L60.288 5.34741H54.666L59.2148 8.65258L57.4781 14L62.0269 10.6948L66.5756 14L64.839 8.65258L69.3877 5.34741H63.7658L62.0268 0Z"
+									fill="black"
+								/>
+								<path
+									d="M80.2475 0L78.5087 5.34741H72.8867L77.4355 8.65258L75.6988 14L80.2476 10.6948L84.7964 14L83.0597 8.65258L87.6084 5.34741H81.9865L80.2475 0Z"
+									fill="black"
+								/>
+							</svg>
+						</span>
+						<span>4.8/5.0 524+ Reviews</span>
+					</div>
+				</div>
+				<div class="hero__image-wrapper">
+					<figure>
+						<img
+							src="./assets/jobtrackr-hero-picture.webp"
+							alt="Captur del Dashboard de Jobtrackr"
+						/>
+					</figure>
+				</div>
+			</section>
+
+			<!-- Problem Explanation Section -->
+			<section id="problem-section" class="problem__container">
+				<div class="problem__content-wrapper">
+					<span class="badge">El Problema</span>
+					<h2 class="section__heading">
+						Cúantas candidaturas enviaste esta semana? <br />Y la
+						semana pasada?
+					</h2>
+				</div>
+				<div class="problem__cards-container">
+					<figure class="problem__card">
+						<div class="problem__card-video-wrapper">
+							<video
+								width="800px"
+								height="460px"
+								autoplay
+								loading="lazy"
+								loop
+								muted
+								playsinline
+							>
+								<source
+									src="./assets/hoja-calculo-animation-hd_1.mov"
+									type="video/mp4; codecs=hvc1"
+								/>
+								<source
+									src="./assets/hoja-calculo-animation-hd.webm"
+									type="video/webm"
+								/>
+							</video>
+						</div>
+						<figcaption class="problem__card-content-wrapper">
+							<div class="problem__card-content-top">
+								<span class="badge">El Problema Actual</span>
+								<h3 class="problem__card-subheading">
+									El Caos de las Hojas de Cálculo
+								</h3>
+								<p class="problem__card-description">
+									Columnas de colores, pestañas duplicadas,
+									fórmulas rotas. No es un sistema, es un
+									parche.
+								</p>
+								<div class="problem__card-btns">
+									<a
+										class="cta-btn hero-cta"
+										href="https://ricardoguzdev.com"
+										>probar jobtrackr</a
+									>
+									<a
+										href="#features-section"
+										class="secondary-btn"
+										><span>Cómo Funciona</span
+										><span class="secondary-btn-svg">
+											<svg
+												xmlns="http://www.w3.org/2000/svg"
+												width="16"
+												height="16"
+												viewBox="0 0 24 24"
+												fill="none"
+												stroke="currentColor"
+												stroke-width="2"
+												stroke-linecap="round"
+												stroke-linejoin="round"
+												class="lucide lucide-chevron-down-icon lucide-chevron-down"
+											>
+												<path d="m6 9 6 6 6-6" />
+											</svg> </span
+									></a>
+								</div>
+							</div>
+							<div class="problem__card-content-bot">
+								<ul class="problem__card-badge-list">
+									<li class="problem__card-badge">
+										<p>
+											<span>
+												<svg
+													xmlns="http://www.w3.org/2000/svg"
+													width="16"
+													height="16"
+													viewBox="0 0 24 24"
+													fill="none"
+													stroke="currentColor"
+													stroke-width="2"
+													stroke-linecap="round"
+													stroke-linejoin="round"
+													class="lucide lucide-circle-x-icon lucide-circle-x"
+												>
+													<circle
+														cx="12"
+														cy="12"
+														r="10"
+													/>
+													<path d="m15 9-6 6" />
+													<path d="m9 9 6 6" />
+												</svg>
+											</span>
+											Sin estructura Real
+										</p>
+									</li>
+									<li class="problem__card-badge">
+										<p>
+											<span>
+												<svg
+													xmlns="http://www.w3.org/2000/svg"
+													width="16"
+													height="16"
+													viewBox="0 0 24 24"
+													fill="none"
+													stroke="currentColor"
+													stroke-width="2"
+													stroke-linecap="round"
+													stroke-linejoin="round"
+													class="lucide lucide-frown-icon lucide-frown"
+												>
+													<circle
+														cx="12"
+														cy="12"
+														r="10"
+													/>
+													<path
+														d="M16 16s-1.5-2-4-2-4 2-4 2"
+													/>
+													<line
+														x1="9"
+														x2="9.01"
+														y1="9"
+														y2="9"
+													/>
+													<line
+														x1="15"
+														x2="15.01"
+														y1="9"
+														y2="9"
+													/>
+												</svg>
+											</span>
+											Imposible de Escalar
+										</p>
+									</li>
+									<li class="problem__card-badge">
+										<p>
+											<svg
+												xmlns="http://www.w3.org/2000/svg"
+												width="16"
+												height="16"
+												viewBox="0 0 24 24"
+												fill="none"
+												stroke="currentColor"
+												stroke-width="2"
+												stroke-linecap="round"
+												stroke-linejoin="round"
+												class="lucide lucide-thumbs-down-icon lucide-thumbs-down"
+											>
+												<path
+													d="M9 18.12 10 14H4.17a2 2 0 0 1-1.92-2.56l2.33-8A2 2 0 0 1 6.5 2H20a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2h-2.76a2 2 0 0 0-1.79 1.11L12 22a3.13 3.13 0 0 1-3-3.88Z"
+												/>
+												<path d="M17 14V2" />
+											</svg>
+											Se rompe con cada actualización
+										</p>
+									</li>
+								</ul>
+							</div>
+						</figcaption>
+					</figure>
+
+					<figure class="problem__card">
+						<div class="problem__card-video-wrapper">
+							<video
+								width="800px"
+								height="460px"
+								loading="lazy"
+								autoplay
+								loop
+								muted
+								playsinline
+							>
+								<source
+									src="./assets/estados-empresas-animation_1.mov"
+									type="video/mp4; codecs=hvc1"
+								/>
+								<source
+									src="./assets/estados-empresas-animation.webm"
+									type="video/webm"
+								/>
+							</video>
+						</div>
+						<figcaption class="problem__card-content-wrapper">
+							<div class="problem__card-content-top">
+								<span class="badge">El Problema Actual</span>
+								<h3 class="problem__card-subheading">
+									Pierdes en que punto estas con cada empresa.
+								</h3>
+								<p class="problem__card-description">
+									Te respondieron? Tienes que hacer follow-up?
+									Se pasó la fecha? Sin visibilidad, todo se
+									pierde.
+								</p>
+								<div class="problem__card-btns">
+									<a
+										class="cta-btn hero-cta"
+										href="https://ricardoguzdev.com"
+										>probar jobtrackr</a
+									>
+									<a href="#faq-section" class="secondary-btn"
+										><span>Contacto</span
+										><span class="secondary-btn-svg">
+											<svg
+												xmlns="http://www.w3.org/2000/svg"
+												width="16"
+												height="16"
+												viewBox="0 0 24 24"
+												fill="none"
+												stroke="currentColor"
+												stroke-width="2"
+												stroke-linecap="round"
+												stroke-linejoin="round"
+												class="lucide lucide-chevron-down-icon lucide-chevron-down"
+											>
+												<path d="m6 9 6 6 6-6" />
+											</svg> </span
+									></a>
+								</div>
+							</div>
+							<div class="problem__card-content-bot">
+								<ul class="problem__card-badge-list">
+									<li class="problem__card-badge">
+										<p>
+											<span>
+												<svg
+													xmlns="http://www.w3.org/2000/svg"
+													width="16"
+													height="16"
+													viewBox="0 0 24 24"
+													fill="none"
+													stroke="currentColor"
+													stroke-width="2"
+													stroke-linecap="round"
+													stroke-linejoin="round"
+													class="lucide lucide-orbit-icon lucide-orbit"
+												>
+													<path
+														d="M20.341 6.484A10 10 0 0 1 10.266 21.85"
+													/>
+													<path
+														d="M3.659 17.516A10 10 0 0 1 13.74 2.152"
+													/>
+													<circle
+														cx="12"
+														cy="12"
+														r="3"
+													/>
+													<circle
+														cx="19"
+														cy="5"
+														r="2"
+													/>
+													<circle
+														cx="5"
+														cy="19"
+														r="2"
+													/>
+												</svg>
+											</span>
+											Sin estado claro por empresa
+										</p>
+									</li>
+									<li class="problem__card-badge">
+										<p>
+											<span>
+												<svg
+													xmlns="http://www.w3.org/2000/svg"
+													width="16"
+													height="16"
+													viewBox="0 0 24 24"
+													fill="none"
+													stroke="currentColor"
+													stroke-width="2"
+													stroke-linecap="round"
+													stroke-linejoin="round"
+													class="lucide lucide-banknote-x-icon lucide-banknote-x"
+												>
+													<path
+														d="M13 18H4a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5"
+													/>
+													<path d="m17 17 5 5" />
+													<path d="M18 12h.01" />
+													<path d="m22 17-5 5" />
+													<path d="M6 12h.01" />
+													<circle
+														cx="12"
+														cy="12"
+														r="2"
+													/>
+												</svg>
+											</span>
+											Follow-ups que nunca envias
+										</p>
+									</li>
+									<li class="problem__card-badge">
+										<p>
+											<svg
+												xmlns="http://www.w3.org/2000/svg"
+												width="16"
+												height="16"
+												viewBox="0 0 24 24"
+												fill="none"
+												stroke="currentColor"
+												stroke-width="2"
+												stroke-linecap="round"
+												stroke-linejoin="round"
+												class="lucide lucide-calendar-off-icon lucide-calendar-off"
+											>
+												<path
+													d="M4.2 4.2A2 2 0 0 0 3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 1.82-1.18"
+												/>
+												<path
+													d="M21 15.5V6a2 2 0 0 0-2-2H9.5"
+												/>
+												<path d="M16 2v4" />
+												<path d="M3 10h7" />
+												<path d="M21 10h-5.5" />
+												<path d="m2 2 20 20" />
+											</svg>
+											Procesos que caducan sin saberlo
+										</p>
+									</li>
+								</ul>
+							</div>
+						</figcaption>
+					</figure>
+
+					<figure class="problem__card">
+						<div class="problem__card-video-wrapper">
+							<video
+								width="1200px"
+								height="450px"
+								autoplay
+								loop
+								muted
+								loading="lazy"
+								playsinline
+							>
+								<source
+									src="./assets/llamada-perdida-toast-animation-svg_1.mov"
+									type="video/mp4; codecs=hvc1"
+								/>
+								<source
+									src="./assets/llamada-perdida-toast-animation.webm"
+									type="video/webm"
+								/>
+							</video>
+						</div>
+						<figcaption class="problem__card-content-wrapper">
+							<div class="problem__card-content-top">
+								<span class="badge">El Problema Actual</span>
+								<h3 class="problem__card-subheading">
+									Pierdes ofertas mientras buscas el papel
+								</h3>
+								<p class="problem__card-description">
+									Sabemos lo importante que es estar en el
+									lugar indicado en el momento indicado.
+								</p>
+								<div class="problem__card-btns">
+									<a
+										class="cta-btn hero-cta"
+										href="https://ricardoguzdev.com"
+										>probar jobtrackr</a
+									>
+									<a
+										href="#features-section"
+										class="secondary-btn"
+										><span>Cómo Funciona</span
+										><span class="secondary-btn-svg">
+											<svg
+												xmlns="http://www.w3.org/2000/svg"
+												width="16"
+												height="16"
+												viewBox="0 0 24 24"
+												fill="none"
+												stroke="currentColor"
+												stroke-width="2"
+												stroke-linecap="round"
+												stroke-linejoin="round"
+												class="lucide lucide-chevron-down-icon lucide-chevron-down"
+											>
+												<path d="m6 9 6 6 6-6" />
+											</svg> </span
+									></a>
+								</div>
+							</div>
+							<div class="problem__card-content-bot">
+								<ul class="problem__card-badge-list">
+									<li class="problem__card-badge">
+										<p>
+											<span>
+												<svg
+													xmlns="http://www.w3.org/2000/svg"
+													width="16"
+													height="16"
+													viewBox="0 0 24 24"
+													fill="none"
+													stroke="currentColor"
+													stroke-width="2"
+													stroke-linecap="round"
+													stroke-linejoin="round"
+													class="lucide lucide-phone-missed-icon lucide-phone-missed"
+												>
+													<path d="m16 2 6 6" />
+													<path d="m22 2-6 6" />
+													<path
+														d="M13.832 16.568a1 1 0 0 0 1.213-.303l.355-.465A2 2 0 0 1 17 15h3a2 2 0 0 1 2 2v3a2 2 0 0 1-2 2A18 18 0 0 1 2 4a2 2 0 0 1 2-2h3a2 2 0 0 1 2 2v3a2 2 0 0 1-.8 1.6l-.468.351a1 1 0 0 0-.292 1.233 14 14 0 0 0 6.392 6.384"
+													/>
+												</svg>
+											</span>
+											Llamadas sin responder
+										</p>
+									</li>
+									<li class="problem__card-badge">
+										<p>
+											<span>
+												<svg
+													xmlns="http://www.w3.org/2000/svg"
+													width="16"
+													height="16"
+													viewBox="0 0 24 24"
+													fill="none"
+													stroke="currentColor"
+													stroke-width="2"
+													stroke-linecap="round"
+													stroke-linejoin="round"
+													class="lucide lucide-mail-question-mark-icon lucide-mail-question-mark"
+												>
+													<path
+														d="M22 10.5V6a2 2 0 0 0-2-2H4a2 2 0 0 0-2 2v12c0 1.1.9 2 2 2h12.5"
+													/>
+													<path
+														d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7"
+													/>
+													<path
+														d="M18 15.28c.2-.4.5-.8.9-1a2.1 2.1 0 0 1 2.6.4c.3.4.5.8.5 1.3 0 1.3-2 2-2 2"
+													/>
+													<path d="M20 22v.01" />
+												</svg>
+											</span>
+											Emails que nunca se mandaron
+										</p>
+									</li>
+									<li class="problem__card-badge">
+										<p>
+											<svg
+												xmlns="http://www.w3.org/2000/svg"
+												width="16"
+												height="16"
+												viewBox="0 0 24 24"
+												fill="none"
+												stroke="currentColor"
+												stroke-width="2"
+												stroke-linecap="round"
+												stroke-linejoin="round"
+												class="lucide lucide-frown-icon lucide-frown"
+											>
+												<circle
+													cx="12"
+													cy="12"
+													r="10"
+												/>
+												<path
+													d="M16 16s-1.5-2-4-2-4 2-4 2"
+												/>
+												<line
+													x1="9"
+													x2="9.01"
+													y1="9"
+													y2="9"
+												/>
+												<line
+													x1="15"
+													x2="15.01"
+													y1="9"
+													y2="9"
+												/>
+											</svg>
+											Oportunidades perdidas
+										</p>
+									</li>
+								</ul>
+							</div>
+						</figcaption>
+					</figure>
+				</div>
+			</section>
+
+			<!-- Features Section -->
+			<section id="features-section" class="features__container">
+				<div class="features__content-wrapper">
+					<span class="badge">Funcionalidades</span>
+					<h2 class="section__heading">
+						Menos estrés.<br />
+						Más ofertas.
+					</h2>
+					<h3 class="section__description">
+						JobTrackr convierte el caos de una búsqueda activa en un
+						sistema claro.<br />
+						Tú decides dónde poner la energía, nosotros guardamos el
+						resto.
+					</h3>
+				</div>
+				<ul class="features__list">
+					<li class="feature-card__item">
+						<figure>
+							<div class="feature-card__image-wrapper">
+								<img
+									src="./assets/kanba-visual1.webp"
+									alt="Visualizacion de un kanban board"
+								/>
+							</div>
+							<figcaption class="feature-card__figcaption">
+								<h4>
+									Kanban Borad donde de un vistazo, sabes
+									exactamente donde estás.
+								</h4>
+								<p>
+									Columnas claras e interfaz sencilla para que
+									no haga falta ni un solo tutorial.
+								</p>
+							</figcaption>
+						</figure>
+					</li>
+					<li class="feature-card__item">
+						<figure>
+							<div class="feature-card__image-wrapper">
+								<img
+									src="./assets/entrevista-details1.webp"
+									alt="Visualizacion de cómo se ve la entrevista en detalle dentro de Jobtrackr"
+								/>
+							</div>
+							<figcaption class="feature-card__figcaption">
+								<h4>
+									Todo sobre una oferta, en un solo sitio.
+								</h4>
+								<p>
+									Columnas claras e interfaz sencilla para que
+									no haga falta ni un solo tutorial.
+								</p>
+							</figcaption>
+						</figure>
+					</li>
+					<li class="feature-card__item">
+						<figure>
+							<div class="feature-card__image-wrapper">
+								<img
+									src="./assets/sortable-list.webp"
+									alt="Visualización de una listea ordenable por drag and drop"
+								/>
+							</div>
+							<figcaption class="feature-card__figcaption">
+								<h4>
+									Mover una tarjeta tarda menos que escribir
+									un mensaje.
+								</h4>
+								<p>
+									Columnas claras e interfaz sencilla para que
+									no haga falta ni un solo tutorial.
+								</p>
+							</figcaption>
+						</figure>
+					</li>
+				</ul>
+			</section>
+
+			<!-- Pricing Section -->
+			<section id="pricing-section" class="pricing__container">
+				<div class="pricing__content-wrapper">
+					<span class="badge">Precio</span>
+					<h2 class="section__heading">
+						Sin Sorpresas. Sin Letra Pequeña.
+					</h2>
+					<h3 class="section__description">
+						JobTrackr es completamente gratuito durante tu búsqueda
+						de empleo.
+					</h3>
+				</div>
+				<div class="pricing-card__wrapper">
+					<article class="pricing-card__article">
+						<h2>Todo Incluido</h2>
+						<p class="pricing-card__description">
+							Sí, es gratis. No, no te vamos a pedir la tarjeta
+							"solo para verificar". Úsalo. Encuentra trabajo.
+							Invítanos a un café si quieres.
+						</p>
+						<p class="pricing-card__price">
+							0€
+							<span class="pricing-card__price-span"
+								>por mes</span
+							>
+						</p>
+						<div class="pricing-card__separator"></div>
+						<ul>
+							<li>✓ Candidaturas Ilimitadas</li>
+							<li>✓ Tablero Kanban Completo</li>
+							<li>✓ Todas las fases y columnas</li>
+							<li>✓ Fichas con notas personales</li>
+							<li>✓ Desde cualquier navegador</li>
+							<li>✓ Sin anuncios</li>
+						</ul>
+						<a
+							class="cta-btn pricing-cta"
+							href="https://ricardoguzdev.com"
+							>probar jobtrackr</a
+						>
+					</article>
+				</div>
+			</section>
+
+			<!-- FAQ Section -->
+			<section id="faq-section" class="contact-faq__container">
+				<div class="faq__wrapper">
+					<h2 class="section__heading">Preguntas Frecuentes</h2>
+					<h3 class="section__description">
+						Si tienes alguna duda escribenos desde el formulario de
+						contacto.
+					</h3>
+					<dl class="faq__list">
+						<div class="faq__question-group">
+							<dt>
+								Necesito crear una cuenta para usar JobTrackr?
+								<span>
+									<svg
+										xmlns="http://www.w3.org/2000/svg"
+										width="20"
+										height="20"
+										viewBox="0 0 24 24"
+										fill="none"
+										stroke="currentColor"
+										stroke-width="2"
+										stroke-linecap="round"
+										stroke-linejoin="round"
+										class="lucide lucide-plus-icon lucide-plus"
+									>
+										<path d="M5 12h14" />
+										<path d="M12 5v14" />
+									</svg>
+								</span>
+							</dt>
+							<dd>
+								No necesitas cuenta porque ahora mismo la
+								aplicacion esta bajo desarrollo. Solo contamos
+								con un usuario ficticio para que usuarios de
+								visita prueben y jueguen un poco con la
+								aplicacion.
+							</dd>
+						</div>
+
+						<div class="faq__question-group">
+							<dt>
+								Mis datos se guardan si cierro el navegador?
+
+								<span>
+									<svg
+										xmlns="http://www.w3.org/2000/svg"
+										width="20"
+										height="20"
+										viewBox="0 0 24 24"
+										fill="none"
+										stroke="currentColor"
+										stroke-width="2"
+										stroke-linecap="round"
+										stroke-linejoin="round"
+										class="lucide lucide-plus-icon lucide-plus"
+									>
+										<path d="M5 12h14" />
+										<path d="M12 5v14" />
+									</svg>
+								</span>
+							</dt>
+							<dd>
+								Sí. JobTrackr guarda tus candidaturas en una
+								base de datos para que estén disponibles cada
+								vez que vuelvas. No se pierden al cerrar la
+								pestaña.
+							</dd>
+						</div>
+
+						<div class="faq__question-group">
+							<dt>
+								Puedo usarlo desde el móvil?
+								<span>
+									<svg
+										xmlns="http://www.w3.org/2000/svg"
+										width="20"
+										height="20"
+										viewBox="0 0 24 24"
+										fill="none"
+										stroke="currentColor"
+										stroke-width="2"
+										stroke-linecap="round"
+										stroke-linejoin="round"
+										class="lucide lucide-plus-icon lucide-plus"
+									>
+										<path d="M5 12h14" />
+										<path d="M12 5v14" />
+									</svg>
+								</span>
+							</dt>
+							<dd>
+								Sí. La interfaz está diseñada para funcionar en
+								cualquier dispositivo, aunque la experiencia es
+								especialmente cómoda desde escritorio.
+							</dd>
+						</div>
+
+						<div class="faq__question-group">
+							<dt>
+								Cuántas candidaturas puedo añadir?
+								<span>
+									<svg
+										xmlns="http://www.w3.org/2000/svg"
+										width="20"
+										height="20"
+										viewBox="0 0 24 24"
+										fill="none"
+										stroke="currentColor"
+										stroke-width="2"
+										stroke-linecap="round"
+										stroke-linejoin="round"
+										class="lucide lucide-plus-icon lucide-plus"
+									>
+										<path d="M5 12h14" />
+										<path d="M12 5v14" />
+									</svg>
+								</span>
+							</dt>
+							<dd>
+								Las que necesites. No hay ningún límite en el
+								número de tarjetas ni de columnas activas.
+							</dd>
+						</div>
+
+						<div class="faq__question-group">
+							<dt>
+								Qué pasa cuando encuentro trabajo?
+								<span>
+									<svg
+										xmlns="http://www.w3.org/2000/svg"
+										width="20"
+										height="20"
+										viewBox="0 0 24 24"
+										fill="none"
+										stroke="currentColor"
+										stroke-width="2"
+										stroke-linecap="round"
+										stroke-linejoin="round"
+										class="lucide lucide-plus-icon lucide-plus"
+									>
+										<path d="M5 12h14" />
+										<path d="M12 5v14" />
+									</svg>
+								</span>
+							</dt>
+							<dd>
+								Dejarlo solo para seguir usando JobTrrackr... Es
+								broma, Enhorabuena! Puedes marcar esa
+								candidatura como Oferta aceptada y seguir usando
+								el tablero para otras oportunidades, o
+								simplemente cerrarlo. Es tu herramienta.
+							</dd>
+						</div>
+
+						<div class="faq__question-group">
+							<dt>
+								JobTrackr tiene acceso a mis datos personales?
+								<span>
+									<svg
+										xmlns="http://www.w3.org/2000/svg"
+										width="20"
+										height="20"
+										viewBox="0 0 24 24"
+										fill="none"
+										stroke="currentColor"
+										stroke-width="2"
+										stroke-linecap="round"
+										stroke-linejoin="round"
+										class="lucide lucide-plus-icon lucide-plus"
+									>
+										<path d="M5 12h14" />
+										<path d="M12 5v14" />
+									</svg>
+								</span>
+							</dt>
+							<dd>
+								No. La aplicación solo guarda la información que
+								tú introduces voluntariamente: nombre de la
+								empresa, puesto y tus notas. No hay rastreo, no
+								hay analítica de usuario.
+							</dd>
+						</div>
+
+						<div class="faq__question-group">
+							<dt>
+								Quién ha creado esto?
+								<span>
+									<svg
+										xmlns="http://www.w3.org/2000/svg"
+										width="20"
+										height="20"
+										viewBox="0 0 24 24"
+										fill="none"
+										stroke="currentColor"
+										stroke-width="2"
+										stroke-linecap="round"
+										stroke-linejoin="round"
+										class="lucide lucide-plus-icon lucide-plus"
+									>
+										<path d="M5 12h14" />
+										<path d="M12 5v14" />
+									</svg>
+								</span>
+							</dt>
+							<dd>
+								JobTrackr es un proyecto desarrollado como parte
+								del ciclo formativo de Desarrollo de
+								Aplicaciones Web. Está construido con
+								tecnologías web estándar y un backend en Java.
+								Puedes ver el código completo en GitHub.
+							</dd>
+						</div>
+					</dl>
+				</div>
+				<div class="contact-form__wrapper">
+					<form action="#">
+						<div class="contact-form__content-wrapper">
+							<h3 class="contact-form__heading">
+								Dinos lo que piensas!
+							</h3>
+							<p class="contact-form__description">
+								Si tienes alguna duda, pregunta. Y si quieres
+								contactarnos, contáctanos.
+							</p>
+						</div>
+						<div class="contact-form__fields-wrapper">
+							<div class="contact-form__field-group">
+								<label for="name">
+									Nombre
+									<input
+										type="text"
+										name="name"
+										id="name"
+										placeholder="John Doe"
+										required
+									/>
+								</label>
+							</div>
+							<div class="contact-form__field-group">
+								<label for="email">
+									Email
+									<input
+										type="email"
+										name="email"
+										id="email"
+										placeholder="john@doe.com"
+										required
+									/>
+								</label>
+							</div>
+							<div class="contact-form__field-group">
+								<label for="message"> Tu duda: </label>
+								<textarea
+									id="message"
+									name="message"
+									cols="10"
+									rows="5"
+									placeholder="Escribe aqui tu duda..."
+									required
+								></textarea>
+							</div>
+							<button type="submit">Enviar</button>
+						</div>
+					</form>
+				</div>
+			</section>
+		</main>
+		<footer>
+			<div class="footer__year-date-wrapper">
+				<p class="footer__year-date">
+					© <span id="year-date">2026</span> JobTrackr
+				</p>
+			</div>
+			<div class="footer__made-by-wrapper">
+				<p class="footer__made-by-text">
+					By Ricardo Guzman -
+					<a href="https://github.com/ricard0g" target="_blank"
+						>Github</a
+					>
+				</p>
+			</div>
+			<div class="footer__logo-wrapper">
+				<img src="./assets/jobtrackr-logo.webp" class="logo-image" />
+			</div>
+		</footer>
+	</body>
+</html>

@@ -21,6 +21,7 @@ import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
+import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
@@ -37,6 +38,7 @@ import org.testcontainers.utility.DockerImageName;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.jayway.jsonpath.JsonPath;
+import com.ricard0g.jobtrackr_api.support.PaidRegistrationFixture;
 import com.ricard0g.jobtrackr_api.model.User;
 import com.ricard0g.jobtrackr_api.model.UserIdentity;
 import com.ricard0g.jobtrackr_api.model.enums.IdentityProvider;
@@ -62,6 +64,9 @@ import jakarta.servlet.http.Cookie;
         "jobtrackr.r2.bucket=test-bucket"
 })
 class GoogleDisconnectIntegrationTest {
+    @Autowired
+    private JdbcClient registrationJdbc;
+
 
     static final String SIGNING_KEY = "test-signing-key-with-at-least-32-characters";
 
@@ -332,7 +337,8 @@ class GoogleDisconnectIntegrationTest {
         return mockMvc.perform(post("/api/v1/auth/register")
                 .with(remoteAddr(uniqueIp()))
                 .contentType(MediaType.APPLICATION_JSON)
-                .content(objectMapper.writeValueAsString(body)));
+                .content(PaidRegistrationFixture.withVerifiedPurchase(
+                                registrationJdbc, objectMapper.writeValueAsString(body))));
     }
 
     private static org.springframework.test.web.servlet.request.RequestPostProcessor remoteAddr(final String clientIp) {

@@ -28,9 +28,12 @@ import org.springframework.context.annotation.Import;
 import org.springframework.data.domain.Sort;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
+import org.springframework.security.test.context.support.WithAnonymousUser;
+import org.springframework.security.test.context.support.WithMockUser;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 
+import com.ricard0g.jobtrackr_api.config.security.MethodSecurityConfig;
 import com.ricard0g.jobtrackr_api.dto.GeneratedCvDto.GeneratedCvDtos;
 import com.ricard0g.jobtrackr_api.exception.CvGenerationException;
 import com.ricard0g.jobtrackr_api.exception.GlobalExceptionHandler;
@@ -41,10 +44,11 @@ import com.ricard0g.jobtrackr_api.service.GeneratedCvSortKey;
 
 @WebMvcTest(controllers = GeneratedCvController.class)
 @AutoConfigureMockMvc(addFilters = false)
-@Import(GlobalExceptionHandler.class)
+@Import({GlobalExceptionHandler.class, MethodSecurityConfig.class})
+@WithMockUser(username = GeneratedCvControllerTest.USER_ID_VALUE)
 class GeneratedCvControllerTest {
 
-    private static final String USER_ID_VALUE = "11111111-1111-4111-8111-111111111111";
+    static final String USER_ID_VALUE = "11111111-1111-4111-8111-111111111111";
     private static final UUID USER_ID = UUID.fromString(USER_ID_VALUE);
     private static final Long APPLICATION_ID = 3L;
     private static final Long GENERATED_CV_ID = 9L;
@@ -55,6 +59,26 @@ class GeneratedCvControllerTest {
 
     @MockitoBean
     private ApplicationCvService applicationCvService;
+
+    @Test
+    @WithAnonymousUser
+    void read_withoutAuthentication_isDeniedByMethodSecurity() throws Exception {
+        // when / then
+        mockMvc.perform(get("/api/v1/generated-cvs").principal(principal()))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.code").value("ACCESS_DENIED"));
+        verifyNoInteractions(applicationCvService);
+    }
+
+    @Test
+    @WithAnonymousUser
+    void mutation_withoutAuthentication_isDeniedByMethodSecurity() throws Exception {
+        // when / then
+        mockMvc.perform(delete("/api/v1/generated-cvs/{generatedCvId}", GENERATED_CV_ID).principal(principal()))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.code").value("ACCESS_DENIED"));
+        verifyNoInteractions(applicationCvService);
+    }
 
     @Test
     void list_returnsGeneratedCvsForApplication() throws Exception {

@@ -40,7 +40,7 @@ Failed Compose validation, image builds, tests inside those builds, or release s
 
 Images are built independently. Each Dockerfile runs that service's established compilation and test gate before the runtime stage is produced:
 
-- Backend: Maven `verify` during the image build. CI also runs `./mvnw -B test` on the runner so the Gotenberg Testcontainers contract executes against the pinned LibreOffice image. That contract is skipped inside the image build when Docker is unavailable there.
+- Backend: Maven `verify` during the image build. CI also runs `./mvnw -B test` on the runner so the PostgreSQL integration tests and Gotenberg contract execute with Docker available. Docker-backed tests are skipped inside the image build, where the Docker socket is unavailable; the remaining tests still run there.
 - Frontend: TypeScript `tsc -b` and the Vite production build, then `nginx -t`.
 - CV Generation: `pytest` with the fake provider. The image build does not call Gemini.
 

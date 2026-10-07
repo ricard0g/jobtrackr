@@ -5,6 +5,7 @@ import java.util.List;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.AccessDeniedException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
@@ -12,11 +13,30 @@ import org.springframework.web.multipart.MaxUploadSizeExceededException;
 import org.springframework.web.multipart.support.MissingServletRequestPartException;
 
 import com.ricard0g.jobtrackr_api.dto.ErrorResponse;
+import com.ricard0g.jobtrackr_api.registration.RegistrationException;
 
 import jakarta.validation.ConstraintViolationException;
 
 @RestControllerAdvice
 public class GlobalExceptionHandler {
+
+    @ExceptionHandler(AccessDeniedException.class)
+    public ResponseEntity<ErrorResponse> handleAccessDenied(final AccessDeniedException exception) {
+        return ResponseEntity.status(HttpStatus.FORBIDDEN).body(ErrorResponse.accessDenied());
+    }
+
+    @ExceptionHandler(RegistrationException.class)
+    public ResponseEntity<ErrorResponse> handleRegistration(final RegistrationException exception) {
+        return ResponseEntity.status(exception.getStatus())
+                .body(ErrorResponse.of(exception.getCode(), exception.getMessage()));
+    }
+
+    @ExceptionHandler(com.ricard0g.jobtrackr_api.billing.BillingException.class)
+    public ResponseEntity<ErrorResponse> handleBilling(
+            final com.ricard0g.jobtrackr_api.billing.BillingException exception) {
+        return ResponseEntity.status(exception.getStatus())
+                .body(ErrorResponse.of(exception.getCode(), exception.getMessage()));
+    }
 
     @ExceptionHandler(CvGenerationException.class)
     public ResponseEntity<ErrorResponse> handleCvGeneration(final CvGenerationException exception) {

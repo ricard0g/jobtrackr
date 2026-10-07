@@ -20,7 +20,7 @@ import {
 import { useBoard } from "./useBoard";
 import { StatusColumn } from "./StatusColumn";
 
-export function KanbanBoard() {
+export function KanbanBoard({ canCreateApplications }: { canCreateApplications: boolean }) {
 	const {
 		applicationsByStatus,
 		allApplications,
@@ -141,10 +141,11 @@ export function KanbanBoard() {
 			onDragOver={handleDragOver}
 			onDragEnd={handleDragEnd}
 		>
-			<div className="flex h-full gap-x-4 overflow-x-scroll px-8 py-8">
+			<div className="grid grid-rows-1 grid-flow-col-dense h-full gap-x-4 overflow-x-scroll px-8 py-8">
 				{applicationStatusOptions.map((status) => (
 					<StatusColumn
 						key={status.value}
+						canCreateApplications={canCreateApplications}
 						status={status}
 						applications={applicationsByStatus[status.value]}
 						allApplications={allApplications}

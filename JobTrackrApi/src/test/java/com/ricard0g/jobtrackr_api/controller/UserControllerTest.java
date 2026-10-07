@@ -1,5 +1,6 @@
 package com.ricard0g.jobtrackr_api.controller;
 
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
@@ -16,10 +17,13 @@ import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.boot.webmvc.test.autoconfigure.WebMvcTest;
 import org.springframework.context.annotation.Import;
 import org.springframework.http.MediaType;
+import org.springframework.security.test.context.support.WithAnonymousUser;
+import org.springframework.security.test.context.support.WithMockUser;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 
 import com.ricard0g.jobtrackr_api.config.security.RefreshTokenCookieService;
+import com.ricard0g.jobtrackr_api.config.security.MethodSecurityConfig;
 import com.ricard0g.jobtrackr_api.dto.AuthDto.AuthResponse;
 import com.ricard0g.jobtrackr_api.dto.UserDto.SignInMethodsResponseDto;
 import com.ricard0g.jobtrackr_api.dto.UserDto.SignInMethodsResponseDto.GoogleSignInMethodDto;
@@ -37,10 +41,11 @@ import com.ricard0g.jobtrackr_api.service.UserService;
 
 @WebMvcTest(controllers = UserController.class)
 @AutoConfigureMockMvc(addFilters = false)
-@Import(GlobalExceptionHandler.class)
+@Import({GlobalExceptionHandler.class, MethodSecurityConfig.class})
+@WithMockUser(username = UserControllerTest.USER_ID_VALUE)
 class UserControllerTest {
 
-    private static final String USER_ID_VALUE = "11111111-1111-1111-1111-111111111111";
+    static final String USER_ID_VALUE = "11111111-1111-1111-1111-111111111111";
     private static final UUID USER_ID = UUID.fromString(USER_ID_VALUE);
     private static final String BASE_PATH = "/api/v1/user";
     private static final OffsetDateTime TIMESTAMP = OffsetDateTime.parse("2026-06-04T12:00:00Z");
@@ -68,6 +73,30 @@ class UserControllerTest {
 
     @MockitoBean
     private AuthenticationRateLimiter authenticationRateLimiter;
+
+    @Test
+    @WithAnonymousUser
+    void read_withoutAuthentication_isDeniedByMethodSecurity() throws Exception {
+        // when / then
+        mockMvc.perform(get(BASE_PATH).principal(authenticatedUser()))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.code").value("ACCESS_DENIED"));
+        verifyNoInteractions(userService, userPasswordService, googleLinkIntentService,
+                googlePasswordReauthIntentService, googleDisconnectService, refreshTokenCookieService,
+                authenticationRateLimiter);
+    }
+
+    @Test
+    @WithAnonymousUser
+    void mutation_withoutAuthentication_isDeniedByMethodSecurity() throws Exception {
+        // when / then
+        mockMvc.perform(post(BASE_PATH + "/password/google-reauth-intent").principal(authenticatedUser()))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.code").value("ACCESS_DENIED"));
+        verifyNoInteractions(userService, userPasswordService, googleLinkIntentService,
+                googlePasswordReauthIntentService, googleDisconnectService, refreshTokenCookieService,
+                authenticationRateLimiter);
+    }
 
     @Test
     void getAuthenticatedUser_returns200() throws Exception {

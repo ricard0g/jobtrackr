@@ -3,6 +3,7 @@ package com.ricard0g.jobtrackr_api.controller;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
@@ -20,16 +21,23 @@ import java.util.List;
 import java.util.UUID;
 
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.BeforeEach;
+import org.springframework.security.core.Authentication;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.boot.webmvc.test.autoconfigure.WebMvcTest;
 import org.springframework.context.annotation.Import;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
+import org.springframework.security.test.context.support.WithAnonymousUser;
+import org.springframework.security.test.context.support.WithMockUser;
 import org.springframework.mock.web.MockMultipartFile;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 
+import com.ricard0g.jobtrackr_api.billing.EntitlementService;
+import com.ricard0g.jobtrackr_api.security.PaidAccessDeniedHandler;
+import com.ricard0g.jobtrackr_api.config.security.MethodSecurityConfig;
 import com.ricard0g.jobtrackr_api.dto.BaseCvDto.BaseCvDownloadDto;
 import com.ricard0g.jobtrackr_api.dto.BaseCvDto.BaseCvPreviewDto;
 import com.ricard0g.jobtrackr_api.dto.BaseCvDto.BaseCvResponseDto;
@@ -41,10 +49,11 @@ import com.ricard0g.jobtrackr_api.service.BaseCvService;
 
 @WebMvcTest(controllers = BaseCvController.class)
 @AutoConfigureMockMvc(addFilters = false)
-@Import(GlobalExceptionHandler.class)
+@Import({GlobalExceptionHandler.class, MethodSecurityConfig.class, PaidAccessDeniedHandler.class})
+@WithMockUser(username = BaseCvControllerTest.USER_ID_VALUE)
 class BaseCvControllerTest {
 
-    private static final String USER_ID_VALUE = "11111111-1111-4111-8111-111111111111";
+    static final String USER_ID_VALUE = "11111111-1111-4111-8111-111111111111";
     private static final UUID USER_ID = UUID.fromString(USER_ID_VALUE);
     private static final String BASE_PATH = "/api/v1/base-cvs";
     private static final Long BASE_CV_ID = 7L;
@@ -54,6 +63,34 @@ class BaseCvControllerTest {
 
     @MockitoBean
     private BaseCvService baseCvService;
+
+    @MockitoBean(name = "entitlementService")
+    private EntitlementService entitlementService;
+
+    @BeforeEach
+    void paidAccess() {
+        when(entitlementService.hasPaidAccess(any(Authentication.class))).thenReturn(true);
+    }
+
+    @Test
+    @WithAnonymousUser
+    void read_withoutAuthentication_isDeniedByMethodSecurity() throws Exception {
+        // when / then
+        mockMvc.perform(get(BASE_PATH).principal(principal()))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.code").value("ACCESS_DENIED"));
+        verifyNoInteractions(baseCvService);
+    }
+
+    @Test
+    @WithAnonymousUser
+    void mutation_withoutAuthentication_isDeniedByMethodSecurity() throws Exception {
+        // when / then
+        mockMvc.perform(delete(BASE_PATH + "/{baseCvId}", BASE_CV_ID).principal(principal()))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.code").value("ACCESS_DENIED"));
+        verifyNoInteractions(baseCvService);
+    }
 
     @Test
     void list_returnsMetadataWithoutInternalStorageFields() throws Exception {

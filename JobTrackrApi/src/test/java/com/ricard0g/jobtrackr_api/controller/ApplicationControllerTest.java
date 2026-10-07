@@ -5,6 +5,7 @@ import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doNothing;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
@@ -20,23 +21,29 @@ import java.time.OffsetDateTime;
 import java.util.List;
 import java.util.UUID;
 
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.boot.webmvc.test.autoconfigure.WebMvcTest;
 import org.springframework.context.annotation.Import;
 import org.springframework.http.MediaType;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.test.context.support.WithAnonymousUser;
+import org.springframework.security.test.context.support.WithMockUser;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 
+import com.ricard0g.jobtrackr_api.billing.EntitlementService;
+import com.ricard0g.jobtrackr_api.config.security.MethodSecurityConfig;
 import com.ricard0g.jobtrackr_api.dto.ApplicationDto.ApplicationCreateRequestDto;
 import com.ricard0g.jobtrackr_api.dto.ApplicationDto.ApplicationPatchRequestDto;
 import com.ricard0g.jobtrackr_api.dto.ApplicationDto.ApplicationPutRequestDto;
 import com.ricard0g.jobtrackr_api.dto.ApplicationDto.ApplicationResponseDto;
 import com.ricard0g.jobtrackr_api.dto.ApplicationDto.ApplicationStatusPatchRequestDto;
+import com.ricard0g.jobtrackr_api.dto.CompanyDto.CompanyResponseDto;
 import com.ricard0g.jobtrackr_api.dto.StatusHistoryDto.StatusHistoryResponseDto;
 import com.ricard0g.jobtrackr_api.dto.TagDto.CreateTagRequestDto;
-import com.ricard0g.jobtrackr_api.dto.CompanyDto.CompanyResponseDto;
 import com.ricard0g.jobtrackr_api.dto.TagDto.TagResponseDto;
 import com.ricard0g.jobtrackr_api.exception.ApplicationNotFoundException;
 import com.ricard0g.jobtrackr_api.exception.CompanyNotFoundException;
@@ -49,14 +56,16 @@ import com.ricard0g.jobtrackr_api.exception.UserNotFoundException;
 import com.ricard0g.jobtrackr_api.model.enums.ApplicationStatus;
 import com.ricard0g.jobtrackr_api.model.enums.RemoteType;
 import com.ricard0g.jobtrackr_api.model.enums.TagCategory;
+import com.ricard0g.jobtrackr_api.security.PaidAccessDeniedHandler;
 import com.ricard0g.jobtrackr_api.service.ApplicationService;
 
 @WebMvcTest(controllers = ApplicationController.class)
 @AutoConfigureMockMvc(addFilters = false)
-@Import(GlobalExceptionHandler.class)
+@Import({GlobalExceptionHandler.class, MethodSecurityConfig.class, PaidAccessDeniedHandler.class})
+@WithMockUser(username = ApplicationControllerTest.USER_ID_VALUE)
 class ApplicationControllerTest {
 
-    private static final String USER_ID_VALUE = "11111111-1111-1111-1111-111111111111";
+    static final String USER_ID_VALUE = "11111111-1111-1111-1111-111111111111";
     private static final UUID USER_ID = UUID.fromString(USER_ID_VALUE);
     private static final String BASE_PATH = "/api/v1/applications";
     private static final OffsetDateTime TIMESTAMP = OffsetDateTime.parse("2026-06-04T12:00:00Z");
@@ -66,6 +75,52 @@ class ApplicationControllerTest {
 
     @MockitoBean
     private ApplicationService applicationService;
+
+    @MockitoBean(name = "entitlementService")
+    private EntitlementService entitlementService;
+
+    @BeforeEach
+    void allowPaidApplicationCreation() {
+        when(entitlementService.canCreateApplications(any(Authentication.class))).thenReturn(true);
+    }
+
+    @Test
+    @WithAnonymousUser
+    void getAllApplications_withoutAuthentication_isDeniedByMethodSecurity() throws Exception {
+        // when / then
+        mockMvc.perform(get(BASE_PATH).principal(authenticatedUser()))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.code").value("ACCESS_DENIED"));
+        verifyNoInteractions(applicationService);
+    }
+
+    @Test
+    @WithAnonymousUser
+    void createApplication_withoutAuthentication_reportsAccessDeniedBeforeCheckingEntitlement() throws Exception {
+        // when / then
+        mockMvc.perform(post(BASE_PATH).principal(authenticatedUser()).contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"companyId":5,"applicationTitle":"Engineer","applicationStatus":"APPLIED"}
+                                """))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.code").value("ACCESS_DENIED"));
+        verifyNoInteractions(applicationService, entitlementService);
+    }
+
+    @Test
+    void createApplication_withLimitedAccess_isDeniedBeforeCreation() throws Exception {
+        // given
+        when(entitlementService.canCreateApplications(any(Authentication.class))).thenReturn(false);
+
+        // when / then
+        mockMvc.perform(post(BASE_PATH).principal(authenticatedUser()).contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"companyId":5,"applicationTitle":"Engineer","applicationStatus":"APPLIED"}
+                                """))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.code").value("PAID_ACCESS_REQUIRED"));
+        verifyNoInteractions(applicationService);
+    }
 
     @Test
     void getAllApplications_returns200() throws Exception {

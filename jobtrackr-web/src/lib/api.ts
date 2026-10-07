@@ -241,6 +241,50 @@ export async function login(request: LoginRequest) {
 	return response;
 }
 
+export async function recoverRegistration(email: string) {
+	return authRequest<void>("/registration/recovery", {
+		method: "POST",
+		headers: jsonHeaders,
+		body: JSON.stringify({ email }),
+	});
+}
+
+export async function getRegistrationVerification(token: string) {
+	return authRequest<{ email: string; paidUntil: string }>(
+		"/registration/verification",
+		{
+			headers: { "X-Verification-Token": token },
+			cache: "no-store",
+		},
+	);
+}
+
+export async function getRegistrationClaim(checkoutToken: string) {
+	return authRequest<{ email: string; paidUntil: string }>(
+		"/registration/claim",
+		{
+			headers: { "X-Checkout-Token": checkoutToken },
+			cache: "no-store",
+		},
+	);
+}
+
+export async function createGoogleRegistrationIntent(
+	token: { checkoutToken: string } | { verificationToken: string },
+) {
+	return authRequest<void>(
+		"/registration/google",
+		{
+			method: "POST",
+			headers:
+				"checkoutToken" in token
+					? { "X-Checkout-Token": token.checkoutToken }
+					: { "X-Verification-Token": token.verificationToken },
+		},
+		true,
+	);
+}
+
 export async function register(request: RegisterRequest) {
 	const response = await authRequest<AuthResponse>("/register", {
 		method: "POST",
@@ -365,7 +409,20 @@ export async function requireSession(request?: Request) {
 	}
 }
 
+export type Entitlement = {
+	access: "PAID" | "LIMITED";
+	canCreateApplications: boolean;
+	paidUntil: string | null;
+};
+
 export const api = {
+	createBillingPortal: () => apiRequest<{ url: string }>("/billing/portal", { method: "POST" }),
+	getSubscriptionStatus: () => apiRequest<{ canResubscribe: boolean }>("/billing/subscription"),
+	resubscribe: (requestId: string) => apiRequest<{ url: string; checkoutToken: string }>("/billing/resubscribe", {
+		method: "POST",
+		headers: { "Idempotency-Key": requestId },
+	}),
+	getEntitlement: () => apiRequest<Entitlement>("/user/entitlement"),
 	getCurrentUser: () => apiRequest<User>("/user"),
 	patchUser: (request: UserPatchRequest) =>
 		apiRequest<User>("/user", {
@@ -655,7 +712,12 @@ export type AppLoaderData = {
 	tags: Tag[];
 };
 
-export type AccountLoaderData = {
+export type EntitlementLoaderData = {
+	entitlement: Entitlement;
+	entitlementCheckedAt: number;
+};
+
+export type AccountLoaderData = EntitlementLoaderData & {
 	user: User;
 };
 

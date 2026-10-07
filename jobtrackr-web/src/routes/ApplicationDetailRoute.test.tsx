@@ -16,6 +16,7 @@ import { isTerminalCvGenerationAcknowledged } from "@/lib/generation-terminal-ac
 import type { Application } from "@/types/application";
 import type { BaseCv } from "@/types/base-cv";
 import type { AiConsent, CvGeneration } from "@/types/cv-generation";
+import { EntitlementContext } from "@/lib/entitlement";
 import type { GeneratedCv } from "@/types/generated-cv";
 import type { User } from "@/types/user";
 
@@ -171,6 +172,7 @@ const renderApplicationDetail = (
                   interviews: [];
                   generations: CvGeneration[];
               }>;
+        paid?: boolean;
         generateLoader?: (
             args: import("react-router").LoaderFunctionArgs,
         ) =>
@@ -235,7 +237,11 @@ const renderApplicationDetail = (
             initialIndex: 1,
         },
     );
-    render(<RouterProvider router={router} />);
+    render(
+        <EntitlementContext value={{ access: options?.paid === false ? "LIMITED" : "PAID", canCreateApplications: options?.paid !== false, paidUntil: null }}>
+            <RouterProvider router={router} />
+        </EntitlementContext>,
+    );
     return router;
 };
 
@@ -512,6 +518,15 @@ describe("Application dialog Details | Generate shell", () => {
 });
 
 describe("Application Generate tab — start CV Generation", () => {
+    it("disables CV Generation during Limited Access and explains why", async () => {
+        const action = vi.fn();
+        renderApplicationDetail("/applications/3/generate", { paid: false, generateAction: action });
+        const form = await screen.findByRole("form", { name: "Start CV Generation" });
+        expect((within(form).getByRole("button", { name: /^Generate CV$/ }) as HTMLButtonElement).disabled).toBe(true);
+        expect(screen.getByText(/CV Generation requires current paid access/)).toBeTruthy();
+        fireEvent.submit(form);
+        expect(action).not.toHaveBeenCalled();
+    });
     it("expands Generate CV when idle with no Generated CVs", async () => {
         renderApplicationDetail("/applications/3/generate");
 

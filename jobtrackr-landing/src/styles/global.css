@@ -1,0 +1,189 @@
+/* Keep the supplied reset's exact defaults; Tailwind preflight changes video sizing. */
+@layer theme, base, components, utilities;
+@import "tailwindcss/theme.css" layer(theme);
+@import "tailwindcss/utilities.css" layer(utilities);
+
+@theme static {
+  --font-display: Nunito, sans-serif;
+  --font-text: Inter, sans-serif;
+  --font-sans: Inter, sans-serif;
+  --color-page: #fff;
+  --color-ink: #000;
+  --color-dark-gray: #333333;
+  --color-medium-gray: #666666;
+  --color-silver: #999999;
+  --color-light-gray: #ccc;
+  --color-off-white: #f5f5f5;
+  --color-accent-darkest: #0d3a28;
+  --color-accent-dark: #269d6d;
+  --color-accent-medium: #6eddab;
+  --color-accent-main: #aaf0d1;
+  --color-accent-light: #cef7e4;
+  --color-accent-lightest: #ebfdf5;
+  --color-demo-red: #ef7774;
+  --color-demo-yellow: #f6c15d;
+  --color-demo-green: #58c67a;
+  --color-pricing-pink: rgb(207, 125, 150);
+  --color-pricing-overlay-strong: rgba(0, 0, 0, 0.85);
+  --color-pricing-overlay-light: rgba(0, 0, 0, 0.1);
+  --radius-card: 10px;
+  --radius-pill: 50px;
+  --radius-browser: 20px;
+  --shadow-site-light: 2px 2px 2px rgba(0, 0, 0, 0.15);
+  --shadow-site-medium: 4px 4px 8px rgba(0, 0, 0, 0.5);
+  --shadow-site-strong: 6px 6px 10px rgba(0, 0, 0, 0.5);
+  --shadow-accent-light:
+    inset 0px 2px 4px rgba(235, 253, 245, 1),
+    inset 0px -2px 4px rgba(13, 58, 40, 1);
+  --shadow-accent-strong:
+    inset 0px 4px 4px rgba(235, 253, 245, 1),
+    inset 0px -4px 4px rgba(13, 58, 40, 1);
+  --shadow-cool-light:
+    inset 0px 4px 4px rgba(255, 255, 255, 1),
+    inset 0px -2px 4px rgba(0, 0, 0, 0.05);
+  --shadow-cool-strong:
+    inset 0px 8px 8px rgba(255, 255, 255, 1),
+    inset 0px -6px 6px rgba(0, 0, 0, 0.1), 10px 10px 10px rgba(0, 0, 0, 0.35);
+  --shadow-inner-light:
+    inset 0px 2px 4px rgba(0, 0, 0, 0.5), inset 0px -2px 4px rgba(0, 0, 0, 0.25);
+  --shadow-inner-strong:
+    inset 0px 6px 8px rgba(0, 0, 0, 0.4), inset 0px -6px 8px rgba(0, 0, 0, 0.25);
+  --breakpoint-site-wide: 68.75rem;
+  --breakpoint-site-tablet: 48rem;
+  --breakpoint-site-medium: 61.875rem;
+  --breakpoint-site-faq: 61.25rem;
+  --breakpoint-site-small: 37.5rem;
+  --breakpoint-site-narrow: 26.5625rem;
+}
+
+@layer base {
+  /* 1. Use a more-intuitive box-sizing model */
+  *,
+  *::before,
+  *::after {
+    box-sizing: border-box;
+  }
+
+  /* 2. Remove default margin */
+  *:not(dialog) {
+    margin: 0;
+  }
+
+  /* 3. Enable keyword animations */
+  @media (prefers-reduced-motion: no-preference) {
+    html {
+      interpolate-size: allow-keywords;
+    }
+  }
+
+  body {
+    /* 4. Increase line-height */
+    line-height: 1.5;
+    /* 5. Improve text rendering */
+    -webkit-font-smoothing: antialiased;
+  }
+
+  /* 6. Improve media defaults */
+  img,
+  picture,
+  video,
+  canvas,
+  svg {
+    display: block;
+    max-width: 100%;
+  }
+
+  /* 7. Inherit fonts for form controls */
+  input,
+  button,
+  textarea,
+  select {
+    font: inherit;
+  }
+
+  /* 8. Avoid text overflows */
+  p,
+  h1,
+  h2,
+  h3,
+  h4,
+  h5,
+  h6 {
+    overflow-wrap: break-word;
+  }
+
+  /* 9. Improve line wrapping */
+  p {
+    text-wrap: pretty;
+  }
+  h1,
+  h2,
+  h3,
+  h4,
+  h5,
+  h6 {
+    text-wrap: balance;
+  }
+
+  /*
+    10. Create a root stacking context
+  */
+  #root,
+  #__next {
+    isolation: isolate;
+  }
+}
+
+@custom-variant under-1100 {
+  @media (max-width: 1100px) {
+    @slot;
+  }
+}
+@custom-variant under-990 {
+  @media (max-width: 990px) {
+    @slot;
+  }
+}
+@custom-variant under-980 {
+  @media (max-width: 980px) {
+    @slot;
+  }
+}
+@custom-variant under-768 {
+  @media (max-width: 768px) {
+    @slot;
+  }
+}
+@custom-variant under-600 {
+  @media (max-width: 600px) {
+    @slot;
+  }
+}
+@custom-variant under-425 {
+  @media (max-width: 425px) {
+    @slot;
+  }
+}
+@utility hero-background {
+  background-image: url("/assets/background-hero-2.webp");
+}
+
+@utility pricing-background {
+  background-image:
+    linear-gradient(
+      180deg,
+      var(--color-pricing-overlay-strong),
+      var(--color-pricing-overlay-light)
+    ),
+    url("/assets/pricing-card-bg.avif");
+}
+
+@utility pricing-heading-bg {
+  background: linear-gradient(
+    90deg,
+    var(--color-page),
+    var(--color-pricing-pink)
+  );
+  background-clip: text;
+  color: transparent;
+}

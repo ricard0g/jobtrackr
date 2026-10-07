@@ -19,6 +19,7 @@ The app is built as a monorepo with a Spring Boot API, a Vite/React web client, 
 ```text
 JobTrackrApi/              Spring Boot API and Flyway migrations
 jobtrackr-web/             Vite/React frontend
+jobtrackr-landing/         Static Astro public landing
 cv-generation-service/     FastAPI + LangGraph + Gemini CV generation
 db/                        Seed and local database dump locations
 docs/                      Root project documentation
@@ -35,3 +36,4 @@ scripts/                   Local development, VPS, and database helper scripts
 - [Project Changelog](docs/changelog/): commit-based records for project changes not covered by the API changelog.
 
 Subproject-specific notes remain in `JobTrackrApi/docs/` and `jobtrackr-web/docs/`.
+The public landing has separate setup and launch notes in [`jobtrackr-landing/README.md`](jobtrackr-landing/README.md).

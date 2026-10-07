@@ -139,7 +139,7 @@ const renderKanban = (options?: {
 			{
 				id: "app",
 				path: "/",
-				loader: () => ({ user }),
+				loader: () => ({ user, entitlement: { access: "PAID", canCreateApplications: true, paidUntil: null } }),
 				Component: Outlet,
 				children: [
 					{

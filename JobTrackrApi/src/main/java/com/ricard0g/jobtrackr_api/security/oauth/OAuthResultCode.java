@@ -6,7 +6,10 @@ public enum OAuthResultCode {
     UNAVAILABLE("unavailable"),
     FAILED("failed"),
     CONFLICT("conflict"),
-    MISMATCH("mismatch");
+    MISMATCH("mismatch"),
+    NOT_REGISTERED("not_registered"),
+    REGISTRATION_USED("registration_used"),
+    REGISTRATION_EXPIRED("registration_expired");
 
     private final String queryValue;
 

@@ -24,7 +24,7 @@ JWT_REFRESH_COOKIE_SECURE=true
 
 Use a private browser window. After each result, confirm the URL shows only an allowlisted `oauthResult` (then the SPA consumes it) and never an authorization code, token, subject, or provider error.
 
-1. **JIT sign-in.** Continue with Google from Create account with an unused Google identity. A User is created with that verified email, no password, and no display name. You land in the application.
+1. **Paid registration.** After a Stripe test-mode purchase, choose Continue with Google on the payment page. Pick the Google account whose verified email matches the Checkout Email. A User is created with that email, no password, and no display name. You land in the application. An unused Google identity without a purchase returns `not_registered`.
 2. **Returning sign-in.** Sign out and Continue with Google with the same identity. You return to the same User. Account Settings still shows the same Primary Email.
 3. **Explicit linking.** With a separate User who signs in with a password and whose Primary Email matches a different unused Google verified email, connect Google from Account Settings after current-password confirmation. Sign-in Methods shows Connected. Other sessions stay valid.
 4. **Fresh-Google password creation.** As a Google-only User, choose Create password, complete Google's fresh authentication, and submit a new password in Account Settings. Other sessions die; this browser stays signed in.

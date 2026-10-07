@@ -5,6 +5,7 @@ import java.io.IOException;
 import org.springframework.http.MediaType;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.security.web.access.AccessDeniedHandler;
+import org.springframework.security.web.csrf.CsrfException;
 import org.springframework.stereotype.Component;
 
 import com.ricard0g.jobtrackr_api.dto.ErrorResponse;
@@ -28,8 +29,11 @@ public class RestAccessDeniedHandler implements AccessDeniedHandler {
             final AccessDeniedException accessDeniedException) throws IOException, ServletException {
         response.setStatus(HttpServletResponse.SC_FORBIDDEN);
         response.setContentType(MediaType.APPLICATION_JSON_VALUE);
+        final ErrorResponse error = accessDeniedException instanceof CsrfException
+                ? ErrorResponse.of("CSRF_TOKEN_INVALID", "Invalid or missing CSRF token")
+                : ErrorResponse.accessDenied();
         jsonMapper.writeValue(
                 response.getOutputStream(),
-                ErrorResponse.of("CSRF_TOKEN_INVALID", "Invalid or missing CSRF token"));
+                error);
     }
 }

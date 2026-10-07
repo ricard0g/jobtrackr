@@ -4,6 +4,7 @@ import java.security.Principal;
 import java.util.UUID;
 
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PatchMapping;
@@ -40,6 +41,7 @@ import lombok.RequiredArgsConstructor;
 @RequestMapping("/api/v1/user")
 @RequiredArgsConstructor
 @Validated
+@PreAuthorize("isAuthenticated()")
 public class UserController {
 
     private static final String UNKNOWN_CLIENT_IP = "unknown";

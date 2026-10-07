@@ -2,12 +2,13 @@ import type { ActionFunctionArgs, LoaderFunctionArgs, ShouldRevalidateFunctionAr
 import { redirect } from "react-router";
 
 import { ACCOUNT_SETTINGS_PATH } from "@/lib/account-settings";
-import { api, logout, requireSession, type AccountLoaderData, type KanbanLoaderData } from "@/lib/api";
+import { api, logout, requireSession, type AccountLoaderData, type EntitlementLoaderData, type KanbanLoaderData } from "@/lib/api";
 import { buildBoardGenerationReminders } from "@/lib/board-generation-reminders";
 
 export async function appLoader({ request }: LoaderFunctionArgs): Promise<AccountLoaderData> {
 	await requireSession(request);
-	return { user: await api.getCurrentUser() };
+	const [user, entitlement] = await Promise.all([api.getCurrentUser(), api.getEntitlement()]);
+	return { user, entitlement, entitlementCheckedAt: Date.now() };
 }
 
 export async function kanbanLoader(): Promise<KanbanLoaderData> {
@@ -64,7 +65,7 @@ export function appShouldRevalidate({
 	}
 
 	if (formAction) {
-		let settingsAction = false;
+		let settingsAction: boolean;
 		try {
 			settingsAction =
 				new URL(formAction, "http://localhost").pathname === ACCOUNT_SETTINGS_PATH;
@@ -87,4 +88,10 @@ export function appShouldRevalidate({
 	}
 
 	return defaultShouldRevalidate;
+}
+
+export async function entitlementLoader(): Promise<EntitlementLoaderData> {
+	await requireSession();
+	const entitlement = await api.getEntitlement();
+	return { entitlement, entitlementCheckedAt: Date.now() };
 }

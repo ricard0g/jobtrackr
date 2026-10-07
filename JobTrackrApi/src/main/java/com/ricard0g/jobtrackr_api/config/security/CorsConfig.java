@@ -34,6 +34,8 @@ public class CorsConfig {
                 "Content-Type",
                 "Accept",
                 "Idempotency-Key",
+                "X-Checkout-Token",
+                "X-Verification-Token",
                 "X-XSRF-TOKEN",
                 "X-CSRF-TOKEN"));
         configuration.setExposedHeaders(List.of("X-XSRF-TOKEN", "X-CSRF-TOKEN"));

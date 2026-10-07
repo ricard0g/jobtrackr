@@ -5,6 +5,7 @@ import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doNothing;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
@@ -25,9 +26,12 @@ import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.boot.webmvc.test.autoconfigure.WebMvcTest;
 import org.springframework.context.annotation.Import;
 import org.springframework.http.MediaType;
+import org.springframework.security.test.context.support.WithAnonymousUser;
+import org.springframework.security.test.context.support.WithMockUser;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 
+import com.ricard0g.jobtrackr_api.config.security.MethodSecurityConfig;
 import com.ricard0g.jobtrackr_api.dto.InterviewDto.InterviewCreateRequestDto;
 import com.ricard0g.jobtrackr_api.dto.InterviewDto.InterviewOutcomePatchRequestDto;
 import com.ricard0g.jobtrackr_api.dto.InterviewDto.InterviewPutRequestDto;
@@ -42,10 +46,11 @@ import com.ricard0g.jobtrackr_api.service.InterviewService;
 
 @WebMvcTest(controllers = InterviewController.class)
 @AutoConfigureMockMvc(addFilters = false)
-@Import(GlobalExceptionHandler.class)
+@Import({GlobalExceptionHandler.class, MethodSecurityConfig.class})
+@WithMockUser(username = InterviewControllerTest.USER_ID_VALUE)
 class InterviewControllerTest {
 
-    private static final String USER_ID_VALUE = "11111111-1111-1111-1111-111111111111";
+    static final String USER_ID_VALUE = "11111111-1111-1111-1111-111111111111";
     private static final UUID USER_ID = UUID.fromString(USER_ID_VALUE);
     private static final String BASE_PATH = "/api/v1/applications/10/interviews";
     private static final OffsetDateTime TIMESTAMP = OffsetDateTime.parse("2026-06-10T15:00:00Z");
@@ -55,6 +60,26 @@ class InterviewControllerTest {
 
     @MockitoBean
     private InterviewService interviewService;
+
+    @Test
+    @WithAnonymousUser
+    void read_withoutAuthentication_isDeniedByMethodSecurity() throws Exception {
+        // when / then
+        mockMvc.perform(get(BASE_PATH).principal(authenticatedUser()))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.code").value("ACCESS_DENIED"));
+        verifyNoInteractions(interviewService);
+    }
+
+    @Test
+    @WithAnonymousUser
+    void mutation_withoutAuthentication_isDeniedByMethodSecurity() throws Exception {
+        // when / then
+        mockMvc.perform(delete(BASE_PATH + "/1").principal(authenticatedUser()))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.code").value("ACCESS_DENIED"));
+        verifyNoInteractions(interviewService);
+    }
 
     @Test
     void getAllInterviews_returns200() throws Exception {
