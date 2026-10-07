@@ -8,7 +8,6 @@ import json
 import os
 import re
 import sys
-import uuid
 from urllib.error import HTTPError, URLError
 from urllib.request import HTTPCookieProcessor, Request, build_opener
 
@@ -124,16 +123,25 @@ if email and password:
         sys.exit("login did not return the persisted user %s" % email)
     print("full-stack origin login passed")
 else:
-    email = "full-stack-%s@example.test" % uuid.uuid4().hex[:10]
+    # Registration needs a paid, verified Registration Claim; the runner seeds one in Postgres.
+    email = os.environ.get("JOBTRACKR_REGISTRATION_EMAIL")
+    verification_token = os.environ.get("JOBTRACKR_REGISTRATION_TOKEN")
+    if not email or not verification_token:
+        sys.exit("JOBTRACKR_REGISTRATION_EMAIL and JOBTRACKR_REGISTRATION_TOKEN are required to register")
     password = "full-stack-password"
     status, _, body = request_json(
         "POST",
         ORIGIN + "/api/v1/auth/register",
-        payload={"email": email, "password": password, "displayName": "Full Stack Smoke"},
+        payload={
+            "email": email,
+            "password": password,
+            "displayName": "Full Stack Smoke",
+            "verificationToken": verification_token,
+        },
         headers={csrf_header: csrf_token},
     )
     if status != 201:
-        sys.exit("register through nginx returned HTTP %s" % status)
+        sys.exit("register through nginx returned HTTP %s: %s" % (status, body.decode()))
     auth = json.loads(body.decode())
     returned_email = (auth.get("user") or {}).get("userEmail")
     if not auth.get("accessToken") or returned_email != email:

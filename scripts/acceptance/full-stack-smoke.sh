@@ -22,6 +22,9 @@ set -a
 set +a
 export JOBTRACKR_APP_ORIGIN
 
+# shellcheck source=scripts/acceptance/paid-registration-claim.sh
+. "$ROOT_DIR/scripts/acceptance/paid-registration-claim.sh"
+
 compose() {
   docker compose --profile full \
     --env-file "$FIXTURE_ENV" \
@@ -45,6 +48,7 @@ echo
 compose up --build -d --wait --wait-timeout 420 \
   postgres cv-generation gotenberg backend frontend
 
+seed_paid_registration_claim
 python3 "$CHECKS" | tee "$CREDS_FILE"
 
 auth_email="$(awk -F= '/^JOBTRACKR_AUTH_EMAIL=/{print $2}' "$CREDS_FILE")"
